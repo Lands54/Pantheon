@@ -1,0 +1,15 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react-swc'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/config': 'http://localhost:8000',
+      '/oracle': 'http://localhost:8000',
+      '/chat': 'http://localhost:8000',
+      '/agents': 'http://localhost:8000'
+    }
+  }
+})

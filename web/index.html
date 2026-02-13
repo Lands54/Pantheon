@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gods Temple | 众神殿</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;600&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="temple-background"></div>
+    <div class="temple-overlay"></div>
+
+    <header>
+        <h1>众神殿 <small>(Gods Temple)</small></h1>
+        <div id="settings-trigger" title="系统配置">⚙️</div>
+    </header>
+
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <h2>🏛️ 系统高度配置</h2>
+            <div class="field">
+                <label>OpenRouter API Key:</label>
+                <input type="password" id="apiKeyInput" placeholder="sk-or-v1-...">
+            </div>
+            <div class="field">
+                <label>Genesis Model:</label>
+                <input type="text" id="genesisModelInput" value="google/gemini-2.0-flash-exp:free">
+            </div>
+            <div class="field">
+                <label>Coder Model:</label>
+                <input type="text" id="coderModelInput" value="google/gemini-2.0-flash-exp:free">
+            </div>
+            <div class="modal-actions">
+                <button id="saveConfigBtn" class="primary-btn">保存配置</button>
+                <button id="closeConfigBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="chambers-container">
+        <!-- Genesis Chamber -->
+        <section class="chamber genesis" id="genesisChamber">
+            <div class="chamber-header">
+                <span class="icon">✨</span>
+                <h2>Genesis Chamber</h2>
+            </div>
+            <div class="content" id="genesisContent">
+                <div class="placeholder">待命回响...</div>
+            </div>
+            <div class="glow-edge"></div>
+        </section>
+
+        <!-- Coder Chamber -->
+        <section class="chamber coder" id="coderChamber">
+            <div class="chamber-header">
+                <span class="icon">💻</span>
+                <h2>Coder Chamber</h2>
+            </div>
+            <div class="content" id="coderContent">
+                <div class="placeholder">逻辑就绪...</div>
+            </div>
+            <div class="glow-edge"></div>
+        </section>
+    </main>
+
+    <footer class="input-area">
+        <div class="global-logs" id="globalLogs">
+            <div class="log-entry system">系统已连接...</div>
+        </div>
+        <div class="command-box">
+            <input type="text" id="userInput" placeholder="传达你的神谕 (Press Enter to send)..." autocomplete="off">
+            <button id="sendBtn">下达</button>
+        </div>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
