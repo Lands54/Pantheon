@@ -26,6 +26,21 @@ app.include_router(communication.router)
 
 
 # --- Simulation Heartbeat ---
+def pause_all_projects_on_startup() -> int:
+    """
+    Enforce safety policy: server startup never auto-resumes simulations.
+    Returns number of projects switched from enabled to disabled.
+    """
+    changed = 0
+    for proj in runtime_config.projects.values():
+        if proj.simulation_enabled:
+            proj.simulation_enabled = False
+            changed += 1
+    if changed > 0:
+        runtime_config.save()
+    return changed
+
+
 
 async def simulation_loop():
     """
@@ -58,6 +73,9 @@ async def simulation_loop():
 @app.on_event("startup")
 async def startup_event():
     """Initialize simulation on startup."""
+    changed = pause_all_projects_on_startup()
+    if changed > 0:
+        logger.info("Startup safety: paused all projects (simulation_enabled=false).")
     asyncio.create_task(simulation_loop())
 
 

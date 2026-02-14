@@ -150,6 +150,30 @@ def cmd_project(args):
                 print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
         except:
             print("❌ Server error.")
+    
+    elif args.subcommand == "start":
+        try:
+            res = requests.post(f"{get_base_url()}/projects/{args.id}/start")
+            if res.status_code == 200:
+                data = res.json()
+                print(f"🟢 Project started: {data.get('project_id')}")
+                print(f"   Current Project: {data.get('current_project')}")
+            else:
+                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
+        except:
+            print("❌ Server error.")
+
+    elif args.subcommand == "stop":
+        try:
+            res = requests.post(f"{get_base_url()}/projects/{args.id}/stop")
+            if res.status_code == 200:
+                data = res.json()
+                print(f"🔴 Project stopped: {data.get('project_id')}")
+                print(f"   Current Project: {data.get('current_project')}")
+            else:
+                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
+        except:
+            print("❌ Server error.")
 
 def cmd_agent(args):
     """View or Edit Agent Directives"""
@@ -310,6 +334,10 @@ def main():
     p_proj_delete.add_argument("id")
     p_proj_graph = proj_sub.add_parser("graph", help="Rebuild project knowledge graph")
     p_proj_graph.add_argument("id")
+    p_proj_start = proj_sub.add_parser("start", help="Start project simulation (exclusive active project)")
+    p_proj_start.add_argument("id")
+    p_proj_stop = proj_sub.add_parser("stop", help="Stop project simulation")
+    p_proj_stop.add_argument("id")
 
     # activate / deactivate
     subparsers.add_parser("activate").add_argument("id")

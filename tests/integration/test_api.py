@@ -133,3 +133,36 @@ def test_get_agents_status():
     data = response.json()
     assert "project_id" in data
     assert "agents" in data
+
+
+def test_project_start_stop_endpoints():
+    """Test project lifecycle endpoints: start/stop."""
+    test_project_id = "test_start_stop_world"
+    client.post("/projects/create", json={"id": test_project_id})
+    try:
+        # Start target project (exclusive)
+        response = client.post(f"/projects/{test_project_id}/start")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "success"
+        assert payload["project_id"] == test_project_id
+        assert payload["simulation_enabled"] is True
+        assert payload["current_project"] == test_project_id
+
+        # Verify config state
+        cfg = client.get("/config").json()
+        assert cfg["current_project"] == test_project_id
+        assert cfg["projects"][test_project_id]["simulation_enabled"] is True
+        for pid, proj in cfg["projects"].items():
+            if pid != test_project_id:
+                assert proj["simulation_enabled"] is False
+
+        # Stop target project
+        response = client.post(f"/projects/{test_project_id}/stop")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "success"
+        assert payload["project_id"] == test_project_id
+        assert payload["simulation_enabled"] is False
+    finally:
+        client.delete(f"/projects/{test_project_id}")

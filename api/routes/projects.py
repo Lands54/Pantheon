@@ -76,3 +76,44 @@ async def rebuild_knowledge_graph(project_id: str):
         "edges": len(graph.get("edges", [])),
         "output": f"projects/{project_id}/knowledge/knowledge_graph.json",
     }
+
+
+@router.post("/{project_id}/start")
+async def start_project(project_id: str):
+    """
+    Start a project's autonomous simulation.
+    New active-project paradigm: only one project can run at a time.
+    """
+    if project_id not in runtime_config.projects:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Pause all projects first to enforce single active project runtime.
+    for pid, proj in runtime_config.projects.items():
+        proj.simulation_enabled = (pid == project_id)
+
+    runtime_config.current_project = project_id
+    runtime_config.save()
+    return {
+        "status": "success",
+        "project_id": project_id,
+        "simulation_enabled": True,
+        "current_project": runtime_config.current_project,
+    }
+
+
+@router.post("/{project_id}/stop")
+async def stop_project(project_id: str):
+    """
+    Stop a project's autonomous simulation.
+    """
+    if project_id not in runtime_config.projects:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    runtime_config.projects[project_id].simulation_enabled = False
+    runtime_config.save()
+    return {
+        "status": "success",
+        "project_id": project_id,
+        "simulation_enabled": False,
+        "current_project": runtime_config.current_project,
+    }
