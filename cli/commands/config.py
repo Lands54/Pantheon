@@ -116,18 +116,93 @@ def cmd_config(args):
             print(f"❌ Error: {e}")
     
     elif args.subcommand == "models":
-        # List available models
-        print("\n🤖 Available Models:")
-        print("\n📦 Free Models:")
-        print("   google/gemini-2.0-flash-exp:free")
-        print("   google/gemini-flash-1.5:free")
-        print("   meta-llama/llama-3.2-3b-instruct:free")
-        print("   qwen/qwen-2-7b-instruct:free")
-        
-        print("\n💎 Premium Models:")
-        print("   anthropic/claude-3.5-sonnet")
-        print("   openai/gpt-4-turbo")
-        print("   google/gemini-pro-1.5")
+        # Fetch available models from OpenRouter API
+        print("\n🤖 Fetching Available Models from OpenRouter...")
+        try:
+            # Get API key if available
+            res = requests.get(f"{base_url}/config")
+            api_key = res.json().get("openrouter_api_key", "")
+            
+            # Fetch models from OpenRouter
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            models_res = requests.get(
+                "https://openrouter.ai/api/v1/models",
+                headers=headers,
+                timeout=5
+            )
+            
+            if models_res.status_code == 200:
+                models_data = models_res.json()
+                models = models_data.get("data", [])
+                
+                # Separate free and paid models
+                free_models = []
+                paid_models = []
+                
+                for model in models:
+                    model_id = model.get("id", "")
+                    pricing = model.get("pricing", {})
+                    prompt_price = float(pricing.get("prompt", "0"))
+                    
+                    # Check if it's free (some models have :free suffix or zero pricing)
+                    if ":free" in model_id or prompt_price == 0:
+                        free_models.append({
+                            "id": model_id,
+                            "name": model.get("name", model_id),
+                            "context": model.get("context_length", "unknown")
+                        })
+                    else:
+                        paid_models.append({
+                            "id": model_id,
+                            "name": model.get("name", model_id),
+                            "context": model.get("context_length", "unknown"),
+                            "price": prompt_price
+                        })
+                
+                # Display free models
+                print("\n📦 Free Models:")
+                if free_models:
+                    for model in sorted(free_models, key=lambda x: x["name"])[:10]:  # Show top 10
+                        print(f"   {model['id']}")
+                        print(f"      Name: {model['name']}")
+                        print(f"      Context: {model['context']} tokens")
+                else:
+                    print("   No free models found")
+                
+                # Display some popular paid models
+                print("\n💎 Popular Premium Models:")
+                popular_keywords = ["claude", "gpt-4", "gemini-pro"]
+                shown = 0
+                for model in sorted(paid_models, key=lambda x: x.get("price", 999)):
+                    if shown >= 10:
+                        break
+                    if any(kw in model["id"].lower() for kw in popular_keywords):
+                        print(f"   {model['id']}")
+                        print(f"      Name: {model['name']}")
+                        print(f"      Context: {model['context']} tokens")
+                        shown += 1
+                
+                print(f"\n📊 Total: {len(free_models)} free, {len(paid_models)} premium models")
+                print(f"💡 Full list: https://openrouter.ai/models")
+            else:
+                raise Exception("API request failed")
+                
+        except Exception as e:
+            # Fallback to hardcoded list
+            print(f"\n⚠️  Could not fetch from OpenRouter API: {e}")
+            print("\n📦 Common Free Models:")
+            print("   google/gemini-2.0-flash-exp:free")
+            print("   google/gemini-flash-1.5:free")
+            print("   meta-llama/llama-3.2-3b-instruct:free")
+            print("   qwen/qwen-2-7b-instruct:free")
+            
+            print("\n💎 Popular Premium Models:")
+            print("   anthropic/claude-3.5-sonnet")
+            print("   openai/gpt-4-turbo")
+            print("   google/gemini-pro-1.5")
         
         print("\n💡 Usage:")
         print("   ./temple.sh config set agent.genesis.model google/gemini-2.0-flash-exp:free")
