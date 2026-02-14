@@ -16,6 +16,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cli.commands.config import cmd_config
+from cli.commands.check import cmd_check
 
 CONFIG_PATH = Path("config.json")
 
@@ -271,6 +272,10 @@ def main():
     # list
     subparsers.add_parser("list", help="List agents in current project")
 
+    # check
+    p_check = subparsers.add_parser("check", help="Check agent's recent activity and responses")
+    p_check.add_argument("agent_id", help="Agent ID to check")
+
     # config
     p_config = subparsers.add_parser("config", help="Manage configuration")
     config_sub = p_config.add_subparsers(dest="subcommand")
@@ -342,6 +347,7 @@ def main():
     
     if args.command == "init": cmd_init(args)
     elif args.command == "list": cmd_list(args)
+    elif args.command == "check": cmd_check(args)
     elif args.command == "config": cmd_config(args)
     elif args.command == "project": cmd_project(args)
     elif args.command == "agent": cmd_agent(args)
