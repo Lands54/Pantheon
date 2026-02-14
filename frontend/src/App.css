@@ -37,6 +37,7 @@
   margin: 0;
   background: linear-gradient(to right, var(--accent-gold), #fff);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -536,4 +537,210 @@ input:checked+.slider:before {
   100% {
     opacity: 0.3;
   }
+}
+
+/* Simulation Status Orb */
+.sim-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  margin-bottom: 15px;
+  font-size: 0.8rem;
+}
+
+.orb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.orb.green {
+  background: #4dfa4d;
+  box-shadow: 0 0 10px #4dfa4d;
+}
+
+.orb.red {
+  background: #fa4d4d;
+}
+
+/* Prayers View */
+.prayers-view {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 30px;
+  border-radius: 20px;
+}
+
+.prayers-view h3 {
+  margin-top: 0;
+  font-family: var(--font-display);
+  color: var(--accent-gold);
+  border-bottom: 1px solid var(--border-glass);
+  padding-bottom: 15px;
+}
+
+.prayers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.prayer-item {
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.prayer-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  margin-bottom: 10px;
+}
+
+.prayer-sender {
+  color: var(--accent-gold);
+  font-weight: bold;
+}
+
+.prayer-time {
+  opacity: 0.4;
+}
+
+.prayer-content {
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.badge {
+  background: var(--accent-gold);
+  color: black;
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: bold;
+  margin-left: auto;
+}
+
+/* Modal Grouping */
+.form-group {
+  margin-bottom: 25px;
+  padding: 20px;
+  border-radius: 15px;
+}
+
+.form-group h4 {
+  margin: 0 0 15px 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.6;
+}
+
+.large .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* Glass Light */
+.glass-light {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+/* Agent Config Card */
+.agent-config-card {
+  margin-bottom: 20px;
+  padding: 15px;
+  border-radius: 16px;
+}
+
+.tool-toggle-grid {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.small {
+  font-size: 0.7rem;
+}
+
+.tools-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tool-tag {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 100px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.tool-tag.enabled {
+  background: rgba(212, 175, 55, 0.1);
+  color: var(--accent-gold);
+  border-color: rgba(212, 175, 55, 0.2);
+}
+
+.tool-tag.disabled {
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.05);
+  text-decoration: line-through;
+}
+
+.tool-tag:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.2);
+}
+/* Project Switcher */
+.project-switcher {
+  margin: 10px 15px;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  border-radius: 8px;
+}
+
+.project-switcher select {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.project-switcher select option {
+  background: var(--bg-deep);
+  color: var(--text-main);
+}
+
+.add-proj-btn {
+  background: var(--accent-gold);
+  border: none;
+  color: var(--bg-deep);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.add-proj-btn:hover {
+  opacity: 1;
 }
