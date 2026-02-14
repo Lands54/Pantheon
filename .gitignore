@@ -12,3 +12,4 @@ projects/**/buffers/*_inbox_guard.json
 projects/**/memory.sqlite
 projects/**/memory.sqlite-shm
 projects/**/memory.sqlite-wal
+.agent/
