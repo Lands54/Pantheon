@@ -18,13 +18,15 @@ $history
 # TASK (Current Universal Intent)
 $task
 
+# PHASE RUNTIME
+Current Phase: $phase_name
+$phase_block
+
 # AVAILABLE TOOLS
 $tools_desc
 
 # PROTOCOL
-1. Read your inbox FIRST.
-2. If another Being reached out, reply via tool calling (send_message).
-3. If inbox is empty, use list_agents and proactively coordinate with peers.
-4. Carry out your work via structured tool calls only.
-5. Do NOT emit custom wrappers like [[...]] or <tool_call>...</tool_call>.
-6. If stuck, use post_to_synod.
+1. Follow the active PHASE constraints strictly.
+2. Use structured tool calls only.
+3. Avoid repeating the same tool call with same args.
+4. Do NOT emit custom wrappers like [[...]] or <tool_call>...</tool_call>.

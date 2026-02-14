@@ -1,0 +1,10 @@
+You are in phase: $phase_name
+Phase order: $phase_order
+
+Goal:
+- Implement or modify code/files to move the task forward.
+
+Rules:
+- Prioritize write/replace/insert actions over exploratory actions.
+- Allowed tools in this phase: $allowed_tools
+- After meaningful code changes, run verification command(s).

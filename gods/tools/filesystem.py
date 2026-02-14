@@ -7,6 +7,19 @@ import json
 import os
 from langchain.tools import tool
 
+RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md"}
+
+
+def _is_reserved_path(path: Path, agent_territory: Path) -> bool:
+    """
+    Disallow agent tools from directly accessing system-managed memory files.
+    """
+    try:
+        rel = path.resolve().relative_to(agent_territory.resolve())
+    except Exception:
+        return False
+    return any(part in RESERVED_SYSTEM_FILES for part in rel.parts)
+
 
 def validate_path(caller_id: str, project_id: str, path: str) -> Path:
     """Ensure the path is strictly within projects/{project_id}/agents/{caller_id}/"""
@@ -29,6 +42,9 @@ def read_file(path: str, caller_id: str, project_id: str = "default") -> str:
     """Read a scroll from your library. Only your personal scrolls are accessible."""
     try:
         file_path = validate_path(caller_id, project_id, path)
+        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        if _is_reserved_path(file_path, agent_territory):
+            return "Divine Restriction: Access to system memory files is forbidden."
         if not file_path.exists():
             return f"Error: Scroll {path} not found."
             
@@ -43,6 +59,9 @@ def write_file(path: str, content: str, caller_id: str, project_id: str = "defau
     """Inscribe a new scroll or overwrite an existing one in your territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
+        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        if _is_reserved_path(file_path, agent_territory):
+            return "Divine Restriction: System memory files are managed by the platform."
         file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -56,6 +75,9 @@ def replace_content(path: str, target_content: str, replacement_content: str, ca
     """Refine the scripture within your project territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
+        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        if _is_reserved_path(file_path, agent_territory):
+            return "Divine Restriction: System memory files are managed by the platform."
         if not file_path.exists():
             return f"Error: Scroll {path} not found."
 
@@ -79,6 +101,9 @@ def insert_content(path: str, anchor: str, content_to_insert: str, position: str
     """Expand the scripture within your project territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
+        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        if _is_reserved_path(file_path, agent_territory):
+            return "Divine Restriction: System memory files are managed by the platform."
         if not file_path.exists():
             return f"Error: Scroll {path} not found."
 
@@ -105,6 +130,9 @@ def multi_replace(path: str, replacements_json: str, caller_id: str, project_id:
     """Reshape the doctrine within your project territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
+        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        if _is_reserved_path(file_path, agent_territory):
+            return "Divine Restriction: System memory files are managed by the platform."
         replacements = json.loads(replacements_json)
         content = file_path.read_text(encoding="utf-8")
         for rep in replacements:
@@ -123,8 +151,22 @@ def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "def
     """Survey the chambers within your current project territory."""
     try:
         dir_path = validate_path(caller_id, project_id, path)
-        items = os.listdir(dir_path)
-        result = [f"{'[CHAMBER]' if (dir_path/item).is_dir() else '[SCROLL]'} {item}" for item in items if not item.startswith('.')]
+        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        if _is_reserved_path(dir_path, agent_territory):
+            return "Divine Restriction: Access to system memory files is forbidden."
+        if not dir_path.exists():
+            return f"Error: Path {path} not found."
+        if not dir_path.is_dir():
+            return f"Error: Path {path} is not a directory."
+
+        items = sorted([
+            item for item in os.listdir(dir_path)
+            if (not item.startswith('.')) and (item not in RESERVED_SYSTEM_FILES)
+        ])
+        if not items:
+            return "[EMPTY] No visible files or directories."
+
+        result = [f"{'[CHAMBER]' if (dir_path / item).is_dir() else '[SCROLL]'} {item}" for item in items]
         return "\n".join(result)
     except Exception as e:
         return f"Divine Restriction: {str(e)}"

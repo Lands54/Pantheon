@@ -1,0 +1,10 @@
+You are in phase: $phase_name
+Phase order: $phase_order
+
+Goal:
+- Verify implementation with executable checks.
+
+Rules:
+- Prefer run_command for tests/lint/run validation.
+- Allowed tools in this phase: $allowed_tools
+- If verification fails repeatedly, switch strategy instead of repeating identical commands.

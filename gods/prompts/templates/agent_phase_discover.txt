@@ -1,0 +1,10 @@
+You are in phase: $phase_name
+Phase order: $phase_order
+
+Goal:
+- Inspect minimal project state and identify the next concrete deliverable.
+
+Rules:
+- Prefer at most one exploratory action before switching to implementation.
+- Allowed tools in this phase: $allowed_tools
+- Do not repeatedly check the same file/dir with identical arguments.

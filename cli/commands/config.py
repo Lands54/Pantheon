@@ -35,6 +35,18 @@ def cmd_config(args):
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
             print(f"   Keep Count: {proj.get('summarize_keep_count', 5)} messages")
             print(f"   Tool Loop Max: {proj.get('tool_loop_max', 8)} per pulse")
+            print(f"   Memory Tail Chars: {proj.get('memory_tail_chars', 2000)}")
+            print(f"   Memory Entry Clip Chars: {proj.get('memory_entry_clip_chars', 1200)}")
+            print(f"   History Clip Chars: {proj.get('history_clip_chars', 600)}")
+            print(f"   History Keep Messages: {proj.get('history_keep_messages', 5)}")
+            print(f"   Memory Compact Trigger Chars: {proj.get('memory_compact_trigger_chars', 200000)}")
+            print(f"   Memory Compact Keep Chars: {proj.get('memory_compact_keep_chars', 50000)}")
+            print(f"\n🧠 Phase Runtime:")
+            print(f"   Enabled: {proj.get('phase_mode_enabled', True)}")
+            print(f"   Repeat Limit: {proj.get('phase_repeat_limit', 2)}")
+            print(f"   Explore Budget: {proj.get('phase_explore_budget', 3)}")
+            print(f"   No Progress Limit: {proj.get('phase_no_progress_limit', 3)}")
+            print(f"   Single Tool Call: {proj.get('phase_single_tool_call', True)}")
             
             print(f"\n👥 Active Agents: {', '.join(proj.get('active_agents', []))}")
             
@@ -107,8 +119,25 @@ def cmd_config(args):
                     data["projects"][pid]["summarize_threshold"] = int(args.value)
                 elif parts[1] == "keep":
                     data["projects"][pid]["summarize_keep_count"] = int(args.value)
+                elif parts[1] == "tail":
+                    data["projects"][pid]["memory_tail_chars"] = int(args.value)
+                elif parts[1] == "entry_clip":
+                    data["projects"][pid]["memory_entry_clip_chars"] = int(args.value)
+                elif parts[1] == "compact_trigger":
+                    data["projects"][pid]["memory_compact_trigger_chars"] = int(args.value)
+                elif parts[1] == "compact_keep":
+                    data["projects"][pid]["memory_compact_keep_chars"] = int(args.value)
                 else:
                     print(f"❌ Unknown memory key: {parts[1]}")
+                    return
+
+            elif parts[0] == "history" and len(parts) >= 2:
+                if parts[1] == "clip":
+                    data["projects"][pid]["history_clip_chars"] = int(args.value)
+                elif parts[1] == "keep":
+                    data["projects"][pid]["history_keep_messages"] = int(args.value)
+                else:
+                    print(f"❌ Unknown history key: {parts[1]}")
                     return
 
             elif parts[0] == "tools" and len(parts) >= 2:
@@ -120,6 +149,21 @@ def cmd_config(args):
                     data["projects"][pid]["tool_loop_max"] = value
                 else:
                     print(f"❌ Unknown tools key: {parts[1]}")
+                    return
+
+            elif parts[0] == "phase" and len(parts) >= 2:
+                if parts[1] == "enabled":
+                    data["projects"][pid]["phase_mode_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "repeat_limit":
+                    data["projects"][pid]["phase_repeat_limit"] = int(args.value)
+                elif parts[1] == "explore_budget":
+                    data["projects"][pid]["phase_explore_budget"] = int(args.value)
+                elif parts[1] == "no_progress_limit":
+                    data["projects"][pid]["phase_no_progress_limit"] = int(args.value)
+                elif parts[1] == "single_tool":
+                    data["projects"][pid]["phase_single_tool_call"] = args.value.lower() == "true"
+                else:
+                    print(f"❌ Unknown phase key: {parts[1]}")
                     return
             
             elif parts[0] == "agent" and len(parts) >= 3:
@@ -167,7 +211,18 @@ def cmd_config(args):
                 print("  simulation.batch (number)")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
+                print("  memory.tail (chars)")
+                print("  memory.entry_clip (chars)")
+                print("  memory.compact_trigger (chars)")
+                print("  memory.compact_keep (chars)")
+                print("  history.clip (chars)")
+                print("  history.keep (message count)")
                 print("  tools.loop_max (number)")
+                print("  phase.enabled (true/false)")
+                print("  phase.repeat_limit (number)")
+                print("  phase.explore_budget (number)")
+                print("  phase.no_progress_limit (number)")
+                print("  phase.single_tool (true/false)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return
