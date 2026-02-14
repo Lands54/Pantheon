@@ -9,6 +9,12 @@ import requests
 import os
 from pathlib import Path
 from typing import Optional
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from cli.commands.config import cmd_config
 
 CONFIG_PATH = Path("config.json")
