@@ -10,10 +10,9 @@ from pathlib import Path
 # Ensure we can import from the current directory
 sys.path.append(os.getcwd())
 
-from platform_logic.agents import GodAgent
-from gods_platform.graph_state import GodsState
+from gods.agents.base import GodAgent
 from langchain_core.messages import HumanMessage
-from gods_platform.config import runtime_config
+from gods.config import runtime_config
 
 def run_test(agent_id: str, project_id: str):
     # 0. Check for API key
@@ -27,7 +26,7 @@ def run_test(agent_id: str, project_id: str):
 
     # 2. Define the State and Mission
     mission = "Manifest a Python script named 'prime_finder.py' in your territory that calculates all prime numbers up to 100 and prints them."
-    state: GodsState = {
+    state = {
         "project_id": project_id,
         "messages": [HumanMessage(content=mission, name="user")],
         "current_speaker": "user",

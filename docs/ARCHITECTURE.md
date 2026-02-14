@@ -1,41 +1,77 @@
-# Gods: 分布式 Agent 开发系统架构
+# Gods Platform 架构概览（当前实现）
 
-## 1. 核心愿景
-构建一个高度自治、自主演化的分布式 Agent 集成平台。每一个 Agent 不仅是一个代码片段，而是一个拥有独立身份、独立环境（封闭文件夹）和核心职责的“数字生命实体”。
+## 1. 总体结构
 
-## 2. 目录结构规范
-系统将遵循严格的物理隔离模式：
+Gods Platform 采用三层结构：
+
+- 核心引擎：`gods/`
+- API 服务：`api/`
+- 命令行：`cli/`
+
+所有运行时世界数据都存放在 `projects/{project_id}/` 下，形成物理隔离。
+
+## 2. 核心引擎（`gods/`）
+
+### 2.1 Agent 模型
+
+- `gods/agents/base.py`：`GodAgent`，每个 Agent 的主脉冲循环。
+- `gods/agents/brain.py`：`GodBrain`，按项目+Agent 动态解析模型并调用 OpenRouter。
+- `gods/workflow.py`：LangGraph 编排（公共讨论与私聊流程）+ SQLite checkpoint。
+- `gods/state.py`：统一状态定义（`GodsState`）。
+
+### 2.2 工具系统
+
+- `gods/tools/communication.py`：私聊投递、收件箱读取、上行给人类、Synod 升级。
+- `gods/tools/filesystem.py`：Agent 领地内文件读写与精确替换。
+- `gods/tools/execution.py`：受限命令执行（黑名单+禁止复杂 shell 符号）。
+
+### 2.3 配置与持久化
+
+- `gods/config.py`：`config.json` 的加载、迁移、保存。
+- `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
+- `projects/{project_id}/agents/{agent_id}/memory.md`：可读记忆日志。
+
+## 3. API 层（`api/`）
+
+- `api/server.py`：FastAPI 入口、路由注册、后台 simulation loop。
+- `api/routes/config.py`：配置读取/保存。
+- `api/routes/projects.py`：项目增删。
+- `api/routes/agents.py`：Agent 增删。
+- `api/routes/communication.py`：
+  - `/broadcast`：SSE 输出多 Agent 讨论流。
+  - `/confess`：向指定 Agent 私聊并可触发即时 pulse（`silent=false`）。
+  - `/prayers/check`：读取 Agent 发给人类的消息。
+
+## 4. CLI 层（`cli/`）
+
+- 入口：`cli/main.py`
+- 快速启动脚本：`temple.sh`
+- 子命令：
+  - 项目管理：`project list/create/switch/delete`
+  - Agent 管理：`list/activate/deactivate/agent view|edit`
+  - 通信：`broadcast/confess/prayers/check`
+  - 配置：`config show/set/models`
+
+## 5. 多项目隔离模型
+
+每个项目目录结构：
 
 ```text
-Gods/
-├── platform/               # 平台核心引擎
-│   ├── bus/                # 消息传递与路由中心
-│   ├── parser/             # Agent 语义与调用解析器
-│   └── registry/           # Agent 注册与状态维护
-├── agents/                 # Agent 物理隔离区
-│   └── {agent_id}/         # 每个 Agent 的专属领地
-│       ├── agent.md        # Agent 的灵魂：定义核心职责、身份与知识
-│       ├── .agent/         # Agent 的私有元数据与记忆
-│       ├── workspace/      # Agent 自由操作的源码与程序空间
-│       └── logs/           # 行为审计日志
-└── shared/                 # 全局协议与标准库
+projects/{project_id}/
+├── agents/{agent_id}/
+│   ├── agent.md
+│   └── memory.md
+├── buffers/
+│   ├── {agent_id}.jsonl
+│   ├── {agent_id}_read.jsonl
+│   └── human.jsonl
+└── memory.sqlite
 ```
 
-## 3. Agent 规格说明 (agent.md)
-每个 Agent 必须包含一个 `agent.md`，其结构定义如下：
-- **Identity**: Agent 名称与 ID。
-- **Core Responsibility**: (核心职责) **最重要**的部分，定义了 Agent 存在的唯一理由。
-- **Capability**: 描述 Agent 能够调用的工具和具备的技能。
-- **State**: 当前任务状态。
+## 6. 数据流（关键路径）
 
-## 4. 通信协议 (Call & Message)
-Agent 之间不直接调用，而是通过平台解析指令：
-- **Private Call**: `[[send(to="agent_b", msg="...")]]`
-- **Group Call**: `[[broadcast(group="dev_team", msg="...")]]`
-- **Tool Call**: `[[exec(runtime="python", code="...")]]` - 允许 Agent 在自身 `workspace` 内编写并运行代码。
-
-## 5. 平台演进规划
-- **Phase 1**: 环境基础与 Agent 注册机制实现。
-- **Phase 2**: 基于文件监听的消息总线 (Message Bus) 建立。
-- **Phase 3**: 语义解析引擎，支持 Agent 理解并触发 `call`。
-- **Phase 4**: 分布式部署支持。
+1. 人类发起 `broadcast` 或 `confess`。  
+2. API 构造 `GodsState`，调用 LangGraph 或直接触发 Agent pulse。  
+3. Agent 先 `check_inbox`，再结合 `agent.md` + `memory.md` 进行推理。  
+4. 工具调用结果写入消息流与记忆文件。  
+5. `broadcast` 场景通过 SSE 实时返回客户端。  

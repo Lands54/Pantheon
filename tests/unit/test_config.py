@@ -10,7 +10,7 @@ from gods.config import SystemConfig, ProjectConfig, AgentModelConfig
 def test_agent_model_config_defaults():
     """Test AgentModelConfig default values."""
     config = AgentModelConfig()
-    assert config.model == "google/gemini-2.0-flash-exp:free"
+    assert config.model == "stepfun/step-3.5-flash:free"
     assert config.disabled_tools == []
 
 

@@ -20,12 +20,26 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
         return json.dumps([])
     
     messages = []
+    read_path = buffer_dir / f"{caller_id}_read.jsonl"
+    read_timestamp = time.time()
+    
     with open(buffer_path, "r+", encoding="utf-8") as f:
         try:
             fcntl.flock(f, fcntl.LOCK_EX)
             for line in f:
                 if line.strip():
-                    messages.append(json.loads(line))
+                    msg = json.loads(line)
+                    msg["read_at"] = read_timestamp
+                    messages.append(msg)
+            
+            # Append read messages to history
+            if messages:
+                with open(read_path, "a", encoding="utf-8") as rf:
+                    fcntl.flock(rf, fcntl.LOCK_EX)
+                    for m in messages:
+                        rf.write(json.dumps(m, ensure_ascii=False) + "\n")
+                    fcntl.flock(rf, fcntl.LOCK_UN)
+
             f.seek(0)
             f.truncate()
         finally:
@@ -53,13 +67,13 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
 
 
 @tool
-def send_to_human(message: str, caller_id: str = "default") -> str:
+def send_to_human(message: str, caller_id: str, project_id: str = "default") -> str:
     """
     Sacred Prayer. Send a private message to the Human Overseer.
     Use this for direct reporting or when human intervention is required.
     """
     project_root = Path(__file__).parent.parent.parent.absolute()
-    buffer_dir = project_root / "gods_platform" / "buffers"
+    buffer_dir = project_root / "projects" / project_id / "buffers"
     buffer_dir.mkdir(parents=True, exist_ok=True)
     
     # Store human messages in a specific buffer

@@ -1,82 +1,79 @@
-# Gods Platform 快速启动指南
+# Gods Platform 快速启动（当前版本）
 
-## 环境激活
+## 1. 启动环境
 
 ```bash
-# 激活 conda 环境
 conda activate gods_env
-
-# 验证环境
-which python
-# 应该输出：/Users/qiuboyu/anaconda3/envs/gods_env/bin/python
 ```
 
-## 启动神殿服务 (Server)
+## 2. 初始化 API Key
 
 ```bash
-# 启动 FastAPI 后端
-python server.py
+./temple.sh init YOUR_OPENROUTER_API_KEY
 ```
 
-## 使用 Sacred Command (CLI)
-
-`temple.py` 是管理众神平台的主要入口。
-
-### 1. 初始化设置
-```bash
-# 设置 API Key
-python temple.py init YOUR_OPENROUTER_API_KEY
-```
-
-### 2. 世界（项目）管理
-```bash
-# 列出所有世界
-python temple.py project list
-
-# 创建新世界
-python temple.py project create new_world --name "新纪元"
-
-# 切换当前激活的世界
-python temple.py project switch new_world
-```
-
-### 3. 众神（代理）管理
-```bash
-# 查看当前世界的众神状态
-python temple.py list
-
-# 激活/休眠代理
-python temple.py activate coder
-python temple.py deactivate genesis
-
-# 查看/编辑代理指令
-python temple.py agent view genesis
-```
-
-### 4. 发布神谕 & 辩论
-```bash
-# 发布广播指令（触发辩论）
-python temple.py broadcast "讨论一下 AI 伦理"
-
-# 运行自动化集成测试
-python temple.py test --cleanup
-```
-
-## 运行离线脚本
-
-如果你想绕过服务器直接运行：
+## 3. 启动服务
 
 ```bash
-# 在指定世界运行单次任务
-python index.py "你的任务..." --project default
-
-# 运行代理能力测试脚本
-python test_divine_manifestation.py --agent coder --project default
+./server.sh
 ```
 
-## 前端开发
+服务默认地址：`http://localhost:8000`  
+API 文档：`http://localhost:8000/docs`
+
+## 4. 常用 CLI 命令
+
+### 4.1 项目管理
+
+```bash
+./temple.sh project list
+./temple.sh project create my_world
+./temple.sh project switch my_world
+./temple.sh project delete my_world
+```
+
+### 4.2 Agent 管理
+
+```bash
+./temple.sh list
+./temple.sh activate genesis
+./temple.sh deactivate genesis
+./temple.sh agent view genesis
+./temple.sh agent edit genesis
+```
+
+### 4.3 通信与观测
+
+```bash
+./temple.sh broadcast "讨论当前目标"
+./temple.sh confess genesis "请先处理收件箱"
+./temple.sh confess genesis "先记录，不要立即执行" --silent
+./temple.sh check genesis
+./temple.sh prayers
+```
+
+### 4.4 配置
+
+```bash
+./temple.sh config show
+./temple.sh config models
+./temple.sh config set agent.genesis.model stepfun/step-3.5-flash:free
+./temple.sh config set all.models stepfun/step-3.5-flash:free
+./temple.sh config set simulation.enabled true
+./temple.sh config set simulation.min 10
+./temple.sh config set simulation.max 40
+```
+
+## 5. 前端开发（可选）
 
 ```bash
 cd frontend
+npm install
 npm run dev
+```
+
+## 6. 测试（建议）
+
+```bash
+pytest -q
 ```

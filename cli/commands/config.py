@@ -59,7 +59,8 @@ def cmd_config(args):
             # Parse key path (e.g., "simulation.enabled" or "agent.genesis.model")
             parts = args.key.split('.')
             
-            if parts[0] == "simulation":
+            # Match key paths
+            if parts[0] == "simulation" and len(parts) >= 2:
                 if parts[1] == "enabled":
                     data["projects"][pid]["simulation_enabled"] = args.value.lower() == "true"
                 elif parts[1] == "min":
@@ -70,7 +71,7 @@ def cmd_config(args):
                     print(f"❌ Unknown simulation key: {parts[1]}")
                     return
             
-            elif parts[0] == "memory":
+            elif parts[0] == "memory" and len(parts) >= 2:
                 if parts[1] == "threshold":
                     data["projects"][pid]["summarize_threshold"] = int(args.value)
                 elif parts[1] == "keep":
@@ -94,6 +95,26 @@ def cmd_config(args):
                     print(f"❌ Unknown agent setting: {setting}")
                     return
             
+            # BATCH SETTING: Set model for ALL agents in the current project
+            elif parts[0] == "all" and parts[1] == "models":
+                if "agent_settings" not in data["projects"][pid]:
+                    data["projects"][pid]["agent_settings"] = {}
+                
+                # Get all active agents and existing settings
+                agents_to_update = set(data["projects"][pid].get("active_agents", []))
+                agents_to_update.update(data["projects"][pid]["agent_settings"].keys())
+                
+                if not agents_to_update:
+                    # Fallback to default
+                    agents_to_update = {"genesis"}
+                
+                for agent_id in agents_to_update:
+                    if agent_id not in data["projects"][pid]["agent_settings"]:
+                        data["projects"][pid]["agent_settings"][agent_id] = {}
+                    data["projects"][pid]["agent_settings"][agent_id]["model"] = args.value
+                
+                print(f"🚀 Updating all agents to model: {args.value}")
+            
             else:
                 print(f"❌ Unknown config key: {args.key}")
                 print("Valid keys:")
@@ -103,6 +124,7 @@ def cmd_config(args):
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
                 print("  agent.<agent_id>.model (model name)")
+                print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return
             
             # Save configuration
@@ -194,8 +216,8 @@ def cmd_config(args):
             # Fallback to hardcoded list
             print(f"\n⚠️  Could not fetch from OpenRouter API: {e}")
             print("\n📦 Common Free Models:")
-            print("   google/gemini-flash-1.5:free")
-            print("   google/gemini-flash-1.5:free")
+            print("   stepfun/step-3.5-flash:free")
+            print("   stepfun/step-3.5-flash:free")
             print("   meta-llama/llama-3.2-3b-instruct:free")
             print("   qwen/qwen-2-7b-instruct:free")
             
@@ -205,4 +227,4 @@ def cmd_config(args):
             print("   google/gemini-pro-1.5")
         
         print("\n💡 Usage:")
-        print("   ./temple.sh config set agent.genesis.model google/gemini-flash-1.5:free")
+        print("   ./temple.sh config set agent.genesis.model stepfun/step-3.5-flash:free")

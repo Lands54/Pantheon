@@ -2,6 +2,7 @@
 CLI Check Command - Check agent responses and activity
 """
 import requests
+import json
 from pathlib import Path
 from cli.utils import get_base_url
 
@@ -39,7 +40,30 @@ def cmd_check(args):
             pending = len(lines)
             print(f"📥 Inbox: {pending} pending message(s)")
     else:
-        print(f"📥 Inbox: Empty")
+        # Check buffers directory for pending messages
+        buffer_path = Path(f"projects/{pid}/buffers/{agent_id}.jsonl")
+        if buffer_path.exists():
+            with open(buffer_path, 'r') as f:
+                lines = f.readlines()
+                pending = len(lines)
+                print(f"📥 Inbox: {pending} pending message(s)")
+        else:
+            print(f"📥 Inbox: Empty")
+    
+    # Show read receipts
+    read_path = Path(f"projects/{pid}/buffers/{agent_id}_read.jsonl")
+    if read_path.exists():
+        print(f"\n📖 Read Receipts (Acknowledged by Agent):")
+        from datetime import datetime
+        with open(read_path, 'r') as f:
+            read_lines = f.readlines()[-5:] # Show last 5 read receipts
+            for line in read_lines:
+                if line.strip():
+                    msg = json.loads(line)
+                    read_time = datetime.fromtimestamp(msg.get("read_at", 0)).strftime("%Y-%m-%d %H:%M:%S")
+                    sender = msg.get("from", "unknown")
+                    content = msg.get("content", "")[:50]
+                    print(f"   ✅ [{read_time}] Read message from {sender}: \"{content}...\"")
     
     # Show recent memory entries
     if memory_file.exists():

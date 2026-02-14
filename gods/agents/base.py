@@ -26,7 +26,7 @@ class GodAgent:
         self.directives = self._load_directives()
         
         # Initialize brain with specific settings from config
-        self.brain = GodBrain(agent_id=agent_id)
+        self.brain = GodBrain(agent_id=agent_id, project_id=project_id)
 
     def _load_directives(self) -> str:
         """Load the core mission/logic from agent.md"""

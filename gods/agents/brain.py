@@ -2,8 +2,6 @@
 Gods Platform - Brain Module (Dynamic API Version)
 Manages LLM instances using runtime configuration.
 """
-import os
-from langchain_openai import ChatOpenAI
 from gods.config import runtime_config
 
 
@@ -12,19 +10,24 @@ class GodBrain:
     Inference Engine using OpenRouter API.
     Model settings are fetched from runtime_config.
     """
-    def __init__(self, agent_id: str = "default"):
+    def __init__(self, agent_id: str = "default", project_id: str = None):
         self.agent_id = agent_id
+        self.project_id = project_id
         
     def get_llm(self):
         """Dynamically build the LLM based on current config"""
-        # Get current project's agent settings
-        current_project = runtime_config.current_project
-        proj = runtime_config.projects.get(current_project)
+        # Delay import to avoid heavy optional deps at module import time.
+        from langchain_openai import ChatOpenAI
         
-        if proj and self.agent_id in proj.agent_settings:
+        # Get current project's agent settings
+        current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+        projects = getattr(runtime_config, 'projects', {})
+        proj = projects.get(current_project)
+        
+        if proj and hasattr(proj, 'agent_settings') and self.agent_id in proj.agent_settings:
             model = proj.agent_settings[self.agent_id].model
         else:
-            model = "google/gemini-flash-1.5:free"
+            model = "stepfun/step-3.5-flash:free"
         
         api_key = runtime_config.openrouter_api_key
         
@@ -53,9 +56,9 @@ class GodBrain:
             return f"Error in reasoning: {str(e)}"
     
     def __repr__(self):
-        current_project = runtime_config.current_project
+        current_project = self.project_id or runtime_config.current_project
         proj = runtime_config.projects.get(current_project)
         model = "default"
         if proj and self.agent_id in proj.agent_settings:
             model = proj.agent_settings[self.agent_id].model
-        return f"GodBrain(agent={self.agent_id}, model={model})"
+        return f"GodBrain(agent={self.agent_id}, project={current_project}, model={model})"

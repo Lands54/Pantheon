@@ -33,7 +33,7 @@ def summarize_conversation(state: GodsState):
 
     print(f"[{project_id}] --- SUMMARIZING CONVERSATION ---")
     
-    brain = GodBrain(agent_id="system_mnemosyne")
+    brain = GodBrain(agent_id="system_mnemosyne", project_id=project_id)
     existing_summary = state.get("summary", "")
     to_summarize = messages[:-keep_count]
     history_str = "\n".join([f"{msg.name if hasattr(msg, 'name') else 'user'}: {msg.content}" for msg in to_summarize])

@@ -67,7 +67,7 @@ async def startup_event():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "operational", "version": "2.0.0"}
+    return {"status": "operational", "version": "2.0.1-REAL-RESTART"}
 
 
 # Serve frontend

@@ -184,7 +184,8 @@ def cmd_broadcast(args):
                     if line_str.startswith('data: '):
                         data = json.loads(line_str[6:])
                         if "content" in data:
-                            print(f"[{data['speaker'].upper()}]: {data['content']}")
+                            speaker = (data.get('speaker') or 'system').upper()
+                            print(f"[{speaker}]: {data['content']}")
         
         # Switch back
         if pid != old_pid:
@@ -239,9 +240,7 @@ def cmd_test(args):
                     line_str = line.decode('utf-8')
                     if line_str.startswith('data: '):
                         data = json.loads(line_str[6:])
-                        speaker = data.get("speaker", "").upper()
                         content = data.get("content", "")
-                        print(f"   [{speaker}]: {content[:50]}...")
                         if "MANIFEST_SUCCESS" in content:
                             received_success = True
         
@@ -313,6 +312,7 @@ def main():
     p_cf = subparsers.add_parser("confess")
     p_cf.add_argument("id")
     p_cf.add_argument("message")
+    p_cf.add_argument("--silent", action="store_true", help="Send message without triggering an immediate pulse")
     
     # prayers
     subparsers.add_parser("prayers")
@@ -375,9 +375,9 @@ def main():
         except: print("❌ Server error.")
     elif args.command == "confess":
         try:
-            payload = {"agent_id": args.id, "message": args.message}
-            requests.post(f"{get_base_url()}/confess", json=payload)
-            print(f"🤫 Confession delivered to {args.id}.")
+            payload = {"agent_id": args.id, "message": args.message, "silent": args.silent}
+            res = requests.post(f"{get_base_url()}/confess", json=payload)
+            print(f"🤫 {res.json().get('status', 'Confession delivered.')}")
         except: print("❌ Server error.")
     elif args.command == "prayers":
         try:

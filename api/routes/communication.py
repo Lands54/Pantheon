@@ -9,7 +9,7 @@ import asyncio
 import logging
 from typing import AsyncGenerator
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from concurrent.futures import ThreadPoolExecutor
@@ -68,9 +68,9 @@ async def god_streamer(task: str, thread_id: str, project_id: str = "default") -
             data = await asyncio.wait_for(queue.get(), timeout=30.0)
             if data is None:
                 break
-            yield f"data: {json.dumps(data, ensure_ascii=False)}\\n\\n"
+            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         except asyncio.TimeoutError:
-            yield ": ping\\n\\n"
+            yield ": ping\n\n"
 
 
 @router.post("/broadcast")
@@ -83,8 +83,8 @@ async def broadcast_decree(req: BroadcastRequest):
 
 
 @router.post("/confess")
-async def human_confession(req: HumanMessageRequest):
-    """Deliver a private message within the current project."""
+async def human_confession(req: HumanMessageRequest, background_tasks: BackgroundTasks):
+    """Deliver a private message and trigger an immediate autonomous pulse."""
     project_id = runtime_config.current_project
     buffer_dir = Path("projects") / project_id / "buffers"
     buffer_dir.mkdir(parents=True, exist_ok=True)
@@ -96,11 +96,36 @@ async def human_confession(req: HumanMessageRequest):
         "type": "confession",
         "content": req.message
     }
+    
+    # 1. Store the message in the buffer
     with open(target_buffer, "a", encoding="utf-8") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
-        f.write(json.dumps(msg_data, ensure_ascii=False) + "\\n")
+        f.write(json.dumps(msg_data, ensure_ascii=False) + "\n")
         fcntl.flock(f, fcntl.LOCK_UN)
-    return {"status": "Confession sent"}
+    
+    # 2. Trigger an immediate pulse for this agent (if not silent)
+    if not req.silent:
+        def run_pulse():
+            from gods.agents.base import GodAgent
+            try:
+                agent = GodAgent(agent_id=req.agent_id, project_id=project_id)
+                state = {
+                    "project_id": project_id,
+                    "messages": [HumanMessage(content=f"PRIVATE REVELATION: {req.message}", name="High Overseer")],
+                    "context": f"Private interaction with High Overseer: {req.message}",
+                    "next_step": ""
+                }
+                agent.process(state)
+                logger.info(f"⚡ Auto-Pulse triggered for {req.agent_id} in {project_id}")
+            except Exception as e:
+                logger.error(f"Auto-Pulse failed for {req.agent_id}: {e}")
+
+        background_tasks.add_task(run_pulse)
+        status = "Confession delivered and pulse triggered"
+    else:
+        status = "Confession delivered silently (no pulse)"
+    
+    return {"status": status}
 
 
 @router.get("/prayers/check")

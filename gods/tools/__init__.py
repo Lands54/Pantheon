@@ -41,7 +41,7 @@ __all__ = [
     'check_inbox',
     'send_message',
     'send_to_human',
-    'post_to_human',
+    'post_to_synod',
     'abstain_from_synod',
     'read_file',
     'write_file',
