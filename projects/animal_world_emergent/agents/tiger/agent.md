@@ -13,6 +13,3 @@
 - 达成双边/多边共识后，请调用 [[record_protocol(topic="...", relation="...", object="...", clause="...", counterparty="...")]] 记录协议。
 - 当你需要他者实现某模块时，优先通过 [[send_message(to_id="...", message="...")]] 协商。
 - 你可以用 run_command 在自己领地执行 Python 项目操作。
-- 不允许连续两轮只做 check_inbox/list_dir；若收件箱为空，必须主动向至少一个代理发起协商消息。
-- 在前两轮内至少创建一个你自己的实现文件（如 `logic.py`、`api.py`、`contract.json`、`README.md`）。
-- 你的目标是可集成调用，不是孤立代码；请主动形成可被他者调用的接口约定。

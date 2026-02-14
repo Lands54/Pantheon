@@ -34,6 +34,7 @@ def cmd_config(args):
             print(f"\n📊 Memory:")
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
             print(f"   Keep Count: {proj.get('summarize_keep_count', 5)} messages")
+            print(f"   Tool Loop Max: {proj.get('tool_loop_max', 8)} per pulse")
             
             print(f"\n👥 Active Agents: {', '.join(proj.get('active_agents', []))}")
             
@@ -44,6 +45,30 @@ def cmd_config(args):
                 disabled = settings.get('disabled_tools', [])
                 if disabled:
                     print(f"      Disabled Tools: {', '.join(disabled)}")
+
+            # Show scheduler runtime status
+            try:
+                s_res = requests.get(f"{base_url}/agents/status", params={"project_id": pid}, timeout=3)
+                s_data = s_res.json()
+                agents = s_data.get("agents", [])
+                if agents:
+                    from datetime import datetime
+                    print(f"\n🧭 Scheduler Status:")
+                    for item in agents:
+                        status = item.get("status", "unknown")
+                        lp = item.get("last_pulse_at", 0) or 0
+                        ne = item.get("next_eligible_at", 0) or 0
+                        lp_s = datetime.fromtimestamp(lp).strftime("%Y-%m-%d %H:%M:%S") if lp > 0 else "N/A"
+                        ne_s = datetime.fromtimestamp(ne).strftime("%Y-%m-%d %H:%M:%S") if ne > 0 else "N/A"
+                        print(f"   {item.get('agent_id')}: {status}")
+                        print(f"      Last Pulse: {lp_s}")
+                        print(f"      Next Eligible: {ne_s}")
+                        print(f"      Empty Cycles: {item.get('empty_cycles', 0)}")
+                        print(f"      Pending Inbox: {item.get('has_pending_inbox', False)}")
+                else:
+                    print(f"\n🧭 Scheduler Status: No active agents in this project")
+            except Exception as e:
+                print(f"\n🧭 Scheduler Status: unavailable ({e})")
         except Exception as e:
             print(f"❌ Error: {e}")
     
@@ -84,6 +109,17 @@ def cmd_config(args):
                     data["projects"][pid]["summarize_keep_count"] = int(args.value)
                 else:
                     print(f"❌ Unknown memory key: {parts[1]}")
+                    return
+
+            elif parts[0] == "tools" and len(parts) >= 2:
+                if parts[1] == "loop_max":
+                    value = int(args.value)
+                    if value < 1:
+                        print("❌ tools.loop_max must be >= 1")
+                        return
+                    data["projects"][pid]["tool_loop_max"] = value
+                else:
+                    print(f"❌ Unknown tools key: {parts[1]}")
                     return
             
             elif parts[0] == "agent" and len(parts) >= 3:
@@ -131,6 +167,7 @@ def cmd_config(args):
                 print("  simulation.batch (number)")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
+                print("  tools.loop_max (number)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return

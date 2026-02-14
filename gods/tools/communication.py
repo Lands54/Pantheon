@@ -9,15 +9,61 @@ import time
 from langchain.tools import tool
 
 
+def _inbox_guard_path(caller_id: str, project_id: str) -> Path:
+    project_root = Path(__file__).parent.parent.parent.absolute()
+    guard_dir = project_root / "projects" / project_id / "buffers"
+    guard_dir.mkdir(parents=True, exist_ok=True)
+    return guard_dir / f"{caller_id}_inbox_guard.json"
+
+
+def _load_inbox_guard(caller_id: str, project_id: str) -> dict:
+    path = _inbox_guard_path(caller_id, project_id)
+    if not path.exists():
+        return {"warned_empty": False, "blocked": False}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"warned_empty": False, "blocked": False}
+
+
+def _save_inbox_guard(caller_id: str, project_id: str, state: dict):
+    path = _inbox_guard_path(caller_id, project_id)
+    path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+
+def reset_inbox_guard(caller_id: str, project_id: str):
+    """
+    Called by non-inbox actions: allow future inbox checks again.
+    """
+    _save_inbox_guard(caller_id, project_id, {"warned_empty": False, "blocked": False})
+
+
 @tool
 def check_inbox(caller_id: str, project_id: str = "default") -> str:
     """Check your own divine inbox for private revelations in the current project."""
+    guard = _load_inbox_guard(caller_id, project_id)
+    if guard.get("blocked"):
+        return (
+            "Divine Warning: Your inbox was empty in consecutive checks. "
+            "You must perform at least one non-inbox action before checking again."
+        )
+
     project_root = Path(__file__).parent.parent.parent.absolute()
     buffer_dir = project_root / "projects" / project_id / "buffers"
     buffer_path = buffer_dir / f"{caller_id}.jsonl"
     
     if not buffer_path.exists():
-        return json.dumps([])
+        if not guard.get("warned_empty", False):
+            _save_inbox_guard(caller_id, project_id, {"warned_empty": True, "blocked": False})
+            return (
+                "Inbox Empty Warning: no new messages. "
+                "If you check again without doing other work, inbox checks will be blocked once."
+            )
+        _save_inbox_guard(caller_id, project_id, {"warned_empty": True, "blocked": True})
+        return (
+            "Divine Warning: inbox still empty. "
+            "Now blocked until you execute a non-inbox action."
+        )
     
     messages = []
     read_path = buffer_dir / f"{caller_id}_read.jsonl"
@@ -44,6 +90,22 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
             f.truncate()
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
+
+    if messages:
+        reset_inbox_guard(caller_id, project_id)
+    else:
+        if not guard.get("warned_empty", False):
+            _save_inbox_guard(caller_id, project_id, {"warned_empty": True, "blocked": False})
+            return (
+                "Inbox Empty Warning: no new messages. "
+                "If you check again without doing other work, inbox checks will be blocked once."
+            )
+        _save_inbox_guard(caller_id, project_id, {"warned_empty": True, "blocked": True})
+        return (
+            "Divine Warning: inbox still empty. "
+            "Now blocked until you execute a non-inbox action."
+        )
+
     return json.dumps(messages, ensure_ascii=False)
 
 
@@ -152,3 +214,41 @@ def record_protocol(
 
     return f"Protocol recorded: {protocol_id} ({caller_id} -[{relation}]-> {object})"
 
+
+@tool
+def list_agents(caller_id: str, project_id: str = "default") -> str:
+    """
+    List all agents in current project with a short role summary from their agent.md.
+    """
+    agents_root = Path("projects") / project_id / "agents"
+    if not agents_root.exists():
+        return "No agents found in this project."
+
+    results = []
+    for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
+        agent_id = agent_dir.name
+        md_path = agent_dir / "agent.md"
+        role = "No role summary."
+        if md_path.exists():
+            text = md_path.read_text(encoding="utf-8").strip()
+            lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+            if lines:
+                role = lines[0].replace("#", "").strip()
+                # Prefer explicit "本体职责/自身职责" section content.
+                for i, ln in enumerate(lines):
+                    if ("本体职责" in ln) or ("自身职责" in ln):
+                        for j in range(i + 1, len(lines)):
+                            cand = lines[j]
+                            if cand.startswith("#"):
+                                break
+                            role = cand[:120]
+                            break
+                        break
+                else:
+                    for ln in lines[1:]:
+                        if not ln.startswith("#"):
+                            role = ln[:120]
+                            break
+        results.append(f"- {agent_id}: {role}")
+
+    return "\n".join(results)

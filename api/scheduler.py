@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage
 
 from gods.agents.base import GodAgent
 from gods.config import runtime_config
+from gods.prompts import prompt_registry
 
 _META_LOCK = threading.Lock()
 _AGENT_LOCKS: Dict[Tuple[str, str], threading.Lock] = {}
@@ -65,19 +66,16 @@ def has_pending_inbox(project_id: str, agent_id: str) -> bool:
 
 def _run_agent_until_pause(project_id: str, agent_id: str, reason: str) -> str:
     agent = GodAgent(agent_id=agent_id, project_id=project_id)
+    pulse_message = prompt_registry.render("scheduler_pulse_message", project_id=project_id, reason=reason)
+    pulse_context = prompt_registry.render("scheduler_pulse_context", project_id=project_id, reason=reason)
     state = {
         "project_id": project_id,
-        "messages": [HumanMessage(content=f"PULSE_EVENT: {reason}", name="system")],
-        "context": f"Autonomous pulse reason={reason}",
+        "messages": [HumanMessage(content=pulse_message, name="system")],
+        "context": pulse_context,
         "next_step": "",
     }
-    max_internal_steps = 4
-    for _ in range(max_internal_steps):
-        state = agent.process(state)
-        next_step = state.get("next_step", "")
-        if next_step != "continue":
-            return next_step
-    return "continue"
+    state = agent.process(state)
+    return state.get("next_step", "finish")
 
 
 def pulse_agent_sync(project_id: str, agent_id: str, reason: str, force: bool = False) -> dict:

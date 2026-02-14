@@ -6,7 +6,9 @@ import uuid
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from gods.state import GodsState
 from gods.agents.brain import GodBrain
+from gods.prompts import prompt_registry
 from gods.tools import GODS_TOOLS
+from gods.tools.communication import reset_inbox_guard
 from gods.config import runtime_config
 from pathlib import Path
 
@@ -35,47 +37,34 @@ class GodAgent:
         return f"Agent ID: {self.agent_id}\n(No agent.md found. Please create one in {self.agent_md})"
     
     def process(self, state: GodsState) -> GodsState:
-        """Autonomous Agent Pulse: Prioritize inbox, then work, then escalate."""
-        max_tool_rounds = 4
-        loop_key = f"_tool_loop_count_{self.agent_id}"
-        current_loops = int(state.get(loop_key, 0))
-        if current_loops >= max_tool_rounds:
-            self._append_to_memory("Reached tool loop budget in this pulse. Yielding to other beings.")
-            state[loop_key] = 0
-            state["next_step"] = "finish"
-            return state
-
-        # 1. Automatic Inbox Perception (still injected for deterministic social awareness)
-        inbox_msgs = self.execute_tool("check_inbox", {})
-        
-        # 2. Load context
+        """Autonomous Agent Pulse: run model<->tool loop until no tool calls."""
+        proj = runtime_config.projects.get(self.project_id)
+        max_tool_rounds = int(getattr(proj, "tool_loop_max", 8) if proj else 8)
+        max_tool_rounds = max(1, min(max_tool_rounds, 64))
+        inbox_msgs = "Inbox is not pre-fetched. Use check_inbox tool when needed."
         local_memory = self._load_local_memory()
-        
-        # 3. Enhance directives for social behavior
-        simulation_directives = f"""
-{self.directives}
+        simulation_directives = prompt_registry.render(
+            "agent_social_protocol",
+            project_id=self.project_id,
+            directives=self.directives,
+            agent_id=self.agent_id,
+        )
 
-# SOCIAL PROTOCOL
-- You are an AVATAR in a shared world.
-- You have a personal TERRITORY (agents/{self.agent_id}/).
-- PRIORITIZE private messages (Inbox) to resolve conflicts.
-- WORK independently in your territory whenever possible.
-- ESCALATE to the Public Synod ONLY if private negotiation fails.
-- ABSTAIN from Public Synod threads using [[abstain_from_synod]] if the topic is irrelevant to you.
-"""
-        context = self.build_context(state, simulation_directives, local_memory, inbox_msgs)
-        
         print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
-        llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
-        response = self.brain.think_with_tools(llm_messages, GODS_TOOLS)
 
-        # Record thought and notify memory.md
-        state["messages"].append(response)
-        self._append_to_memory(response.content or "[No textual response]")
+        for _ in range(max_tool_rounds):
+            context = self.build_context(state, simulation_directives, local_memory, inbox_msgs)
+            llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-16:]
+            response = self.brain.think_with_tools(llm_messages, GODS_TOOLS)
 
-        # 4. Structured Tool Execution (official tool-calling path)
-        tool_calls = getattr(response, "tool_calls", []) or []
-        if tool_calls:
+            state["messages"].append(response)
+            self._append_to_memory(response.content or "[No textual response]")
+
+            tool_calls = getattr(response, "tool_calls", []) or []
+            if not tool_calls:
+                state["next_step"] = "finish"
+                return state
+
             for call in tool_calls:
                 tool_name = call.get("name", "")
                 args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
@@ -86,29 +75,24 @@ class GodAgent:
                     ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name)
                 )
                 self._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
-                
-                # Special: If escalated, stop pulse and flag for global resonance
+
                 if tool_name == "post_to_synod":
-                    state[loop_key] = 0
                     state["next_step"] = "escalated"
                     return state
-                
-                # Special: If abstained, mark as disinterested in this thread
                 if tool_name == "abstain_from_synod":
                     if "abstained" not in state or state["abstained"] is None:
                         state["abstained"] = []
                     if self.agent_id not in state["abstained"]:
                         state["abstained"].append(self.agent_id)
-                    state[loop_key] = 0
                     state["next_step"] = "abstained"
                     return state
-            
-            state[loop_key] = current_loops + 1
-            state["next_step"] = "continue"
-        else:
-            state[loop_key] = 0
-            state["next_step"] = "finish"
-            
+
+            # refresh local memory snapshot for next loop iteration
+            local_memory = self._load_local_memory()
+
+        # Safety guard: if model keeps issuing tools forever, yield and let scheduler pulse later.
+        self._append_to_memory("Reached tool loop safety cap in this pulse. Will continue next pulse.")
+        state["next_step"] = "continue"
         return state
 
     def _load_local_memory(self) -> str:
@@ -142,7 +126,10 @@ class GodAgent:
         for tool_func in GODS_TOOLS:
             if tool_func.name == name:
                 try:
-                    return tool_func.invoke(args)
+                    result = tool_func.invoke(args)
+                    if name != "check_inbox":
+                        reset_inbox_guard(self.agent_id, self.project_id)
+                    return result
                 except Exception as e:
                     return f"Error executing {name}: {str(e)}"
         return f"Unknown tool: {name}"
@@ -155,38 +142,18 @@ class GodAgent:
         
         tools_desc = "\n".join([f"- [[{t.name}({', '.join(t.args)})]]: {t.description}" for t in GODS_TOOLS])
         
-        context = f"""
-# IDENTITY
-{directives}
-Project: {self.project_id}
-
-# SACRED INBOX (Incoming Private Revelations)
-{inbox_content}
-
-# YOUR CHRONICLES (memory.md)
-{local_memory}
-
-# TERRITORY
-Location: projects/{self.project_id}/agents/{self.agent_id}/
-
-# GLOBAL RECORD & SYNOD HISTORY
-{sacred_record}
-{history}
-
-# TASK (Current Universal Intent)
-{state.get('context', 'Exist and evolve.')}
-
-# AVAILABLE TOOLS
-{tools_desc}
-
-# PROTOCOL
-1. Read your inbox FIRST.
-2. If another Being reached out, reply via tool calling (send_message).
-3. Carry out your work via structured tool calls only.
-4. Do NOT emit custom wrappers like [[...]] or <tool_call>...</tool_call>.
-5. If stuck, use post_to_synod.
-"""
-        return context
+        return prompt_registry.render(
+            "agent_context",
+            project_id=self.project_id,
+            directives=directives,
+            inbox_content=inbox_content,
+            local_memory=local_memory,
+            sacred_record=sacred_record,
+            history=history,
+            task=state.get("context", "Exist and evolve."),
+            tools_desc=tools_desc,
+            agent_id=self.agent_id,
+        )
 
 # Factory function for LangGraph nodes
 def create_god_node(agent_id: str):

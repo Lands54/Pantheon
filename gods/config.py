@@ -28,6 +28,8 @@ class ProjectConfig(BaseModel):
     simulation_interval_max: int = 40
     summarize_threshold: int = 12
     summarize_keep_count: int = 5
+    # Agent model<->tool loop cap per pulse
+    tool_loop_max: int = 8
     # Command execution governance
     command_max_parallel: int = 2
     command_timeout_sec: int = 60

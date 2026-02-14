@@ -9,6 +9,7 @@ from gods.state import GodsState
 from gods.config import runtime_config
 from gods.agents.base import create_god_node
 from gods.agents.brain import GodBrain
+from gods.prompts import prompt_registry
 from langchain_core.messages import HumanMessage, RemoveMessage
 
 def should_continue(state: GodsState) -> str:
@@ -38,7 +39,12 @@ def summarize_conversation(state: GodsState):
     to_summarize = messages[:-keep_count]
     history_str = "\n".join([f"{msg.name if hasattr(msg, 'name') else 'user'}: {msg.content}" for msg in to_summarize])
     
-    prompt = f"Summarize the following theological history for project '{project_id}':\nExisting: {existing_summary}\nNew: {history_str}\nSummary:"
+    prompt = prompt_registry.render(
+        "workflow_summarizer",
+        project_id=project_id,
+        existing_summary=existing_summary,
+        history_str=history_str,
+    )
     new_summary = brain.think(prompt)
     delete_messages = [RemoveMessage(id=m.id) for m in to_summarize if hasattr(m, 'id')]
     
