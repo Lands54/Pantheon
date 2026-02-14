@@ -84,7 +84,9 @@ class GodAgent:
         """Autonomous Agent Pulse with phase runtime (fallback to legacy loop when disabled)."""
         proj = runtime_config.projects.get(self.project_id)
         phase_mode_enabled = bool(getattr(proj, "phase_mode_enabled", True) if proj else True)
-        if phase_mode_enabled:
+        phase_strategy = str(getattr(proj, "phase_strategy", "strict_triad") if proj else "strict_triad")
+        # Freeform mode: bypass phase state-machine and use unconstrained agent<->tool loop.
+        if phase_mode_enabled and phase_strategy != "freeform":
             inbox_msgs = self._build_inbox_context_hint()
             local_memory = self._load_local_memory()
             simulation_directives = self._build_behavior_directives()
@@ -103,6 +105,8 @@ class GodAgent:
         local_memory = self._load_local_memory()
         simulation_directives = self._build_behavior_directives()
 
+        if phase_mode_enabled and phase_strategy == "freeform":
+            self._append_to_memory("[MODE] freeform - phase state-machine bypassed.")
         print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
 
         for _ in range(max_tool_rounds):

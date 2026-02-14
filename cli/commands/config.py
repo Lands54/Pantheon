@@ -149,8 +149,8 @@ def cmd_config(args):
                 if parts[1] == "enabled":
                     data["projects"][pid]["phase_mode_enabled"] = args.value.lower() == "true"
                 elif parts[1] == "strategy":
-                    if args.value not in ("strict_triad", "iterative_action"):
-                        print("❌ phase.strategy must be one of: strict_triad, iterative_action")
+                    if args.value not in ("strict_triad", "iterative_action", "freeform"):
+                        print("❌ phase.strategy must be one of: strict_triad, iterative_action, freeform")
                         return
                     data["projects"][pid]["phase_strategy"] = args.value
                 elif parts[1] == "interaction_max":
@@ -253,7 +253,7 @@ def cmd_config(args):
                 print("  memory.compact_keep (chars)")
                 print("  tools.loop_max (number)")
                 print("  phase.enabled (true/false)")
-                print("  phase.strategy (strict_triad|iterative_action)")
+                print("  phase.strategy (strict_triad|iterative_action|freeform)")
                 print("  phase.interaction_max (number)")
                 print("  phase.act_require_tool (true/false)")
                 print("  phase.act_require_productive (true/false)")

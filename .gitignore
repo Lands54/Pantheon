@@ -5,3 +5,10 @@ __pycache__/
 config.json
 .DS_Store
 .env
+archives/
+projects/**/debug/
+projects/**/buffers/*.jsonl
+projects/**/buffers/*_inbox_guard.json
+projects/**/memory.sqlite
+projects/**/memory.sqlite-shm
+projects/**/memory.sqlite-wal
