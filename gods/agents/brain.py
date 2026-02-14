@@ -17,9 +17,14 @@ class GodBrain:
         
     def get_llm(self):
         """Dynamically build the LLM based on current config"""
-        # Get agent-specific model if exists, otherwise use default
-        settings = runtime_config.agent_settings.get(self.agent_id)
-        model = settings.model if settings else "google/gemini-2.0-flash-exp:free"
+        # Get current project's agent settings
+        current_project = runtime_config.current_project
+        proj = runtime_config.projects.get(current_project)
+        
+        if proj and self.agent_id in proj.agent_settings:
+            model = proj.agent_settings[self.agent_id].model
+        else:
+            model = "google/gemini-2.0-flash-exp:free"
         
         api_key = runtime_config.openrouter_api_key
         
@@ -48,6 +53,9 @@ class GodBrain:
             return f"Error in reasoning: {str(e)}"
     
     def __repr__(self):
-        settings = runtime_config.agent_settings.get(self.agent_id)
-        model = settings.model if settings else "default"
+        current_project = runtime_config.current_project
+        proj = runtime_config.projects.get(current_project)
+        model = "default"
+        if proj and self.agent_id in proj.agent_settings:
+            model = proj.agent_settings[self.agent_id].model
         return f"GodBrain(agent={self.agent_id}, model={model})"
