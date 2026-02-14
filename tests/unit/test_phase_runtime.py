@@ -223,3 +223,36 @@ def test_iterative_action_strategy_supports_multiple_action_observe_cycles():
     finally:
         runtime_config.projects = old_projects
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
+
+
+def test_iterative_action_allows_first_diagnostic_then_requires_productive():
+    project_id = "unit_phase_iterative_productive_threshold"
+    agent_id = "tester"
+    responses = [
+        AIMessage(content="reason ok", tool_calls=[]),
+        AIMessage(content="act1 diagnose", tool_calls=[{"id": "a1", "name": "read_file", "args": {"path": "models/book.py"}}]),
+        AIMessage(content="observe1 not done", tool_calls=[]),
+        AIMessage(content="act2 still diagnose", tool_calls=[{"id": "a2", "name": "list_dir", "args": {}}]),
+    ]
+    old_projects = runtime_config.projects.copy()
+    runtime_config.projects[project_id] = ProjectConfig(
+        name="iterative-threshold-test",
+        active_agents=[agent_id],
+        agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
+        phase_strategy="iterative_action",
+        phase_interaction_max=3,
+        phase_act_require_tool_call=True,
+        phase_act_require_productive_tool=True,
+        phase_act_productive_from_interaction=2,
+    )
+    agent = _DummyAgent(project_id, agent_id, _SequenceBrain(responses))
+    runtime = AgentPhaseRuntime(agent)
+    state = {"messages": [], "next_step": "", "project_id": project_id}
+    try:
+        out = runtime.run(state, simulation_directives="", local_memory="", inbox_msgs="")
+        assert out["next_step"] == "continue"
+        assert [name for name, _ in agent.executed_tools] == ["read_file"]
+        assert any("[PHASE_RETRY] act" in m for m in agent.memory_log)
+    finally:
+        runtime_config.projects = old_projects
+        shutil.rmtree(Path("projects") / project_id, ignore_errors=True)

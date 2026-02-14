@@ -216,6 +216,16 @@ class AgentPhaseRuntime:
         proj = self._project_cfg()
         return bool(getattr(proj, "phase_act_require_productive_tool", True) if proj else True)
 
+    def _act_productive_from_interaction(self) -> int:
+        proj = self._project_cfg()
+        value = int(getattr(proj, "phase_act_productive_from_interaction", 2) if proj else 2)
+        return max(1, min(value, 16))
+
+    def _should_require_productive_for_interaction(self, interaction_idx: int) -> bool:
+        if not self._act_require_productive_tool():
+            return False
+        return int(interaction_idx) >= self._act_productive_from_interaction()
+
     def _act_violation_feedback(self, reason: str) -> str:
         if reason == "no_tool":
             return (
@@ -332,7 +342,7 @@ class AgentPhaseRuntime:
                     terminal_reason = "iterative_act_no_tool_call"
                     return self._continue(state)
 
-                if self._act_require_productive_tool():
+                if self._should_require_productive_for_interaction(interaction_idx):
                     names = [c.get("name", "") for c in act_calls]
                     if not any(n in PRODUCTIVE_ACT_TOOLS for n in names):
                         fb = self._act_violation_feedback("no_productive")
@@ -574,7 +584,7 @@ class AgentPhaseRuntime:
                 terminal_reason = "act_no_tool_call"
                 return self._continue(state)
 
-            if self._act_require_productive_tool():
+            if self._should_require_productive_for_interaction(1):
                 names = [c.get("name", "") for c in act_calls]
                 if not any(n in PRODUCTIVE_ACT_TOOLS for n in names):
                     fb = self._act_violation_feedback("no_productive")

@@ -42,6 +42,9 @@ class ProjectConfig(BaseModel):
     # stricter act-phase control
     phase_act_require_tool_call: bool = True
     phase_act_require_productive_tool: bool = True
+    # require productive tool from this act index (1-based) in one pulse
+    # e.g. 2 => first act can be diagnostic (read/list), from second act must be productive
+    phase_act_productive_from_interaction: int = 2
     phase_repeat_limit: int = 2
     phase_explore_budget: int = 3
     phase_no_progress_limit: int = 3

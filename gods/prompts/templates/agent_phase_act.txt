@@ -7,30 +7,28 @@ Goal:
 Rules:
 - HARD CONSTRAINT: this is the only phase for implementation tool execution.
 - You SHOULD emit a batch of tool calls in one response when tasks are related.
-- Prefer productive tools (`write_file`, `replace_content`, `insert_content`, `multi_replace`, `run_command`) over repeated inspection.
+- First prioritize moving work forward; avoid inspection-only loops.
 - You MUST NOT call `finalize` in this phase.
-- Before tool calls, include a one-line intent summary.
 - Output protocol:
-  - Do NOT print fake tool syntax in plain text (no literal `write_file(...)` as text-only output).
-  - If a tool is needed, emit real structured tool calls via the tool-calling channel.
-  - Plain text is only for intent summary.
+  - You may include one short intent line.
+  - Then emit REAL tool calls via tool-calling channel.
+  - Never return plan-only text without any tool call.
+  - Do NOT print fake tool syntax in plain text.
 - Allowed tools in this phase: $allowed_tools
 
 Examples (valid in Act):
-1) Intent: Create core files and run quick verification.
-   Batch tool calls in one response:
-   - `write_file(path="models/book.py", content="...")`
+1) Intent: Diagnose failing constructor quickly and patch.
+   Tool calls:
+   - `read_file(path="models/book.py")`
+   - `replace_content(path="models/book.py", target_content="old", replacement_content="new")`
+   - `run_command(command="python -m pytest -q tests/test_book.py")`
+
+2) Intent: Create missing model and related tests.
+   Tool calls:
    - `write_file(path="models/user.py", content="...")`
-   - `run_command(command="python -m pytest -q tests/test_models.py")`
+   - `write_file(path="tests/test_user.py", content="...")`
+   - `run_command(command="python -m pytest -q tests/test_user.py")`
 
-2) Intent: Patch one bug and verify.
-   Batch tool calls in one response:
-   - `read_file(path="services/borrow_service.py")`
-   - `replace_content(path="services/borrow_service.py", target_content="...", replacement_content="...")`
-   - `run_command(command="python -m pytest -q tests/test_borrow.py")`
-
-3) Intent: Build CLI command path end-to-end.
-   Batch tool calls in one response:
-   - `write_file(path="cli/main.py", content="...")`
-   - `write_file(path="tests/test_cli.py", content="...")`
-   - `run_command(command="python -m pytest -q tests/test_cli.py")`
+3) Invalid (DO NOT DO THIS):
+   - Text-only plan like "I will now read files and then fix code."
+   - Fake text like `write_file(...)` without real tool call.

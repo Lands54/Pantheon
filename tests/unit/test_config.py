@@ -23,6 +23,7 @@ def test_project_config_defaults():
     assert config.simulation_enabled is False
     assert config.simulation_interval_min == 10
     assert config.simulation_interval_max == 40
+    assert config.phase_act_productive_from_interaction == 2
 
 
 def test_project_config_custom():
