@@ -23,13 +23,14 @@ pip install -r requirements.txt
 ### 2. Set API Key
 
 ```bash
-python cli/main.py init YOUR_OPENROUTER_API_KEY
+./temple.sh init YOUR_OPENROUTER_API_KEY
 ```
 
 ### 3. Start Server
 
 ```bash
-python api/server.py
+./server.sh
+# Or manually: python api/server.py
 ```
 
 ### 4. Access Web UI
@@ -39,17 +40,14 @@ Open `http://localhost:8000` in your browser.
 ### 5. Use CLI
 
 ```bash
-# List agents
+# Quick way (recommended)
+./temple.sh list
+./temple.sh project create my_world
+./temple.sh broadcast "Hello, divine beings!"
+
+# Or manual way
 python cli/main.py list
-
-# Create a new world
-python cli/main.py project create my_world
-
-# Broadcast to all agents
-python cli/main.py broadcast "Hello, divine beings!"
-
-# Run automated tests
-python cli/main.py test --cleanup
+python cli/main.py broadcast "Hello!"
 ```
 
 ## Project Structure
