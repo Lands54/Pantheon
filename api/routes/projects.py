@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException
 from gods.config import runtime_config, ProjectConfig
+from gods.protocols import build_knowledge_graph
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -60,3 +61,18 @@ async def delete_project(project_id: str):
         shutil.rmtree(proj_dir)
         
     return {"status": "success"}
+
+
+@router.post("/{project_id}/knowledge/rebuild")
+async def rebuild_knowledge_graph(project_id: str):
+    """Rebuild project knowledge graph from protocol events."""
+    if project_id not in runtime_config.projects:
+        raise HTTPException(status_code=404, detail="Project not found")
+    graph = build_knowledge_graph(project_id)
+    return {
+        "status": "success",
+        "project_id": project_id,
+        "nodes": len(graph.get("nodes", [])),
+        "edges": len(graph.get("edges", [])),
+        "output": f"projects/{project_id}/knowledge/knowledge_graph.json",
+    }

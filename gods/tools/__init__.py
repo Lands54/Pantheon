@@ -7,7 +7,8 @@ from .communication import (
     send_message,
     send_to_human,
     post_to_synod,
-    abstain_from_synod
+    abstain_from_synod,
+    record_protocol,
 )
 from .filesystem import (
     read_file,
@@ -32,6 +33,7 @@ GODS_TOOLS = [
     run_command,
     post_to_synod,
     abstain_from_synod,
+    record_protocol,
     multi_replace,
     list_dir
 ]
@@ -43,6 +45,7 @@ __all__ = [
     'send_to_human',
     'post_to_synod',
     'abstain_from_synod',
+    'record_protocol',
     'read_file',
     'write_file',
     'replace_content',

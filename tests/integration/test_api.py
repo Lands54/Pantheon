@@ -80,6 +80,21 @@ def test_cannot_delete_default_project():
     assert response.status_code == 400
 
 
+def test_rebuild_knowledge_graph():
+    """Test POST /projects/{project_id}/knowledge/rebuild endpoint."""
+    test_project_id = "test_graph_world"
+    client.post("/projects/create", json={"id": test_project_id})
+    try:
+        response = client.post(f"/projects/{test_project_id}/knowledge/rebuild")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["project_id"] == test_project_id
+        assert "output" in data
+    finally:
+        client.delete(f"/projects/{test_project_id}")
+
+
 def test_create_agent():
     """Test POST /agents/create endpoint."""
     response = client.post(

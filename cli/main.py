@@ -136,6 +136,20 @@ def cmd_project(args):
             print(f"🌌 Shifted consciousness to world: {args.id}")
         except:
             print("❌ Server error.")
+    
+    elif args.subcommand == "graph":
+        try:
+            res = requests.post(f"{get_base_url()}/projects/{args.id}/knowledge/rebuild")
+            if res.status_code == 200:
+                data = res.json()
+                print(f"🧠 Knowledge graph rebuilt for '{args.id}'")
+                print(f"   Nodes: {data.get('nodes', 0)}")
+                print(f"   Edges: {data.get('edges', 0)}")
+                print(f"   Output: {data.get('output')}")
+            else:
+                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
+        except:
+            print("❌ Server error.")
 
 def cmd_agent(args):
     """View or Edit Agent Directives"""
@@ -294,6 +308,8 @@ def main():
     p_proj_switch.add_argument("id")
     p_proj_delete = proj_sub.add_parser("delete", help="Delete a world")
     p_proj_delete.add_argument("id")
+    p_proj_graph = proj_sub.add_parser("graph", help="Rebuild project knowledge graph")
+    p_proj_graph.add_argument("id")
 
     # activate / deactivate
     subparsers.add_parser("activate").add_argument("id")
