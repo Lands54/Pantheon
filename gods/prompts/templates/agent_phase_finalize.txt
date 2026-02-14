@@ -7,4 +7,5 @@ Goal:
 Rules:
 - Keep actions minimal and outcome-oriented.
 - Allowed tools in this phase: $allowed_tools
+- Use `finalize` when you intentionally complete this pulse.
 - If no necessary tool call remains, conclude the pulse.

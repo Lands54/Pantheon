@@ -28,11 +28,7 @@ class ProjectConfig(BaseModel):
     simulation_interval_max: int = 40
     summarize_threshold: int = 12
     summarize_keep_count: int = 5
-    # Memory/context compression controls
-    memory_tail_chars: int = 2000
-    memory_entry_clip_chars: int = 1200
-    history_clip_chars: int = 600
-    history_keep_messages: int = 5
+    # Memory compression controls (full-read mode)
     memory_compact_trigger_chars: int = 200000
     memory_compact_keep_chars: int = 50000
     # Agent model<->tool loop cap per pulse
@@ -43,6 +39,12 @@ class ProjectConfig(BaseModel):
     phase_explore_budget: int = 3
     phase_no_progress_limit: int = 3
     phase_single_tool_call: bool = True
+    # Debug tracing
+    debug_trace_enabled: bool = True
+    debug_trace_max_events: int = 200
+    debug_trace_full_content: bool = True
+    # Full LLM IO tracing (request/response payload snapshots)
+    debug_llm_trace_enabled: bool = True
     # Command execution governance
     command_max_parallel: int = 2
     command_timeout_sec: int = 60
@@ -53,6 +55,7 @@ class ProjectConfig(BaseModel):
 class SystemConfig(BaseModel):
     openrouter_api_key: str = ""
     current_project: str = "default"
+    enable_legacy_social_api: bool = False
     # project_id -> project settings
     projects: Dict[str, ProjectConfig] = {
         "default": ProjectConfig(name="Default World")
@@ -92,6 +95,7 @@ class SystemConfig(BaseModel):
                 new_cfg = cls(
                     openrouter_api_key=data.get("openrouter_api_key", ""),
                     current_project="default",
+                    enable_legacy_social_api=data.get("enable_legacy_social_api", False),
                     projects={"default": default_proj}
                 )
                 new_cfg.save() # Save the migrated version

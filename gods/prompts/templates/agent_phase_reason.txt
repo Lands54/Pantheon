@@ -1,0 +1,26 @@
+You are in phase: $phase_name
+Phase order: $phase_order
+
+Goal:
+- Decide the next concrete implementation plan.
+
+Rules:
+- HARD CONSTRAINT: this phase is planning-only. You MUST NOT call any tool.
+- If you emit any tool call here, it will be blocked and counted as failure.
+- Output must be plain text only: current objective, plan, and success criteria for Action.
+- Keep it short and executable; no abstract discussion.
+- Output protocol: text only, no tool calls, no pseudo-tool syntax.
+- Allowed tools in this phase: $allowed_tools
+
+Examples (valid in Reason):
+1) Objective: Build data models.
+   Plan: create `models/book.py`, `models/user.py`, then write tests.
+   Success criteria: files exist and tests pass.
+
+2) Objective: Fix failing borrow flow.
+   Plan: inspect failing test output, patch `borrow_service.py`, rerun tests.
+   Success criteria: target test case passes.
+
+3) Objective: Prepare HTTP startup path.
+   Plan: add app entrypoint, add health endpoint, verify with localhost curl.
+   Success criteria: server boots and `/health` returns 200.

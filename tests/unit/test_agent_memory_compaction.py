@@ -17,16 +17,14 @@ def test_agent_memory_compaction_rolls_old_content():
         name="unit compact",
         active_agents=[agent_id],
         simulation_enabled=False,
-        memory_tail_chars=1000,
-        memory_entry_clip_chars=200,
-        history_clip_chars=200,
-        history_keep_messages=4,
         memory_compact_trigger_chars=1500,
         memory_compact_keep_chars=500,
     )
 
     try:
         agent = GodAgent(agent_id=agent_id, project_id=project_id)
+        initial_mem = (agent_dir / "memory.md").read_text(encoding="utf-8")
+        assert initial_mem.startswith("### SYSTEM_SEED")
         for i in range(180):
             agent._append_to_memory(f"entry {i}: " + ("x" * 180))
 
@@ -35,6 +33,7 @@ def test_agent_memory_compaction_rolls_old_content():
         mem_text = mem_path.read_text(encoding="utf-8")
 
         assert "MEMORY_COMPACTED" in mem_text
+        assert mem_text.startswith("### SYSTEM_SEED")
         assert archive_path.exists()
         assert archive_path.stat().st_size > 0
         assert mem_path.stat().st_size < 12000

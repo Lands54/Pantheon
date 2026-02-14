@@ -49,6 +49,15 @@ PROJECT_SEMAPHORES: dict[str, threading.BoundedSemaphore] = {}
 AGENT_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 
 
+def _format_exec_error(territory: Path | None, title: str, reason: str, suggestion: str) -> str:
+    cwd = territory if territory is not None else "unknown"
+    return (
+        f"[Current CWD: {cwd}] "
+        f"{title}: {reason}\n"
+        f"Suggested next step: {suggestion}"
+    )
+
+
 def _has_forbidden_shell_syntax(command: str) -> bool:
     return any(char in command for char in [";", "&", "|", ">", "<", "`", "$"])
 
@@ -90,7 +99,12 @@ def _is_localhost_url(value: str) -> bool:
 
 def _validate_command(parts: list[str], territory: Path) -> str | None:
     if not parts:
-        return "Divine Restriction: Empty incantation."
+        return _format_exec_error(
+            territory,
+            "Command Error",
+            "Empty incantation.",
+            "Provide a concrete command, for example: 'python app.py' or 'ls'.",
+        )
 
     executable = parts[0]
     base = Path(executable).name.lower()
@@ -99,17 +113,37 @@ def _validate_command(parts: list[str], territory: Path) -> str | None:
         # .venv/bin/python|pip|uv are always allowed within territory.
         pass
     elif base in {"pip", "pip3"}:
-        return "Divine Restriction: Use a project virtualenv executable like .venv/bin/pip."
+        return _format_exec_error(
+            territory,
+            "Divine Restriction",
+            "Plain pip is blocked to avoid polluting global environment.",
+            "Use a project virtualenv executable like '.venv/bin/pip ...' inside your territory.",
+        )
     elif base not in SAFE_BASE_COMMANDS:
-        return f"Divine Restriction: Command '{base}' is outside your authorized capabilities."
+        return _format_exec_error(
+            territory,
+            "Divine Restriction",
+            f"Command '{base}' is outside your authorized capabilities.",
+            f"Use one of the approved commands or .venv/bin/python/.venv/bin/pip. Requested: '{base}'.",
+        )
 
     if base == "curl":
         urls = [p for p in parts[1:] if p.startswith("http://") or p.startswith("https://")]
         if not urls:
-            return "Divine Restriction: curl requires an explicit localhost URL."
+            return _format_exec_error(
+                territory,
+                "Command Error",
+                "curl requires an explicit localhost URL.",
+                "Example: curl http://localhost:8000/health",
+            )
         for url in urls:
             if not _is_localhost_url(url):
-                return f"Divine Restriction: Network access is limited to localhost. Rejected: {url}"
+                return _format_exec_error(
+                    territory,
+                    "Divine Restriction",
+                    f"Network access is limited to localhost. Rejected: {url}",
+                    "Use localhost/127.0.0.1 endpoints only.",
+                )
 
     return None
 
@@ -173,17 +207,32 @@ def _build_preexec_fn(max_memory_mb: int, max_cpu_sec: int):
 def run_command(command: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Run an approved command within your project territory, with resource and concurrency limits."""
     if _has_forbidden_shell_syntax(command):
-        return "Divine Restriction: Complex shell chaining is forbidden."
+        return _format_exec_error(
+            None,
+            "Divine Restriction",
+            "Complex shell chaining is forbidden.",
+            "Run one command per invocation; avoid ; & | > < ` $.",
+        )
 
     try:
         parts = shlex.split(command)
     except ValueError as e:
-        return f"Divine Restriction: Invalid command syntax ({e})."
+        return _format_exec_error(
+            None,
+            "Command Error",
+            f"Invalid command syntax ({e}).",
+            "Check quotes and escaping, then retry.",
+        )
 
     try:
         territory = validate_path(caller_id, project_id, ".")
     except Exception as e:
-        return f"Divine Restriction: {str(e)}"
+        return _format_exec_error(
+            None,
+            "Territory Error",
+            str(e),
+            "Use a valid caller_id/project_id and retry.",
+        )
 
     validation_error = _validate_command(parts, territory)
     if validation_error:
@@ -195,10 +244,20 @@ def run_command(command: str, caller_id: str = "default", project_id: str = "def
     agent_lock = _get_agent_lock(project_id, caller_id)
 
     if not agent_lock.acquire(blocking=False):
-        return "Divine Restriction: You already have a running command. Wait for it to finish."
+        return _format_exec_error(
+            territory,
+            "Concurrency Limit",
+            "You already have a running command.",
+            "Wait for it to finish before launching another one.",
+        )
     if not project_sem.acquire(blocking=False):
         agent_lock.release()
-        return "Divine Restriction: Project command queue is full. Retry shortly."
+        return _format_exec_error(
+            territory,
+            "Concurrency Limit",
+            "Project command queue is full.",
+            "Retry shortly or reduce parallel command usage.",
+        )
 
     try:
         result = subprocess.run(
@@ -217,9 +276,19 @@ def run_command(command: str, caller_id: str = "default", project_id: str = "def
             f"STDERR: {stderr}"
         )
     except subprocess.TimeoutExpired:
-        return f"Manifestation Failed: Command timed out after {timeout_sec}s."
+        return _format_exec_error(
+            territory,
+            "Execution Timeout",
+            f"Command timed out after {timeout_sec}s.",
+            "Break the task into smaller steps or increase command_timeout_sec via config.",
+        )
     except Exception as e:
-        return f"Manifestation Failed: {str(e)}"
+        return _format_exec_error(
+            territory,
+            "Execution Failed",
+            str(e),
+            "Check command arguments and local environment, then retry.",
+        )
     finally:
         project_sem.release()
         agent_lock.release()

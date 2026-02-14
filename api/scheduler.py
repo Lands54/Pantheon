@@ -6,6 +6,7 @@ from __future__ import annotations
 import random
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -14,6 +15,7 @@ from langchain_core.messages import HumanMessage
 from gods.agents.base import GodAgent
 from gods.config import runtime_config
 from gods.prompts import prompt_registry
+from gods.agents.tool_policy import is_tool_disabled
 
 _META_LOCK = threading.Lock()
 _AGENT_LOCKS: Dict[Tuple[str, str], threading.Lock] = {}
@@ -64,7 +66,7 @@ def has_pending_inbox(project_id: str, agent_id: str) -> bool:
         return False
 
 
-def _run_agent_until_pause(project_id: str, agent_id: str, reason: str) -> str:
+def _run_agent_until_pause(project_id: str, agent_id: str, reason: str, pulse_id: str) -> str:
     agent = GodAgent(agent_id=agent_id, project_id=project_id)
     pulse_message = prompt_registry.render("scheduler_pulse_message", project_id=project_id, reason=reason)
     pulse_context = prompt_registry.render("scheduler_pulse_context", project_id=project_id, reason=reason)
@@ -73,6 +75,11 @@ def _run_agent_until_pause(project_id: str, agent_id: str, reason: str) -> str:
         "messages": [HumanMessage(content=pulse_message, name="system")],
         "context": pulse_context,
         "next_step": "",
+        "__pulse_meta": {
+            "pulse_id": pulse_id,
+            "reason": reason,
+            "started_at": time.time(),
+        },
     }
     state = agent.process(state)
     return state.get("next_step", "finish")
@@ -88,9 +95,10 @@ def pulse_agent_sync(project_id: str, agent_id: str, reason: str, force: bool = 
         return {"triggered": False, "reason": "busy"}
 
     try:
+        pulse_id = uuid.uuid4().hex[:12]
         if (not force) and now < float(status.get("next_eligible_at", 0.0)):
             status["status"] = "cooldown"
-            return {"triggered": False, "reason": "cooldown"}
+            return {"triggered": False, "reason": "cooldown", "pulse_id": pulse_id}
 
         status["status"] = "running"
         status["last_reason"] = reason
@@ -102,13 +110,13 @@ def pulse_agent_sync(project_id: str, agent_id: str, reason: str, force: bool = 
         max_interval = int(getattr(proj, "simulation_interval_max", 40) if proj else 40)
 
         try:
-            next_step = _run_agent_until_pause(project_id, agent_id, reason)
+            next_step = _run_agent_until_pause(project_id, agent_id, reason, pulse_id)
             status["last_next_step"] = next_step
         except Exception as e:
             status["status"] = "error"
             status["last_error"] = str(e)
             status["next_eligible_at"] = time.time() + max(10, min_interval)
-            return {"triggered": False, "reason": f"error: {e}"}
+            return {"triggered": False, "reason": f"error: {e}", "pulse_id": pulse_id}
 
         now2 = time.time()
         if next_step == "finish":
@@ -127,7 +135,7 @@ def pulse_agent_sync(project_id: str, agent_id: str, reason: str, force: bool = 
         # Soft cap to avoid runaway delays.
         max_next = now2 + max(10, max_interval * 8)
         status["next_eligible_at"] = min(float(status["next_eligible_at"]), float(max_next))
-        return {"triggered": True, "reason": reason, "next_step": next_step}
+        return {"triggered": True, "reason": reason, "next_step": next_step, "pulse_id": pulse_id}
     finally:
         lock.release()
 
@@ -152,7 +160,8 @@ def pick_pulse_batch(project_id: str, active_agents: List[str], batch_size: int)
         eligible = now >= float(st.get("next_eligible_at", 0.0))
         if st.get("status") == "running":
             continue
-        if has_pending_inbox(project_id, agent_id):
+        inbox_enabled = not is_tool_disabled(project_id, agent_id, "check_inbox")
+        if inbox_enabled and has_pending_inbox(project_id, agent_id):
             urgent.append((agent_id, "inbox_event"))
         elif eligible:
             normal.append((agent_id, "heartbeat"))

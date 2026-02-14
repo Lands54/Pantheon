@@ -109,6 +109,46 @@ def cmd_check(args):
                 print()
     else:
         print(f"\n💭 No memory file found")
+
+    # Show recent pulse debug traces
+    trace_file = agent_dir / "debug" / "pulse_trace.jsonl"
+    if trace_file.exists():
+        print(f"\n🪵 Pulse Trace (last 3):")
+        try:
+            lines = trace_file.read_text(encoding="utf-8").splitlines()[-3:]
+            for line in lines:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                pulse_id = item.get("pulse_id", "unknown")
+                reason = item.get("reason", "unknown")
+                duration = item.get("duration_sec", 0)
+                events = item.get("events", [])
+                end = events[-1] if events else {}
+                next_step = end.get("next_step", "")
+                terminal = end.get("terminal_reason", "")
+                print(f"   pulse={pulse_id} reason={reason} duration={duration}s")
+                print(f"      next_step={next_step} terminal={terminal} events={item.get('event_count', 0)}")
+        except Exception as e:
+            print(f"   (trace parse failed: {e})")
+
+    llm_trace_file = agent_dir / "debug" / "llm_io.jsonl"
+    if llm_trace_file.exists():
+        print(f"\n🧠 LLM IO Trace (last 3):")
+        try:
+            lines = llm_trace_file.read_text(encoding="utf-8").splitlines()[-3:]
+            for line in lines:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                mode = item.get("mode", "")
+                model = item.get("model", "")
+                pulse_id = item.get("pulse_id", "")
+                has_resp = "response" in item
+                err = item.get("error", "")
+                print(f"   pulse={pulse_id} mode={mode} model={model} response={has_resp} error={bool(err)}")
+        except Exception as e:
+            print(f"   (llm trace parse failed: {e})")
     
     # Check for prayers (messages to human)
     try:

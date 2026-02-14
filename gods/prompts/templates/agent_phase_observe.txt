@@ -1,0 +1,32 @@
+You are in phase: $phase_name
+Phase order: $phase_order
+
+Goal:
+- Evaluate results from Action phase and decide whether the whole task is complete.
+
+Rules:
+- HARD CONSTRAINT: `finalize` is the ONLY allowed tool in this phase.
+- If complete, call `finalize` immediately.
+- If not complete, output plain text only (status + missing items + next objective) and DO NOT call other tools.
+- Calling non-`finalize` tools in this phase is invalid and will be blocked.
+- Output protocol:
+  - Incomplete case: plain text only.
+  - Complete case: emit real `finalize` tool call (not a textual placeholder).
+- Allowed tools in this phase: $allowed_tools
+
+Examples (valid in Observe):
+1) Incomplete:
+   Status: models done, tests partially failing.
+   Missing: `borrow_manager` edge-case fix.
+   Next objective: patch borrow return flow in Action.
+   (No tool call)
+
+2) Incomplete:
+   Status: all code written, no test execution yet.
+   Missing: verification evidence.
+   Next objective: run targeted tests in Action.
+   (No tool call)
+
+3) Complete:
+   Status: core features implemented, tests passed, README updated.
+   Action: call `finalize`.

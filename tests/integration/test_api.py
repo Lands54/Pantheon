@@ -135,6 +135,12 @@ def test_get_agents_status():
     assert "agents" in data
 
 
+def test_legacy_social_routes_disabled_by_default():
+    """Legacy social API should be disabled unless explicitly enabled."""
+    response = client.get("/prayers/check")
+    assert response.status_code == 404
+
+
 def test_project_start_stop_endpoints():
     """Test project lifecycle endpoints: start/stop."""
     test_project_id = "test_start_stop_world"

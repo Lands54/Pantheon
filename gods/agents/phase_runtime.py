@@ -1,30 +1,22 @@
 """
 Phase-based autonomous runtime for GodAgent.
-Provides modular stage control, tool policy gating, and deterministic transitions.
+New deterministic cycle:
+Reason -> Action (batch tool calls) -> Observe (finalize decision)
 """
 from __future__ import annotations
 
 import json
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
 from gods.config import runtime_config
 from gods.prompts import prompt_registry
-
-
-EXPLORATORY_TOOLS = {"list_dir", "read_file", "check_inbox", "list_agents"}
-SOCIAL_TOOLS = {
-    "check_inbox",
-    "send_message",
-    "send_to_human",
-    "post_to_synod",
-    "abstain_from_synod",
-    "record_protocol",
-    "list_agents",
-}
+from gods.agents.tool_policy import SOCIAL_TOOLS, get_disabled_tools
+from gods.agents.debug_trace import PulseTraceLogger
 
 
 @dataclass(frozen=True)
@@ -37,13 +29,13 @@ class AgentPhase:
 def _base_phases() -> List[AgentPhase]:
     return [
         AgentPhase(
-            name="discover",
-            prompt_template="agent_phase_discover",
-            allowed_tools=("list_dir", "read_file", "run_command", "write_file"),
+            name="reason",
+            prompt_template="agent_phase_reason",
+            allowed_tools=(),
         ),
         AgentPhase(
-            name="implement",
-            prompt_template="agent_phase_implement",
+            name="act",
+            prompt_template="agent_phase_act",
             allowed_tools=(
                 "read_file",
                 "write_file",
@@ -55,14 +47,9 @@ def _base_phases() -> List[AgentPhase]:
             ),
         ),
         AgentPhase(
-            name="verify",
-            prompt_template="agent_phase_verify",
-            allowed_tools=("run_command", "read_file", "list_dir", "write_file"),
-        ),
-        AgentPhase(
-            name="finalize",
-            prompt_template="agent_phase_finalize",
-            allowed_tools=("write_file", "read_file", "list_dir", "run_command"),
+            name="observe",
+            prompt_template="agent_phase_observe",
+            allowed_tools=("finalize",),
         ),
     ]
 
@@ -75,8 +62,7 @@ class PhaseToolPolicy:
     """
     Per-pulse policy gate:
     - phase allow-list
-    - repeated same-call blocking
-    - exploratory budget limiting
+    - repeated same-call blocking (in action phase)
     """
 
     def __init__(
@@ -84,15 +70,12 @@ class PhaseToolPolicy:
         phase_allow_map: Dict[str, set],
         disabled_tools: set,
         max_repeat_same_call: int = 2,
-        explore_budget: int = 3,
+        explore_budget: int = 9999,  # kept for backward-compatible ctor shape
     ):
         self.phase_allow_map = phase_allow_map
         self.disabled_tools = disabled_tools
         self.max_repeat_same_call = max(1, max_repeat_same_call)
-        self.explore_budget = max(1, explore_budget)
-        self._last_sig: Optional[str] = None
-        self._same_sig_count: int = 0
-        self._explore_count: int = 0
+        self._same_sig_count: dict[str, int] = {}
 
     def _signature(self, tool_name: str, args: dict) -> str:
         try:
@@ -110,44 +93,33 @@ class PhaseToolPolicy:
             return f"Tool '{tool_name}' is not allowed in phase '{phase_name}'."
 
         sig = self._signature(tool_name, args)
-        if self._last_sig == sig and self._same_sig_count >= self.max_repeat_same_call:
+        if self._same_sig_count.get(sig, 0) >= self.max_repeat_same_call:
             return f"Repeated call blocked: {tool_name} with same arguments."
-
-        if tool_name in EXPLORATORY_TOOLS and self._explore_count >= self.explore_budget:
-            return f"Exploration budget exceeded for this pulse ({self.explore_budget})."
 
         return None
 
     def record(self, tool_name: str, args: dict):
         sig = self._signature(tool_name, args)
-        if self._last_sig == sig:
-            self._same_sig_count += 1
-        else:
-            self._last_sig = sig
-            self._same_sig_count = 1
-        if tool_name in EXPLORATORY_TOOLS:
-            self._explore_count += 1
+        self._same_sig_count[sig] = self._same_sig_count.get(sig, 0) + 1
 
 
 class AgentPhaseRuntime:
     """
-    Deterministic phase runner around model<->tool loop.
+    Deterministic 3-stage runtime:
+    1) reason: produce plan text
+    2) act: produce batch tool calls; system executes all allowed calls
+    3) observe: summarize and optionally call finalize
     """
 
     def __init__(self, agent):
         self.agent = agent
+        self._state_path = self.agent.agent_dir / "runtime_state.json"
 
     def _project_cfg(self):
         return runtime_config.projects.get(self.agent.project_id)
 
     def _disabled_tools(self) -> set:
-        proj = self._project_cfg()
-        if not proj:
-            return set()
-        settings = proj.agent_settings.get(self.agent.agent_id)
-        if not settings:
-            return set()
-        return set(settings.disabled_tools or [])
+        return get_disabled_tools(self.agent.project_id, self.agent.agent_id)
 
     def _build_phase_allow_map(self, phases: List[AgentPhase]) -> Dict[str, set]:
         disabled = self._disabled_tools()
@@ -159,6 +131,14 @@ class AgentPhaseRuntime:
             allow_map[phase.name] = allow
         return allow_map
 
+    def _save_runtime_state(self, phase_idx: int, no_progress_rounds: int):
+        payload = {
+            "phase_idx": int(max(0, phase_idx)),
+            "no_progress_rounds": int(max(0, no_progress_rounds)),
+        }
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
     def _phase_prompt(self, phase: AgentPhase, phase_order: List[str]) -> str:
         return prompt_registry.render(
             phase.prompt_template,
@@ -168,121 +148,243 @@ class AgentPhaseRuntime:
             allowed_tools=", ".join(phase.allowed_tools),
         )
 
-    def _is_success_obs(self, tool_name: str, observation: str) -> bool:
-        if tool_name != "run_command":
-            return False
-        return "exit=0" in (observation or "")
+    def _finish(self, state):
+        state["next_step"] = "finish"
+        self._save_runtime_state(0, 0)
+        return state
 
-    def _advance_phase(self, phase_idx: int, phases: List[AgentPhase]) -> int:
-        return min(phase_idx + 1, len(phases) - 1)
+    def _continue(self, state):
+        state["next_step"] = "continue"
+        self._save_runtime_state(0, 0)
+        return state
 
-    def _next_phase_index(self, phase_idx: int, phases: List[AgentPhase], tool_name: str, observation: str) -> int:
-        current = phases[phase_idx].name
-        if current == "discover" and tool_name in {"write_file", "replace_content", "insert_content", "multi_replace"}:
-            return self._advance_phase(phase_idx, phases)
-        if current == "implement" and self._is_success_obs(tool_name, observation):
-            return self._advance_phase(phase_idx, phases)
-        if current == "verify" and self._is_success_obs(tool_name, observation):
-            return self._advance_phase(phase_idx, phases)
-        return phase_idx
+    def _think(self, state, phase, phase_order, simulation_directives, local_memory, inbox_msgs, pulse_meta):
+        phase_block = self._phase_prompt(phase, phase_order)
+        context = self.agent.build_context(
+            state=state,
+            directives=simulation_directives,
+            local_memory=local_memory,
+            inbox_content=inbox_msgs,
+            phase_block=phase_block,
+            phase_name=phase.name,
+        )
+        llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
+        response: AIMessage = self.agent.brain.think_with_tools(
+            llm_messages,
+            self.agent.get_tools(),
+            trace_meta=pulse_meta,
+        )
+        state["messages"].append(response)
+        self.agent._append_to_memory(response.content or "[No textual response]")
+        return response
+
+    def _violation_feedback(self, phase_name: str) -> str:
+        if phase_name == "reason":
+            return (
+                "RULE VIOLATION: Reason phase is planning-only. "
+                "Do NOT call any tool. Reply again with plain text plan only."
+            )
+        if phase_name == "observe":
+            return (
+                "RULE VIOLATION: Observe phase allows ONLY `finalize` tool. "
+                "If complete call finalize, otherwise reply with plain text status and no tools."
+            )
+        return "RULE VIOLATION: Retry with valid output for current phase."
 
     def run(self, state, simulation_directives: str, local_memory: str, inbox_msgs: str):
         proj = self._project_cfg()
-        max_rounds = int(getattr(proj, "tool_loop_max", 8) if proj else 8)
-        max_rounds = max(1, min(max_rounds, 64))
         max_repeat = int(getattr(proj, "phase_repeat_limit", 2) if proj else 2)
-        explore_budget = int(getattr(proj, "phase_explore_budget", 3) if proj else 3)
-        no_progress_limit = int(getattr(proj, "phase_no_progress_limit", 3) if proj else 3)
-        single_tool = bool(getattr(proj, "phase_single_tool_call", True) if proj else True)
+        phase_retry_limit = max(1, int(getattr(proj, "phase_repeat_limit", 2) if proj else 2))
+        pulse_meta = state.get("__pulse_meta", {}) if isinstance(state, dict) else {}
+        pulse_id = str(pulse_meta.get("pulse_id", "manual"))
+        pulse_reason = str(pulse_meta.get("reason", "unknown"))
+        tracer = PulseTraceLogger(self.agent.project_id, self.agent.agent_id, pulse_id, pulse_reason)
 
         phases = _base_phases()
         phase_order = phase_names(phases)
-        phase_idx = 0
-        no_progress_rounds = 0
+        allow_map = self._build_phase_allow_map(phases)
         policy = PhaseToolPolicy(
-            phase_allow_map=self._build_phase_allow_map(phases),
+            phase_allow_map=allow_map,
             disabled_tools=self._disabled_tools(),
             max_repeat_same_call=max_repeat,
-            explore_budget=explore_budget,
+            explore_budget=9999,
         )
 
-        for _ in range(max_rounds):
-            phase = phases[phase_idx]
-            phase_block = self._phase_prompt(phase, phase_order)
-            context = self.agent.build_context(
-                state=state,
-                directives=simulation_directives,
-                local_memory=local_memory,
-                inbox_content=inbox_msgs,
-                phase_block=phase_block,
-                phase_name=phase.name,
+        terminal_reason = ""
+        try:
+            tracer.event("pulse_start", phase_name="reason")
+
+            # Stage 1: REASON (text only; no tool execution)
+            reason_phase = phases[0]
+            for reason_try in range(1, phase_retry_limit + 1):
+                tracer.event("round_start", phase_name="reason", attempt=reason_try)
+                reason_resp = self._think(
+                    state, reason_phase, phase_order, simulation_directives, local_memory, inbox_msgs, pulse_meta
+                )
+                reason_calls = getattr(reason_resp, "tool_calls", []) or []
+                tracer.event(
+                    "llm_response",
+                    phase_name="reason",
+                    attempt=reason_try,
+                    content_preview=PulseTraceLogger.clip(reason_resp.content or ""),
+                    content_full=reason_resp.content or "",
+                    tool_calls_full=reason_calls,
+                    tool_calls=len(reason_calls),
+                )
+                if not reason_calls:
+                    break
+
+                for call in reason_calls:
+                    tool_name = call.get("name", "")
+                    obs = f"Policy Block: Tool '{tool_name}' is not allowed in phase 'reason'."
+                    tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
+                    state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
+                    self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                    tracer.event(
+                        "tool_blocked",
+                        phase_name="reason",
+                        attempt=reason_try,
+                        tool_name=tool_name,
+                        block_reason=obs,
+                    )
+
+                if reason_try < phase_retry_limit:
+                    fb = self._violation_feedback("reason")
+                    state["messages"].append(SystemMessage(content=fb))
+                    self.agent._append_to_memory(f"[PHASE_RETRY] reason -> {fb}")
+                    tracer.event("phase_retry", phase_name="reason", attempt=reason_try, reason="tool_call_not_allowed")
+
+            # Stage 2: ACTION (batch tools)
+            act_phase = phases[1]
+            tracer.event("round_start", phase_name="act")
+            act_resp = self._think(
+                state, act_phase, phase_order, simulation_directives, local_memory, inbox_msgs, pulse_meta
+            )
+            act_calls = getattr(act_resp, "tool_calls", []) or []
+            tracer.event(
+                "llm_response",
+                phase_name="act",
+                content_preview=PulseTraceLogger.clip(act_resp.content or ""),
+                content_full=act_resp.content or "",
+                tool_calls_full=act_calls,
+                tool_calls=len(act_calls),
             )
 
-            llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
-            response: AIMessage = self.agent.brain.think_with_tools(llm_messages, self.agent.get_tools())
-            state["messages"].append(response)
-            self.agent._append_to_memory(response.content or "[No textual response]")
-
-            tool_calls = getattr(response, "tool_calls", []) or []
-            if not tool_calls:
-                if phase.name in {"verify", "finalize"}:
-                    state["next_step"] = "finish"
-                    return state
-                phase_idx = self._advance_phase(phase_idx, phases)
-                no_progress_rounds += 1
-                if no_progress_rounds >= no_progress_limit:
-                    state["next_step"] = "continue"
-                    return state
-                continue
-
-            if single_tool:
-                tool_calls = tool_calls[:1]
-
-            round_progress = False
-            for call in tool_calls:
+            for call in act_calls:
                 tool_name = call.get("name", "")
                 args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
                 tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
-
-                block_reason = policy.check(phase.name, tool_name, args)
+                block_reason = policy.check("act", tool_name, args)
                 if block_reason:
                     obs = f"Policy Block: {block_reason}"
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
                     self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                    tracer.event(
+                        "tool_blocked",
+                        phase_name="act",
+                        tool_name=tool_name,
+                        args_preview=PulseTraceLogger.clip(args),
+                        args_full=args,
+                        block_reason=block_reason,
+                    )
                     continue
 
                 obs = self.agent.execute_tool(tool_name, args)
                 policy.record(tool_name, args)
-                obs_for_context = self.agent._clip_text(
-                    obs,
-                    int(getattr(proj, "history_clip_chars", 600) if proj else 600),
-                )
-                state["messages"].append(ToolMessage(content=obs_for_context, tool_call_id=tool_call_id, name=tool_name))
+                state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
                 self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                tracer.event(
+                    "tool_executed",
+                    phase_name="act",
+                    tool_name=tool_name,
+                    args_preview=PulseTraceLogger.clip(args),
+                    args_full=args,
+                    obs_preview=PulseTraceLogger.clip(obs),
+                    obs_full=obs,
+                )
 
-                if tool_name == "post_to_synod":
-                    state["next_step"] = "escalated"
-                    return state
-                if tool_name == "abstain_from_synod":
-                    if "abstained" not in state or state["abstained"] is None:
-                        state["abstained"] = []
-                    if self.agent.agent_id not in state["abstained"]:
-                        state["abstained"].append(self.agent.agent_id)
-                    state["next_step"] = "abstained"
-                    return state
+            # Stage 3: OBSERVE (only finalize is allowed)
+            observe_phase = phases[2]
+            for observe_try in range(1, phase_retry_limit + 1):
+                tracer.event("round_start", phase_name="observe", attempt=observe_try)
+                observe_resp = self._think(
+                    state, observe_phase, phase_order, simulation_directives, local_memory, inbox_msgs, pulse_meta
+                )
+                observe_calls = getattr(observe_resp, "tool_calls", []) or []
+                tracer.event(
+                    "llm_response",
+                    phase_name="observe",
+                    attempt=observe_try,
+                    content_preview=PulseTraceLogger.clip(observe_resp.content or ""),
+                    content_full=observe_resp.content or "",
+                    tool_calls_full=observe_calls,
+                    tool_calls=len(observe_calls),
+                )
 
-                phase_idx = self._next_phase_index(phase_idx, phases, tool_name, obs)
-                round_progress = round_progress or tool_name not in EXPLORATORY_TOOLS
+                invalid_calls = [c for c in observe_calls if c.get("name", "") != "finalize"]
+                if invalid_calls:
+                    for call in invalid_calls:
+                        tool_name = call.get("name", "")
+                        args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
+                        tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
+                        obs = "Policy Block: Tool '{}' is not allowed in phase 'observe'.".format(tool_name)
+                        state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
+                        self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                        tracer.event(
+                            "tool_blocked",
+                            phase_name="observe",
+                            attempt=observe_try,
+                            tool_name=tool_name,
+                            args_preview=PulseTraceLogger.clip(args),
+                            args_full=args,
+                            block_reason=obs,
+                        )
+                    if observe_try < phase_retry_limit:
+                        fb = self._violation_feedback("observe")
+                        state["messages"].append(SystemMessage(content=fb))
+                        self.agent._append_to_memory(f"[PHASE_RETRY] observe -> {fb}")
+                        tracer.event(
+                            "phase_retry",
+                            phase_name="observe",
+                            attempt=observe_try,
+                            reason="non_finalize_tool_call",
+                        )
+                        continue
+                    break
 
-            local_memory = self.agent._load_local_memory()
-            if round_progress:
-                no_progress_rounds = 0
-            else:
-                no_progress_rounds += 1
-                if no_progress_rounds >= no_progress_limit:
-                    state["next_step"] = "continue"
-                    return state
+                finalize_calls = [c for c in observe_calls if c.get("name", "") == "finalize"]
+                if finalize_calls:
+                    call = finalize_calls[0]
+                    args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
+                    tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
+                    obs = self.agent.execute_tool("finalize", args)
+                    state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
+                    self.agent._append_to_memory(f"[[ACTION]] finalize -> {obs}")
+                    tracer.event(
+                        "tool_executed",
+                        phase_name="observe",
+                        attempt=observe_try,
+                        tool_name="finalize",
+                        args_preview=PulseTraceLogger.clip(args),
+                        args_full=args,
+                        obs_preview=PulseTraceLogger.clip(obs),
+                        obs_full=obs,
+                    )
+                    tracer.event("finish_decision", reason="observe_finalize_called")
+                    terminal_reason = "observe_finalize_called"
+                    return self._finish(state)
+                break
 
-        self.agent._append_to_memory("Reached phase loop safety cap in this pulse. Will continue next pulse.")
-        state["next_step"] = "continue"
-        return state
+            tracer.event("continue_decision", reason="observe_no_finalize_return_to_reason")
+            terminal_reason = "observe_no_finalize_return_to_reason"
+            return self._continue(state)
+        finally:
+            tracer.event(
+                "pulse_end",
+                next_step=state.get("next_step", ""),
+                terminal_reason=terminal_reason or "unknown",
+                phase_idx=0,
+                phase_name="reason",
+                no_progress_rounds=0,
+            )
+            tracer.flush()

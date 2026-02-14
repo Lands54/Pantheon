@@ -16,6 +16,7 @@ def test_validate_command_blocks_plain_pip():
     err = _validate_command(["pip", "install", "requests"], territory)
     assert err is not None
     assert "virtualenv" in err
+    assert "Suggested next step:" in err
 
 
 def test_validate_command_allows_venv_pip():
@@ -28,6 +29,7 @@ def test_validate_command_blocks_non_localhost_curl():
     err = _validate_command(["curl", "https://example.com"], territory)
     assert err is not None
     assert "localhost" in err
+    assert "Suggested next step:" in err
 
 
 def test_validate_command_allows_localhost_curl():

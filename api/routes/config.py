@@ -20,6 +20,7 @@ async def get_config():
     return {
         "openrouter_api_key": runtime_config.openrouter_api_key,
         "current_project": runtime_config.current_project,
+        "enable_legacy_social_api": runtime_config.enable_legacy_social_api,
         "projects": runtime_config.projects,
         "available_agents": get_available_agents(),
         "all_tools": [t.name for t in GODS_TOOLS]
@@ -34,6 +35,8 @@ async def save_config(req: Request):
         runtime_config.openrouter_api_key = data["openrouter_api_key"]
     if "current_project" in data:
         runtime_config.current_project = data["current_project"]
+    if "enable_legacy_social_api" in data:
+        runtime_config.enable_legacy_social_api = bool(data["enable_legacy_social_api"])
     if "projects" in data:
         for pid, pdata in data["projects"].items():
             runtime_config.projects[pid] = ProjectConfig(**pdata)

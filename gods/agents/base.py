@@ -12,6 +12,7 @@ from gods.tools import GODS_TOOLS
 from gods.tools.communication import reset_inbox_guard
 from gods.config import runtime_config
 from gods.agents.phase_runtime import AgentPhaseRuntime
+from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from pathlib import Path
 
 
@@ -28,6 +29,7 @@ class GodAgent:
         
         # Load behavior description from agent.md
         self.directives = self._load_directives()
+        self._ensure_memory_seeded()
         
         # Initialize brain with specific settings from config
         self.brain = GodBrain(agent_id=agent_id, project_id=project_id)
@@ -37,20 +39,55 @@ class GodAgent:
         if self.agent_md.exists():
             return self.agent_md.read_text(encoding="utf-8")
         return f"Agent ID: {self.agent_id}\n(No agent.md found. Please create one in {self.agent_md})"
+
+    def _ensure_memory_seeded(self):
+        """
+        Seed memory.md with directives snapshot once, so agent doesn't need to read agent.md.
+        """
+        mem_path = self.agent_dir / "memory.md"
+        if mem_path.exists():
+            try:
+                if mem_path.stat().st_size > 0:
+                    return
+            except Exception:
+                return
+        self.agent_dir.mkdir(parents=True, exist_ok=True)
+        seed = (
+            "### SYSTEM_SEED\n"
+            "Directives snapshot (from agent.md):\n\n"
+            f"{self.directives}\n\n---\n"
+        )
+        mem_path.write_text(seed, encoding="utf-8")
     
+    def _build_inbox_context_hint(self) -> str:
+        if is_tool_disabled(self.project_id, self.agent_id, "check_inbox"):
+            return "Inbox access is disabled by policy. Do NOT call check_inbox. Continue local work."
+        return "Inbox is not pre-fetched. Use check_inbox tool when needed."
+
+    def _build_behavior_directives(self) -> str:
+        if is_social_disabled(self.project_id, self.agent_id):
+            return (
+                f"{self.directives}\n\n"
+                "# LOCAL EXECUTION PROTOCOL\n"
+                "- Social tools are disabled for this agent.\n"
+                "- Do NOT attempt inbox/social actions.\n"
+                "- Focus only on local implementation, verification, and completion."
+            )
+        return prompt_registry.render(
+            "agent_social_protocol",
+            project_id=self.project_id,
+            directives=self.directives,
+            agent_id=self.agent_id,
+        )
+
     def process(self, state: GodsState) -> GodsState:
         """Autonomous Agent Pulse with phase runtime (fallback to legacy loop when disabled)."""
         proj = runtime_config.projects.get(self.project_id)
         phase_mode_enabled = bool(getattr(proj, "phase_mode_enabled", True) if proj else True)
         if phase_mode_enabled:
-            inbox_msgs = "Inbox is not pre-fetched. Use check_inbox tool when needed."
+            inbox_msgs = self._build_inbox_context_hint()
             local_memory = self._load_local_memory()
-            simulation_directives = prompt_registry.render(
-                "agent_social_protocol",
-                project_id=self.project_id,
-                directives=self.directives,
-                agent_id=self.agent_id,
-            )
+            simulation_directives = self._build_behavior_directives()
             print(f"[{self.agent_id}] Pulsing (Phase Runtime)...")
             return AgentPhaseRuntime(self).run(
                 state=state,
@@ -62,23 +99,20 @@ class GodAgent:
         # --- Legacy loop ---
         max_tool_rounds = int(getattr(proj, "tool_loop_max", 8) if proj else 8)
         max_tool_rounds = max(1, min(max_tool_rounds, 64))
-        inbox_msgs = "Inbox is not pre-fetched. Use check_inbox tool when needed."
+        inbox_msgs = self._build_inbox_context_hint()
         local_memory = self._load_local_memory()
-        simulation_directives = prompt_registry.render(
-            "agent_social_protocol",
-            project_id=self.project_id,
-            directives=self.directives,
-            agent_id=self.agent_id,
-        )
+        simulation_directives = self._build_behavior_directives()
 
         print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
 
         for _ in range(max_tool_rounds):
             context = self.build_context(state, simulation_directives, local_memory, inbox_msgs)
-            history_keep = int(getattr(proj, "history_keep_messages", 5) if proj else 5)
-            history_keep = max(2, min(history_keep, 16))
-            llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-history_keep:]
-            response = self.brain.think_with_tools(llm_messages, self.get_tools())
+            llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
+            response = self.brain.think_with_tools(
+                llm_messages,
+                self.get_tools(),
+                trace_meta=state.get("__pulse_meta", {}) if isinstance(state, dict) else {},
+            )
 
             state["messages"].append(response)
             self._append_to_memory(response.content or "[No textual response]")
@@ -94,9 +128,8 @@ class GodAgent:
                 tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
 
                 obs = self.execute_tool(tool_name, args)
-                obs_for_context = self._clip_text(obs, int(getattr(proj, "history_clip_chars", 600) if proj else 600))
                 state["messages"].append(
-                    ToolMessage(content=obs_for_context, tool_call_id=tool_call_id, name=tool_name)
+                    ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name)
                 )
                 self._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
 
@@ -120,38 +153,22 @@ class GodAgent:
         return state
 
     def _load_local_memory(self) -> str:
-        """Load the tail of memory.md for contextual awareness"""
+        """Load full memory.md after automatic compaction."""
         mem_path = self.agent_dir / "memory.md"
         self._maybe_compact_memory(mem_path)
         if mem_path.exists():
-            content = mem_path.read_text(encoding="utf-8")
-            proj = runtime_config.projects.get(self.project_id)
-            tail = int(getattr(proj, "memory_tail_chars", 2000) if proj else 2000)
-            tail = max(500, min(tail, 10000))
-            return content[-tail:] if len(content) > tail else content
+            return mem_path.read_text(encoding="utf-8")
         return "No personal chronicles yet."
 
     def _append_to_memory(self, text: str):
         """Append a thought or event to the human-readable memory.md"""
         from datetime import datetime
-        proj = runtime_config.projects.get(self.project_id)
-        clip = int(getattr(proj, "memory_entry_clip_chars", 1200) if proj else 1200)
         mem_path = self.agent_dir / "memory.md"
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        clipped = self._clip_text(text or "", clip)
-        entry = f"\n### 📖 Entry [{timestamp}]\n{clipped}\n\n---\n"
+        entry = f"\n### 📖 Entry [{timestamp}]\n{text or ''}\n\n---\n"
         with open(mem_path, "a", encoding="utf-8") as f:
             f.write(entry)
         self._maybe_compact_memory(mem_path)
-
-    def _clip_text(self, text: str, max_chars: int) -> str:
-        if text is None:
-            return ""
-        if max_chars <= 0:
-            max_chars = 1
-        if len(text) <= max_chars:
-            return text
-        return f"{text[:max_chars]}\n...[truncated {len(text) - max_chars} chars]"
 
     def _maybe_compact_memory(self, mem_path: Path):
         """
@@ -170,9 +187,12 @@ class GodAgent:
         content = mem_path.read_text(encoding="utf-8")
         if len(content) <= trigger:
             return
+        seed_block, body = self._split_seed_block(content)
+        if len(body) <= trigger:
+            return
 
-        old = content[:-keep]
-        recent = content[-keep:]
+        old = body[:-keep]
+        recent = body[-keep:]
         action_names = re.findall(r"\[\[ACTION\]\]\s+([a-z_]+)\s+->", old)
         action_count = {}
         for name in action_names:
@@ -197,29 +217,72 @@ class GodAgent:
                 af.write("\n")
             af.write("\n---\n")
 
-        mem_path.write_text(compact_note + recent, encoding="utf-8")
+        mem_path.write_text(seed_block + compact_note + recent, encoding="utf-8")
+
+    def _split_seed_block(self, content: str):
+        """
+        Keep SYSTEM_SEED at the top across compaction.
+        Returns (seed_block, body_without_seed).
+        """
+        marker = "### SYSTEM_SEED"
+        if not content.startswith(marker):
+            return "", content
+        end = content.find("\n---\n")
+        if end == -1:
+            return "", content
+        end += len("\n---\n")
+        return content[:end], content[end:]
 
     def execute_tool(self, name: str, args: dict) -> str:
         """Execute the tool function with identity and project injection"""
+        path_aware_tools = {
+            "read_file",
+            "write_file",
+            "replace_content",
+            "insert_content",
+            "multi_replace",
+            "list_dir",
+            "run_command",
+        }
+
+        def ensure_cwd_prefix(msg: str) -> str:
+            if not isinstance(msg, str):
+                return str(msg)
+            if "[Current CWD:" in msg:
+                return msg
+            return f"[Current CWD: {self.agent_dir.resolve()}] Content: {msg}"
+
         # Check if the tool is disabled for this agent in THIS project
         proj = runtime_config.projects.get(self.project_id)
         if proj:
             settings = proj.agent_settings.get(self.agent_id)
             if settings and name in settings.disabled_tools:
-                return f"Divine Restriction: The tool '{name}' has been disabled for you by the High Overseer."
+                return (
+                    f"Divine Restriction: The tool '{name}' has been disabled for you by the High Overseer.\n"
+                    "Suggested next step: choose another available tool aligned with your current phase."
+                )
 
-                args['caller_id'] = self.agent_id
+        args['caller_id'] = self.agent_id
         args['project_id'] = self.project_id
         for tool_func in self.get_tools():
             if tool_func.name == name:
                 try:
                     result = tool_func.invoke(args)
+                    if name in path_aware_tools:
+                        result = ensure_cwd_prefix(result)
                     if name != "check_inbox":
                         reset_inbox_guard(self.agent_id, self.project_id)
                     return result
                 except Exception as e:
-                    return f"Error executing {name}: {str(e)}"
-        return f"Unknown tool: {name}"
+                    return (
+                        f"Tool Execution Error: failed to run '{name}'. Reason: {str(e)}\n"
+                        "Suggested next step: verify required arguments and retry once."
+                    )
+        available = ", ".join([t.name for t in self.get_tools()])
+        return (
+            f"Tool Error: Unknown tool '{name}'.\n"
+            f"Suggested next step: choose one from [{available}]."
+        )
 
     def get_tools(self):
         return GODS_TOOLS
@@ -235,12 +298,9 @@ class GodAgent:
     ) -> str:
         """Autonomous Context Architecture with Project Awareness"""
         sacred_record = state.get("summary", "No ancient records.")
-        proj = runtime_config.projects.get(self.project_id)
-        history_keep = int(getattr(proj, "history_keep_messages", 5) if proj else 5)
-        history_clip = int(getattr(proj, "history_clip_chars", 600) if proj else 600)
-        recent_messages = state.get("messages", [])[-max(2, min(history_keep, 16)):]
+        recent_messages = state.get("messages", [])[-8:]
         history = "\n".join([
-            f"[{getattr(msg, 'name', 'system')}]: {self._clip_text(str(getattr(msg, 'content', '')), history_clip)}"
+            f"[{getattr(msg, 'name', 'system')}]: {str(getattr(msg, 'content', ''))}"
             for msg in recent_messages
         ])
         

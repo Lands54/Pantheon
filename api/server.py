@@ -23,6 +23,10 @@ app.include_router(config.router)
 app.include_router(projects.router)
 app.include_router(agents.router)
 app.include_router(communication.router)
+if runtime_config.enable_legacy_social_api:
+    from api.routes import legacy_social
+    app.include_router(legacy_social.router)
+    logger.info("Legacy social API routes enabled (/broadcast, /prayers/check).")
 
 
 # --- Simulation Heartbeat ---

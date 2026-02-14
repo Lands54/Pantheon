@@ -24,6 +24,7 @@ def cmd_config(args):
             print(f"\n⚙️  CONFIGURATION - Project: {pid}")
             print(f"\n🔑 API Key: {'SET' if data['openrouter_api_key'] else 'NOT SET'}")
             print(f"\n🌍 Current Project: {data['current_project']}")
+            print(f"\n🧱 Legacy Social API: {data.get('enable_legacy_social_api', False)}")
             
             print(f"\n🤖 Simulation:")
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
@@ -35,10 +36,6 @@ def cmd_config(args):
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
             print(f"   Keep Count: {proj.get('summarize_keep_count', 5)} messages")
             print(f"   Tool Loop Max: {proj.get('tool_loop_max', 8)} per pulse")
-            print(f"   Memory Tail Chars: {proj.get('memory_tail_chars', 2000)}")
-            print(f"   Memory Entry Clip Chars: {proj.get('memory_entry_clip_chars', 1200)}")
-            print(f"   History Clip Chars: {proj.get('history_clip_chars', 600)}")
-            print(f"   History Keep Messages: {proj.get('history_keep_messages', 5)}")
             print(f"   Memory Compact Trigger Chars: {proj.get('memory_compact_trigger_chars', 200000)}")
             print(f"   Memory Compact Keep Chars: {proj.get('memory_compact_keep_chars', 50000)}")
             print(f"\n🧠 Phase Runtime:")
@@ -47,6 +44,11 @@ def cmd_config(args):
             print(f"   Explore Budget: {proj.get('phase_explore_budget', 3)}")
             print(f"   No Progress Limit: {proj.get('phase_no_progress_limit', 3)}")
             print(f"   Single Tool Call: {proj.get('phase_single_tool_call', True)}")
+            print(f"\n🪵 Debug Trace:")
+            print(f"   Enabled: {proj.get('debug_trace_enabled', True)}")
+            print(f"   Max Events Per Pulse: {proj.get('debug_trace_max_events', 200)}")
+            print(f"   Full Content: {proj.get('debug_trace_full_content', True)}")
+            print(f"   LLM IO Trace Enabled: {proj.get('debug_llm_trace_enabled', True)}")
             
             print(f"\n👥 Active Agents: {', '.join(proj.get('active_agents', []))}")
             
@@ -119,25 +121,12 @@ def cmd_config(args):
                     data["projects"][pid]["summarize_threshold"] = int(args.value)
                 elif parts[1] == "keep":
                     data["projects"][pid]["summarize_keep_count"] = int(args.value)
-                elif parts[1] == "tail":
-                    data["projects"][pid]["memory_tail_chars"] = int(args.value)
-                elif parts[1] == "entry_clip":
-                    data["projects"][pid]["memory_entry_clip_chars"] = int(args.value)
                 elif parts[1] == "compact_trigger":
                     data["projects"][pid]["memory_compact_trigger_chars"] = int(args.value)
                 elif parts[1] == "compact_keep":
                     data["projects"][pid]["memory_compact_keep_chars"] = int(args.value)
                 else:
                     print(f"❌ Unknown memory key: {parts[1]}")
-                    return
-
-            elif parts[0] == "history" and len(parts) >= 2:
-                if parts[1] == "clip":
-                    data["projects"][pid]["history_clip_chars"] = int(args.value)
-                elif parts[1] == "keep":
-                    data["projects"][pid]["history_keep_messages"] = int(args.value)
-                else:
-                    print(f"❌ Unknown history key: {parts[1]}")
                     return
 
             elif parts[0] == "tools" and len(parts) >= 2:
@@ -164,6 +153,29 @@ def cmd_config(args):
                     data["projects"][pid]["phase_single_tool_call"] = args.value.lower() == "true"
                 else:
                     print(f"❌ Unknown phase key: {parts[1]}")
+                    return
+            elif parts[0] == "debug" and len(parts) >= 2:
+                if parts[1] == "trace":
+                    data["projects"][pid]["debug_trace_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "max_events":
+                    value = int(args.value)
+                    if value < 20:
+                        print("❌ debug.max_events must be >= 20")
+                        return
+                    data["projects"][pid]["debug_trace_max_events"] = value
+                elif parts[1] == "full":
+                    data["projects"][pid]["debug_trace_full_content"] = args.value.lower() == "true"
+                elif parts[1] == "llm_trace":
+                    data["projects"][pid]["debug_llm_trace_enabled"] = args.value.lower() == "true"
+                else:
+                    print(f"❌ Unknown debug key: {parts[1]}")
+                    return
+
+            elif parts[0] == "legacy" and len(parts) >= 2:
+                if parts[1] == "social_api":
+                    data["enable_legacy_social_api"] = args.value.lower() == "true"
+                else:
+                    print(f"❌ Unknown legacy key: {parts[1]}")
                     return
             
             elif parts[0] == "agent" and len(parts) >= 3:
@@ -211,18 +223,19 @@ def cmd_config(args):
                 print("  simulation.batch (number)")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
-                print("  memory.tail (chars)")
-                print("  memory.entry_clip (chars)")
                 print("  memory.compact_trigger (chars)")
                 print("  memory.compact_keep (chars)")
-                print("  history.clip (chars)")
-                print("  history.keep (message count)")
                 print("  tools.loop_max (number)")
                 print("  phase.enabled (true/false)")
                 print("  phase.repeat_limit (number)")
                 print("  phase.explore_budget (number)")
                 print("  phase.no_progress_limit (number)")
                 print("  phase.single_tool (true/false)")
+                print("  debug.trace (true/false)")
+                print("  debug.max_events (number)")
+                print("  debug.full (true/false)")
+                print("  debug.llm_trace (true/false)")
+                print("  legacy.social_api (true/false)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return
