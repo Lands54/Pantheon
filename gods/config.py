@@ -24,6 +24,12 @@ class ProjectConfig(BaseModel):
     simulation_interval_max: int = 40
     summarize_threshold: int = 12
     summarize_keep_count: int = 5
+    # Command execution governance
+    command_max_parallel: int = 2
+    command_timeout_sec: int = 60
+    command_max_memory_mb: int = 512
+    command_max_cpu_sec: int = 15
+    command_max_output_chars: int = 4000
 
 class SystemConfig(BaseModel):
     openrouter_api_key: str = ""
