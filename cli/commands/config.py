@@ -42,6 +42,8 @@ def cmd_config(args):
             print(f"   Enabled: {proj.get('phase_mode_enabled', True)}")
             print(f"   Strategy: {proj.get('phase_strategy', 'strict_triad')}")
             print(f"   Interaction Max: {proj.get('phase_interaction_max', 3)}")
+            print(f"   Act Require Tool Call: {proj.get('phase_act_require_tool_call', True)}")
+            print(f"   Act Require Productive Tool: {proj.get('phase_act_require_productive_tool', True)}")
             print(f"   Repeat Limit: {proj.get('phase_repeat_limit', 2)}")
             print(f"   Explore Budget: {proj.get('phase_explore_budget', 3)}")
             print(f"   No Progress Limit: {proj.get('phase_no_progress_limit', 3)}")
@@ -156,6 +158,10 @@ def cmd_config(args):
                         print("❌ phase.interaction_max must be >= 1")
                         return
                     data["projects"][pid]["phase_interaction_max"] = value
+                elif parts[1] == "act_require_tool":
+                    data["projects"][pid]["phase_act_require_tool_call"] = args.value.lower() == "true"
+                elif parts[1] == "act_require_productive":
+                    data["projects"][pid]["phase_act_require_productive_tool"] = args.value.lower() == "true"
                 elif parts[1] == "repeat_limit":
                     data["projects"][pid]["phase_repeat_limit"] = int(args.value)
                 elif parts[1] == "explore_budget":
@@ -242,6 +248,8 @@ def cmd_config(args):
                 print("  phase.enabled (true/false)")
                 print("  phase.strategy (strict_triad|iterative_action)")
                 print("  phase.interaction_max (number)")
+                print("  phase.act_require_tool (true/false)")
+                print("  phase.act_require_productive (true/false)")
                 print("  phase.repeat_limit (number)")
                 print("  phase.explore_budget (number)")
                 print("  phase.no_progress_limit (number)")

@@ -21,6 +21,7 @@ from gods.agents.debug_trace import PulseTraceLogger
 PHASE_STRATEGY_STRICT_TRIAD = "strict_triad"
 PHASE_STRATEGY_ITERATIVE_ACTION = "iterative_action"
 PHASE_STRATEGIES = {PHASE_STRATEGY_STRICT_TRIAD, PHASE_STRATEGY_ITERATIVE_ACTION}
+PRODUCTIVE_ACT_TOOLS = {"write_file", "replace_content", "insert_content", "multi_replace", "run_command"}
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,28 @@ class AgentPhaseRuntime:
         value = int(getattr(proj, "phase_interaction_max", 3) if proj else 3)
         return max(1, min(value, 16))
 
+    def _act_require_tool_call(self) -> bool:
+        proj = self._project_cfg()
+        return bool(getattr(proj, "phase_act_require_tool_call", True) if proj else True)
+
+    def _act_require_productive_tool(self) -> bool:
+        proj = self._project_cfg()
+        return bool(getattr(proj, "phase_act_require_productive_tool", True) if proj else True)
+
+    def _act_violation_feedback(self, reason: str) -> str:
+        if reason == "no_tool":
+            return (
+                "RULE VIOLATION: Act phase must emit at least one tool call. "
+                "Reply again with concrete implementation tool calls."
+            )
+        if reason == "no_productive":
+            return (
+                "RULE VIOLATION: Act phase must include at least one productive tool "
+                "(write_file/replace_content/insert_content/multi_replace/run_command). "
+                "Reply again with productive tool calls."
+            )
+        return "RULE VIOLATION: Act phase output invalid. Retry with valid tool calls."
+
     def _run_iterative(self, state, simulation_directives: str, local_memory: str, inbox_msgs: str):
         """
         Strategy: one Reason, then multiple Action<->Observe interactions in a single pulse.
@@ -293,6 +316,43 @@ class AgentPhaseRuntime:
                     tool_calls_full=act_calls,
                     tool_calls=len(act_calls),
                 )
+
+                if self._act_require_tool_call() and len(act_calls) == 0:
+                    fb = self._act_violation_feedback("no_tool")
+                    state["messages"].append(SystemMessage(content=fb))
+                    self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                    tracer.event(
+                        "phase_retry",
+                        phase_name="act",
+                        interaction=interaction_idx,
+                        attempt=1,
+                        reason="no_tool_call",
+                    )
+                    tracer.event("continue_decision", reason="iterative_act_no_tool_call", interaction=interaction_idx)
+                    terminal_reason = "iterative_act_no_tool_call"
+                    return self._continue(state)
+
+                if self._act_require_productive_tool():
+                    names = [c.get("name", "") for c in act_calls]
+                    if not any(n in PRODUCTIVE_ACT_TOOLS for n in names):
+                        fb = self._act_violation_feedback("no_productive")
+                        state["messages"].append(SystemMessage(content=fb))
+                        self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                        tracer.event(
+                            "phase_retry",
+                            phase_name="act",
+                            interaction=interaction_idx,
+                            attempt=1,
+                            reason="no_productive_tool_call",
+                        )
+                        tracer.event(
+                            "continue_decision",
+                            reason="iterative_act_no_productive_tool",
+                            interaction=interaction_idx,
+                        )
+                        terminal_reason = "iterative_act_no_productive_tool"
+                        return self._continue(state)
+
                 for call in act_calls:
                     tool_name = call.get("name", "")
                     args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
@@ -504,6 +564,26 @@ class AgentPhaseRuntime:
                 tool_calls_full=act_calls,
                 tool_calls=len(act_calls),
             )
+
+            if self._act_require_tool_call() and len(act_calls) == 0:
+                fb = self._act_violation_feedback("no_tool")
+                state["messages"].append(SystemMessage(content=fb))
+                self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                tracer.event("phase_retry", phase_name="act", attempt=1, reason="no_tool_call")
+                tracer.event("continue_decision", reason="act_no_tool_call")
+                terminal_reason = "act_no_tool_call"
+                return self._continue(state)
+
+            if self._act_require_productive_tool():
+                names = [c.get("name", "") for c in act_calls]
+                if not any(n in PRODUCTIVE_ACT_TOOLS for n in names):
+                    fb = self._act_violation_feedback("no_productive")
+                    state["messages"].append(SystemMessage(content=fb))
+                    self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                    tracer.event("phase_retry", phase_name="act", attempt=1, reason="no_productive_tool_call")
+                    tracer.event("continue_decision", reason="act_no_productive_tool")
+                    terminal_reason = "act_no_productive_tool"
+                    return self._continue(state)
 
             for call in act_calls:
                 tool_name = call.get("name", "")

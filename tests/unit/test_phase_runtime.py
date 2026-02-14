@@ -138,7 +138,7 @@ def test_observe_non_finalize_tool_is_blocked():
     agent_id = "tester"
     responses = [
         AIMessage(content="reason", tool_calls=[]),
-        AIMessage(content="act", tool_calls=[]),
+        AIMessage(content="act", tool_calls=[{"id": "a1", "name": "write_file", "args": {"path": "x.txt", "content": "ok"}}]),
         AIMessage(content="observe", tool_calls=[{"id": "t1", "name": "list_dir", "args": {}}]),
         AIMessage(content="observe retry no tool", tool_calls=[]),
     ]
@@ -148,7 +148,7 @@ def test_observe_non_finalize_tool_is_blocked():
     try:
         out = runtime.run(state, simulation_directives="", local_memory="", inbox_msgs="")
         assert out["next_step"] == "continue"
-        assert agent.executed_tools == []
+        assert [name for name, _ in agent.executed_tools] == ["write_file"]
         assert any("Tool 'list_dir' is not allowed in phase 'observe'" in m for m in agent.memory_log)
         assert any("[PHASE_RETRY] observe" in m for m in agent.memory_log)
     finally:
@@ -171,6 +171,25 @@ def test_reason_tool_call_triggers_retry_feedback():
         out = runtime.run(state, simulation_directives="", local_memory="", inbox_msgs="")
         assert out["next_step"] == "continue"
         assert any("[PHASE_RETRY] reason" in m for m in agent.memory_log)
+        assert agent.executed_tools == []
+    finally:
+        shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
+
+
+def test_act_without_tool_call_is_rejected_in_strict_mode():
+    project_id = "unit_phase_act_no_tool"
+    agent_id = "tester"
+    responses = [
+        AIMessage(content="reason ok", tool_calls=[]),
+        AIMessage(content="act no tool", tool_calls=[]),
+    ]
+    agent = _DummyAgent(project_id, agent_id, _SequenceBrain(responses))
+    runtime = AgentPhaseRuntime(agent)
+    state = {"messages": [], "next_step": "", "project_id": project_id}
+    try:
+        out = runtime.run(state, simulation_directives="", local_memory="", inbox_msgs="")
+        assert out["next_step"] == "continue"
+        assert any("[PHASE_RETRY] act" in m for m in agent.memory_log)
         assert agent.executed_tools == []
     finally:
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)

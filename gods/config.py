@@ -39,6 +39,9 @@ class ProjectConfig(BaseModel):
     phase_strategy: str = "strict_triad"
     # iterative_action strategy: max action-observe interactions per pulse
     phase_interaction_max: int = 3
+    # stricter act-phase control
+    phase_act_require_tool_call: bool = True
+    phase_act_require_productive_tool: bool = True
     phase_repeat_limit: int = 2
     phase_explore_budget: int = 3
     phase_no_progress_limit: int = 3
