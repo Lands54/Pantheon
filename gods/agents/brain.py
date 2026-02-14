@@ -24,7 +24,7 @@ class GodBrain:
         if proj and self.agent_id in proj.agent_settings:
             model = proj.agent_settings[self.agent_id].model
         else:
-            model = "google/gemini-2.0-flash-exp:free"
+            model = "google/gemini-flash-1.5:free"
         
         api_key = runtime_config.openrouter_api_key
         

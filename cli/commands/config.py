@@ -194,7 +194,7 @@ def cmd_config(args):
             # Fallback to hardcoded list
             print(f"\n⚠️  Could not fetch from OpenRouter API: {e}")
             print("\n📦 Common Free Models:")
-            print("   google/gemini-2.0-flash-exp:free")
+            print("   google/gemini-flash-1.5:free")
             print("   google/gemini-flash-1.5:free")
             print("   meta-llama/llama-3.2-3b-instruct:free")
             print("   qwen/qwen-2-7b-instruct:free")
@@ -205,4 +205,4 @@ def cmd_config(args):
             print("   google/gemini-pro-1.5")
         
         print("\n💡 Usage:")
-        print("   ./temple.sh config set agent.genesis.model google/gemini-2.0-flash-exp:free")
+        print("   ./temple.sh config set agent.genesis.model google/gemini-flash-1.5:free")

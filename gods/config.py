@@ -10,7 +10,7 @@ from pathlib import Path
 CONFIG_FILE = Path("config.json")
 
 class AgentModelConfig(BaseModel):
-    model: str = "google/gemini-2.0-flash-exp:free"
+    model: str = "google/gemini-flash-1.5:free"
     disabled_tools: List[str] = []
 
 class ProjectConfig(BaseModel):
