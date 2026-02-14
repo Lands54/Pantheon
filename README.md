@@ -1,18 +1,34 @@
-# Gods Platform
+# Pantheon
 
-A distributed multi-agent platform where AI agents exist as autonomous entities with isolated territories, persistent memory, and social interaction capabilities.
+Pantheon is an experimental multi-agent simulation platform for autonomous, file-grounded software collaboration.
+
+Each agent ("Being") has its own territory, local memory, and tool access.  
+Projects are isolated worlds, orchestrated by pulse-based scheduling through API + CLI.
+
+## Status
+
+This repository is in **research preview** stage:
+
+- Architecture and orchestration are functional.
+- Agent behavior is still unstable for long, fully autonomous tasks.
+- Expect breaking changes.
+
+## Core Concepts
+
+- **World (`project`)**: isolated runtime and data space under `projects/<id>/`
+- **Being (`agent`)**: autonomous actor with its own filesystem territory
+- **Pulse**: scheduler-triggered activation cycle
+- **Private channel**: `confess` / `send_message`
+- **Protocol logging**: `record_protocol` emits structured negotiation events
 
 ## Architecture
 
-Gods Platform follows a clean three-layer architecture:
-
-- **Core Layer (`gods/`)**: Business logic, agents, tools, and workflows
-- **API Layer (`api/`)**: FastAPI server with modularized routes
-- **CLI Layer (`cli/`)**: Command-line interface for management
+- **Core** (`gods/`): agents, tools, runtime strategies, memory flow
+- **API** (`api/`): FastAPI routes + scheduler
+- **CLI** (`cli/`): operational control and diagnostics
+- **Frontend** (`frontend/`): optional web console
 
 ## Quick Start
-
-### 1. Install Dependencies
 
 ```bash
 conda create -n gods_env python=3.11
@@ -20,90 +36,71 @@ conda activate gods_env
 pip install -r requirements.txt
 ```
 
-### 2. Set API Key
+Set API key:
 
 ```bash
 ./temple.sh init YOUR_OPENROUTER_API_KEY
 ```
 
-### 3. Start Server
+Start server:
 
 ```bash
-./server.sh
-# Or manually: python api/server.py
+python -m api.server
 ```
 
-### 4. Access Web UI
-
-Open `http://localhost:8000` in your browser.
-
-### 5. Use CLI
+Basic CLI flow:
 
 ```bash
-# Quick way (recommended)
+./temple.sh project create demo_world
+./temple.sh project switch demo_world
 ./temple.sh list
-./temple.sh project create my_world
-./temple.sh broadcast "Hello, divine beings!"
-
-# Or manual way
-python cli/main.py list
-python cli/main.py broadcast "Hello!"
+./temple.sh project start demo_world
+./temple.sh check genesis
 ```
 
-## Project Structure
+## Runtime Strategies
 
-```
-Gods/
-├── gods/                  # Core business logic
-│   ├── config.py          # Configuration management
-│   ├── state.py           # State definitions
-│   ├── workflow.py        # LangGraph workflows
-│   ├── agents/            # Agent logic
-│   │   ├── base.py        # GodAgent class
-│   │   └── brain.py       # LLM interface
-│   └── tools/             # Agent capabilities
-│       ├── communication.py
-│       ├── filesystem.py
-│       └── execution.py
-│
-├── api/                   # FastAPI server
-│   ├── server.py          # Main server
-│   ├── models.py          # Pydantic models
-│   └── routes/            # Modularized endpoints
-│       ├── config.py
-│       ├── projects.py
-│       ├── agents.py
-│       └── communication.py
-│
-├── cli/                   # Command-line interface
-│   ├── main.py            # CLI entry point
-│   ├── utils.py           # Helper functions
-│   └── commands/          # Command modules
-│
-├── tests/                 # Test suite
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-│
-├── frontend/              # React web UI
-├── projects/              # Multi-project data
-└── docs/                  # Documentation
+- `strict_triad`: Reason -> Act -> Observe
+- `iterative_action`: Reason + multiple Act/Observe loops
+- `freeform`: unconstrained agent<->tool loop (experimental)
+
+Set strategy per project:
+
+```bash
+./temple.sh --project demo_world config set phase.strategy freeform
 ```
 
-## Key Features
+## Tooling Surface
 
-- **Multi-Project Architecture**: Isolated worlds with independent agent ecosystems
-- **Autonomous Agents**: Self-aware entities with persistent memory
-- **Territory Isolation**: Each agent operates in a sandboxed file system
-- **Social Simulation**: Agents communicate via inbox/broadcast mechanisms
-- **Streaming Debates**: Real-time multi-agent conversations
-- **Web + CLI**: Dual interface for management and interaction
+Agents can use tools for:
 
-## Documentation
+- communication (`check_inbox`, `send_message`, `send_to_human`)
+- filesystem edits (`read_file`, `write_file`, `replace_content`, `insert_content`, `multi_replace`, `list_dir`)
+- command execution (`run_command`)
+- coordination (`record_protocol`, `list_agents`, `post_to_synod`, `abstain_from_synod`, `finalize`)
 
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Quick Start Guide](docs/QUICKSTART.md)
-- [API Documentation](docs/api.md)
+## Safety Notes
+
+- Do **not** commit secrets (`config.json` is ignored).
+- Rotate keys immediately if exposed.
+- `run_command` is resource-guarded but still powerful; use cautiously.
+
+## Project Layout
+
+```text
+gods/        core runtime
+api/         FastAPI + scheduler
+cli/         command-line control
+tests/       unit/integration/e2e tests
+projects/    runtime worlds (local, not for versioned test data)
+```
+
+## Roadmap
+
+- executable inter-agent protocol registry
+- contract-based cross-agent calls
+- stronger convergence controls for autonomous loops
+- better cost/runtime observability
 
 ## License
 
