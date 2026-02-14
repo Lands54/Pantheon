@@ -40,6 +40,8 @@ def cmd_config(args):
             print(f"   Memory Compact Keep Chars: {proj.get('memory_compact_keep_chars', 50000)}")
             print(f"\n🧠 Phase Runtime:")
             print(f"   Enabled: {proj.get('phase_mode_enabled', True)}")
+            print(f"   Strategy: {proj.get('phase_strategy', 'strict_triad')}")
+            print(f"   Interaction Max: {proj.get('phase_interaction_max', 3)}")
             print(f"   Repeat Limit: {proj.get('phase_repeat_limit', 2)}")
             print(f"   Explore Budget: {proj.get('phase_explore_budget', 3)}")
             print(f"   No Progress Limit: {proj.get('phase_no_progress_limit', 3)}")
@@ -143,6 +145,17 @@ def cmd_config(args):
             elif parts[0] == "phase" and len(parts) >= 2:
                 if parts[1] == "enabled":
                     data["projects"][pid]["phase_mode_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "strategy":
+                    if args.value not in ("strict_triad", "iterative_action"):
+                        print("❌ phase.strategy must be one of: strict_triad, iterative_action")
+                        return
+                    data["projects"][pid]["phase_strategy"] = args.value
+                elif parts[1] == "interaction_max":
+                    value = int(args.value)
+                    if value < 1:
+                        print("❌ phase.interaction_max must be >= 1")
+                        return
+                    data["projects"][pid]["phase_interaction_max"] = value
                 elif parts[1] == "repeat_limit":
                     data["projects"][pid]["phase_repeat_limit"] = int(args.value)
                 elif parts[1] == "explore_budget":
@@ -227,6 +240,8 @@ def cmd_config(args):
                 print("  memory.compact_keep (chars)")
                 print("  tools.loop_max (number)")
                 print("  phase.enabled (true/false)")
+                print("  phase.strategy (strict_triad|iterative_action)")
+                print("  phase.interaction_max (number)")
                 print("  phase.repeat_limit (number)")
                 print("  phase.explore_budget (number)")
                 print("  phase.no_progress_limit (number)")

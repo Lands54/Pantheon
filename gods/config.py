@@ -35,6 +35,10 @@ class ProjectConfig(BaseModel):
     tool_loop_max: int = 8
     # Phase-runtime controls
     phase_mode_enabled: bool = True
+    # phase strategy: strict_triad | iterative_action
+    phase_strategy: str = "strict_triad"
+    # iterative_action strategy: max action-observe interactions per pulse
+    phase_interaction_max: int = 3
     phase_repeat_limit: int = 2
     phase_explore_budget: int = 3
     phase_no_progress_limit: int = 3

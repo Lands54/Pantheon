@@ -5,6 +5,7 @@ import shutil
 from langchain_core.messages import AIMessage
 
 from gods.agents.phase_runtime import AgentPhaseRuntime, PhaseToolPolicy, _base_phases
+from gods.config import runtime_config, ProjectConfig, AgentModelConfig
 
 
 def test_base_phases_match_new_state_machine():
@@ -172,4 +173,34 @@ def test_reason_tool_call_triggers_retry_feedback():
         assert any("[PHASE_RETRY] reason" in m for m in agent.memory_log)
         assert agent.executed_tools == []
     finally:
+        shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
+
+
+def test_iterative_action_strategy_supports_multiple_action_observe_cycles():
+    project_id = "unit_phase_iterative_strategy"
+    agent_id = "tester"
+    responses = [
+        AIMessage(content="reason ok", tool_calls=[]),
+        AIMessage(content="act1", tool_calls=[{"id": "a1", "name": "write_file", "args": {"path": "a.txt", "content": "1"}}]),
+        AIMessage(content="observe1 incomplete", tool_calls=[]),
+        AIMessage(content="act2", tool_calls=[{"id": "a2", "name": "write_file", "args": {"path": "b.txt", "content": "2"}}]),
+        AIMessage(content="observe2 complete", tool_calls=[{"id": "f1", "name": "finalize", "args": {}}]),
+    ]
+    old_projects = runtime_config.projects.copy()
+    runtime_config.projects[project_id] = ProjectConfig(
+        name="iterative-test",
+        active_agents=[agent_id],
+        agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
+        phase_strategy="iterative_action",
+        phase_interaction_max=3,
+    )
+    agent = _DummyAgent(project_id, agent_id, _SequenceBrain(responses))
+    runtime = AgentPhaseRuntime(agent)
+    state = {"messages": [], "next_step": "", "project_id": project_id}
+    try:
+        out = runtime.run(state, simulation_directives="", local_memory="", inbox_msgs="")
+        assert out["next_step"] == "finish"
+        assert [name for name, _ in agent.executed_tools] == ["write_file", "write_file", "finalize"]
+    finally:
+        runtime_config.projects = old_projects
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
