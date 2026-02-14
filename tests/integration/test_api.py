@@ -124,3 +124,12 @@ def test_delete_agent():
     # Delete it
     response = client.delete("/agents/test_delete_agent")
     assert response.status_code == 200
+
+
+def test_get_agents_status():
+    """Test GET /agents/status endpoint."""
+    response = client.get("/agents/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert "project_id" in data
+    assert "agents" in data

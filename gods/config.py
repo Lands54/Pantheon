@@ -20,6 +20,10 @@ class ProjectConfig(BaseModel):
         "genesis": AgentModelConfig()
     }
     simulation_enabled: bool = False
+    # 非 Synod 场景：是否并行触发多个 Agent 脉冲
+    autonomous_parallel: bool = True
+    # 并行模式下每批最多同时触发的 Agent 数量
+    autonomous_batch_size: int = 4
     simulation_interval_min: int = 10
     simulation_interval_max: int = 40
     summarize_threshold: int = 12

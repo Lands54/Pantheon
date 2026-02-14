@@ -3,6 +3,7 @@ Gods Platform - Brain Module (Dynamic API Version)
 Manages LLM instances using runtime configuration.
 """
 from gods.config import runtime_config
+from langchain_core.messages import AIMessage
 
 
 class GodBrain:
@@ -54,6 +55,20 @@ class GodBrain:
             return response.content
         except Exception as e:
             return f"Error in reasoning: {str(e)}"
+
+    def think_with_tools(self, messages: list, tools: list) -> AIMessage:
+        """Perform inference with official structured tool-calling."""
+        if not runtime_config.openrouter_api_key:
+            return AIMessage(content="❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings.")
+
+        try:
+            llm = self.get_llm().bind_tools(tools)
+            response = llm.invoke(messages)
+            if isinstance(response, AIMessage):
+                return response
+            return AIMessage(content=str(getattr(response, "content", response)))
+        except Exception as e:
+            return AIMessage(content=f"Error in reasoning: {str(e)}")
     
     def __repr__(self):
         current_project = self.project_id or runtime_config.current_project

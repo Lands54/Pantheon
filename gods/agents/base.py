@@ -2,13 +2,13 @@
 Gods Platform - Agent Node Definitions
 Agents load their core logic directly from their respective agents/{id}/agent.md files.
 """
-from langchain_core.messages import HumanMessage, AIMessage
+import uuid
+from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from gods.state import GodsState
 from gods.agents.brain import GodBrain
 from gods.tools import GODS_TOOLS
 from gods.config import runtime_config
 from pathlib import Path
-import re
 
 
 class GodAgent:
@@ -36,7 +36,16 @@ class GodAgent:
     
     def process(self, state: GodsState) -> GodsState:
         """Autonomous Agent Pulse: Prioritize inbox, then work, then escalate."""
-        # 1. Automatic Inbox Perception (Mandatory check for social simulation)
+        max_tool_rounds = 4
+        loop_key = f"_tool_loop_count_{self.agent_id}"
+        current_loops = int(state.get(loop_key, 0))
+        if current_loops >= max_tool_rounds:
+            self._append_to_memory("Reached tool loop budget in this pulse. Yielding to other beings.")
+            state[loop_key] = 0
+            state["next_step"] = "finish"
+            return state
+
+        # 1. Automatic Inbox Perception (still injected for deterministic social awareness)
         inbox_msgs = self.execute_tool("check_inbox", {})
         
         # 2. Load context
@@ -57,22 +66,30 @@ class GodAgent:
         context = self.build_context(state, simulation_directives, local_memory, inbox_msgs)
         
         print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
-        response = self.brain.think(context)
-        
-        # Record thought and notify memory.md
-        state["messages"].append(AIMessage(content=response, name=self.agent_id))
-        self._append_to_memory(response)
+        llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
+        response = self.brain.think_with_tools(llm_messages, GODS_TOOLS)
 
-        # 4. Action Execution
-        tool_calls = self.parse_tool_calls(response)
+        # Record thought and notify memory.md
+        state["messages"].append(response)
+        self._append_to_memory(response.content or "[No textual response]")
+
+        # 4. Structured Tool Execution (official tool-calling path)
+        tool_calls = getattr(response, "tool_calls", []) or []
         if tool_calls:
-            for tool_name, args in tool_calls:
+            for call in tool_calls:
+                tool_name = call.get("name", "")
+                args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
+                tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
+
                 obs = self.execute_tool(tool_name, args)
-                state["messages"].append(HumanMessage(content=f"Observation: {obs}", name="system"))
+                state["messages"].append(
+                    ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name)
+                )
                 self._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
                 
                 # Special: If escalated, stop pulse and flag for global resonance
                 if tool_name == "post_to_synod":
+                    state[loop_key] = 0
                     state["next_step"] = "escalated"
                     return state
                 
@@ -82,11 +99,14 @@ class GodAgent:
                         state["abstained"] = []
                     if self.agent_id not in state["abstained"]:
                         state["abstained"].append(self.agent_id)
+                    state[loop_key] = 0
                     state["next_step"] = "abstained"
                     return state
             
+            state[loop_key] = current_loops + 1
             state["next_step"] = "continue"
         else:
+            state[loop_key] = 0
             state["next_step"] = "finish"
             
         return state
@@ -107,19 +127,6 @@ class GodAgent:
         entry = f"\n### 📖 Entry [{timestamp}]\n{text}\n\n---\n"
         with open(mem_path, "a", encoding="utf-8") as f:
             f.write(entry)
-
-    def parse_tool_calls(self, text: str) -> list:
-        """Parse [[tool_name(key=\"val\")]] matches"""
-        pattern = r"\[\[(\w+)\((.*?)\)\]\]"
-        matches = re.findall(pattern, text)
-        results = []
-        for name, args_str in matches:
-            args = {}
-            kv_pattern = r'(\w+)\s*=\s*"(.*?)"'
-            for k, v in re.findall(kv_pattern, args_str):
-                args[k] = v
-            results.append((name, args))
-        return results
 
     def execute_tool(self, name: str, args: dict) -> str:
         """Execute the tool function with identity and project injection"""
@@ -169,11 +176,15 @@ Location: projects/{self.project_id}/agents/{self.agent_id}/
 # TASK (Current Universal Intent)
 {state.get('context', 'Exist and evolve.')}
 
+# AVAILABLE TOOLS
+{tools_desc}
+
 # PROTOCOL
 1. Read your inbox FIRST.
-2. If another Being reached out, reply via [[send_message]].
-3. Carry out your work via file/command tools.
-4. If stuck, use [[post_to_synod]].
+2. If another Being reached out, reply via tool calling (send_message).
+3. Carry out your work via structured tool calls only.
+4. Do NOT emit custom wrappers like [[...]] or <tool_call>...</tool_call>.
+5. If stuck, use post_to_synod.
 """
         return context
 

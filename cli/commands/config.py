@@ -28,6 +28,8 @@ def cmd_config(args):
             print(f"\n🤖 Simulation:")
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
             print(f"   Interval: {proj.get('simulation_interval_min', 10)}-{proj.get('simulation_interval_max', 40)}s")
+            print(f"   Autonomous Parallel: {proj.get('autonomous_parallel', True)}")
+            print(f"   Autonomous Batch Size: {proj.get('autonomous_batch_size', 4)}")
             
             print(f"\n📊 Memory:")
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
@@ -67,6 +69,10 @@ def cmd_config(args):
                     data["projects"][pid]["simulation_interval_min"] = int(args.value)
                 elif parts[1] == "max":
                     data["projects"][pid]["simulation_interval_max"] = int(args.value)
+                elif parts[1] == "parallel":
+                    data["projects"][pid]["autonomous_parallel"] = args.value.lower() == "true"
+                elif parts[1] == "batch":
+                    data["projects"][pid]["autonomous_batch_size"] = int(args.value)
                 else:
                     print(f"❌ Unknown simulation key: {parts[1]}")
                     return
@@ -121,6 +127,8 @@ def cmd_config(args):
                 print("  simulation.enabled (true/false)")
                 print("  simulation.min (seconds)")
                 print("  simulation.max (seconds)")
+                print("  simulation.parallel (true/false)")
+                print("  simulation.batch (number)")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
                 print("  agent.<agent_id>.model (model name)")

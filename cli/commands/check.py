@@ -32,6 +32,26 @@ def cmd_check(args):
     inbox_file = agent_dir / "inbox.jsonl"
     
     print(f"\n📬 Checking {agent_id}'s activity in {pid}...\n")
+
+    # Scheduler status
+    try:
+        status_res = requests.get(f"{base_url}/agents/status", params={"project_id": pid})
+        status_data = status_res.json()
+        for item in status_data.get("agents", []):
+            if item.get("agent_id") == agent_id:
+                import datetime
+                lp = item.get("last_pulse_at", 0) or 0
+                ne = item.get("next_eligible_at", 0) or 0
+                lp_s = datetime.datetime.fromtimestamp(lp).strftime("%Y-%m-%d %H:%M:%S") if lp > 0 else "N/A"
+                ne_s = datetime.datetime.fromtimestamp(ne).strftime("%Y-%m-%d %H:%M:%S") if ne > 0 else "N/A"
+                print(f"🧭 Scheduler: {item.get('status', 'unknown')}")
+                print(f"   Last Pulse: {lp_s}")
+                print(f"   Next Eligible: {ne_s}")
+                print(f"   Empty Cycles: {item.get('empty_cycles', 0)}")
+                print(f"   Pending Inbox: {item.get('has_pending_inbox', False)}")
+                break
+    except Exception:
+        pass
     
     # Show inbox status
     if inbox_file.exists():

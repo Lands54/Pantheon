@@ -151,3 +151,4 @@ def record_protocol(
             fcntl.flock(f, fcntl.LOCK_UN)
 
     return f"Protocol recorded: {protocol_id} ({caller_id} -[{relation}]-> {object})"
+

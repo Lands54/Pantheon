@@ -4,13 +4,13 @@ Main server entry point with modularized routes.
 """
 import asyncio
 import logging
-import random
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from gods.config import runtime_config
 from api.routes import config, projects, agents, communication
+from api.scheduler import pick_pulse_batch, pulse_agent_sync
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -28,34 +28,31 @@ app.include_router(communication.router)
 # --- Simulation Heartbeat ---
 
 async def simulation_loop():
-    """Background loop that randomly triggers agent pulses."""
-    from gods.agents.base import GodAgent
-    from langchain_core.messages import HumanMessage
-    
+    """
+    Event-driven autonomous loop:
+    - pulse idle agents only
+    - prioritize inbox-driven wakeups
+    - heartbeat is fallback for silent periods
+    """
+
     logger.info("Universal Simulation Heartbeat initiated.")
     while True:
         proj = runtime_config.projects.get(runtime_config.current_project)
         if proj and proj.simulation_enabled and proj.active_agents:
-            # Pick a lucky agent
-            agent_id = random.choice(proj.active_agents)
-            logger.info(f"✨ Simulation Pulse: Awakening {agent_id}")
-            
-            try:
-                # Trigger autonomous pulse
-                agent = GodAgent(agent_id=agent_id, project_id=runtime_config.current_project)
-                state = {
-                    "project_id": runtime_config.current_project,
-                    "messages": [HumanMessage(content="EXISTENCE_PULSE: Update your state and personal chronicles.", name="system")],
-                    "context": "Autonomous evolution pulse",
-                    "next_step": ""
-                }
-                agent.process(state)
-            except Exception as e:
-                logger.error(f"Pulse failed for {agent_id}: {e}")
-        
-        # Sleep for a random interval within configured bounds
-        interval = random.randint(proj.simulation_interval_min if proj else 10, proj.simulation_interval_max if proj else 40)
-        await asyncio.sleep(interval)
+            project_id = runtime_config.current_project
+            active_agents = list(proj.active_agents)
+            batch_size = max(1, int(getattr(proj, "autonomous_batch_size", 4)))
+            batch = pick_pulse_batch(project_id, active_agents, batch_size)
+            if batch:
+                logger.info(f"✨ Event Pulse: {len(batch)} agents in {project_id}")
+                tasks = [
+                    asyncio.to_thread(pulse_agent_sync, project_id, agent_id, reason, False)
+                    for agent_id, reason in batch
+                ]
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Fast polling for event-driven wakeups without 1s alarm spam to each agent.
+        await asyncio.sleep(1.0)
 
 
 @app.on_event("startup")

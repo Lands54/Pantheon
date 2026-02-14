@@ -6,9 +6,19 @@ import shutil
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from gods.config import runtime_config, AgentModelConfig
+from api.scheduler import get_project_status
 from api.models import CreateAgentRequest
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+@router.get("/status")
+async def get_agents_status(project_id: str = None):
+    """Get scheduler status for active agents in selected project."""
+    project_id = project_id or runtime_config.current_project
+    proj = runtime_config.projects.get(project_id)
+    active = list(proj.active_agents) if proj else []
+    return {"project_id": project_id, "agents": get_project_status(project_id, active)}
 
 
 @router.post("/create")

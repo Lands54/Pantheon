@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from gods.config import runtime_config
 from gods.workflow import create_gods_workflow, create_private_workflow
+from api.scheduler import pulse_agent_sync
 from api.models import BroadcastRequest, HumanMessageRequest
 
 router = APIRouter(tags=["communication"])
@@ -106,17 +107,17 @@ async def human_confession(req: HumanMessageRequest, background_tasks: Backgroun
     # 2. Trigger an immediate pulse for this agent (if not silent)
     if not req.silent:
         def run_pulse():
-            from gods.agents.base import GodAgent
             try:
-                agent = GodAgent(agent_id=req.agent_id, project_id=project_id)
-                state = {
-                    "project_id": project_id,
-                    "messages": [HumanMessage(content=f"PRIVATE REVELATION: {req.message}", name="High Overseer")],
-                    "context": f"Private interaction with High Overseer: {req.message}",
-                    "next_step": ""
-                }
-                agent.process(state)
-                logger.info(f"⚡ Auto-Pulse triggered for {req.agent_id} in {project_id}")
+                result = pulse_agent_sync(
+                    project_id=project_id,
+                    agent_id=req.agent_id,
+                    reason="human_confess",
+                    force=False,
+                )
+                if result.get("triggered"):
+                    logger.info(f"⚡ Auto-Pulse triggered for {req.agent_id} in {project_id}")
+                else:
+                    logger.info(f"⏸ Pulse skipped for {req.agent_id}: {result.get('reason')}")
             except Exception as e:
                 logger.error(f"Auto-Pulse failed for {req.agent_id}: {e}")
 
