@@ -9,6 +9,7 @@ import requests
 import os
 from pathlib import Path
 from typing import Optional
+from cli.commands.config import cmd_config
 
 CONFIG_PATH = Path("config.json")
 
@@ -264,6 +265,15 @@ def main():
     # list
     subparsers.add_parser("list", help="List agents in current project")
 
+    # config
+    p_config = subparsers.add_parser("config", help="Manage configuration")
+    config_sub = p_config.add_subparsers(dest="subcommand")
+    config_sub.add_parser("show", help="Show current configuration")
+    p_config_set = config_sub.add_parser("set", help="Set configuration value")
+    p_config_set.add_argument("key", help="Config key (e.g., simulation.enabled, agent.genesis.model)")
+    p_config_set.add_argument("value", help="Config value")
+    config_sub.add_parser("models", help="List available models")
+
     # Project management
     p_proj = subparsers.add_parser("project", help="Manage Worlds (Projects)")
     proj_sub = p_proj.add_subparsers(dest="subcommand")
@@ -326,6 +336,7 @@ def main():
     
     if args.command == "init": cmd_init(args)
     elif args.command == "list": cmd_list(args)
+    elif args.command == "config": cmd_config(args)
     elif args.command == "project": cmd_project(args)
     elif args.command == "agent": cmd_agent(args)
     elif args.command == "broadcast": cmd_broadcast(args)
