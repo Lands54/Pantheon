@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from api.routes import agents, communication, config, hermes, mnemosyne, projects, tool_gateway
 from api.services import simulation_service
 from gods.config import runtime_config
+from gods.runtime.detach import startup_mark_lost_all_projects
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GodsServer")
@@ -38,6 +39,9 @@ if runtime_config.enable_legacy_social_api:
 async def startup_event():
     # Safety-first startup: pause worlds first, then start scheduler loop.
     changed = simulation_service.pause_all_projects_on_startup()
+    lost = startup_mark_lost_all_projects()
+    logger.info(f"Detach startup reconcile: marked lost jobs per project: {lost}")
+    simulation_service.check_runtime_health()
     if changed > 0:
         logger.info("Startup safety: paused all projects (simulation_enabled=false).")
     asyncio.create_task(simulation_service.simulation_loop())

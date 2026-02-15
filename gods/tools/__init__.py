@@ -22,6 +22,7 @@ from .filesystem import (
     validate_path
 )
 from .execution import run_command
+from .detach import run_command_detach, detach_list, detach_stop
 from .hermes import (
     register_protocol,  # deprecated compatibility tool, not in default agent toolset
     call_protocol,  # exported for direct import, not in default agent toolset
@@ -53,6 +54,9 @@ GODS_TOOLS = [
     replace_content,
     insert_content,
     run_command,
+    run_command_detach,
+    detach_list,
+    detach_stop,
     post_to_synod,
     abstain_from_synod,
     list_agents,
@@ -87,6 +91,9 @@ __all__ = [
     'multi_replace',
     'list_dir',
     'run_command',
+    'run_command_detach',
+    'detach_list',
+    'detach_stop',
     'validate_path',
     'register_protocol',
     'call_protocol',

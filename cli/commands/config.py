@@ -65,6 +65,26 @@ def cmd_config(args):
             print(f"   Default Rate Limit: {proj.get('hermes_default_rate_per_minute', 60)} /min")
             print(f"   Default Max Concurrency: {proj.get('hermes_default_max_concurrency', 2)}")
             print(f"   Allow agent_tool Provider: {proj.get('hermes_allow_agent_tool_provider', False)}")
+            print(f"\n🐳 Runtime (Command Executor):")
+            print(f"   Executor: {proj.get('command_executor', 'local')}")
+            print(f"   Docker Enabled: {proj.get('docker_enabled', True)}")
+            print(f"   Docker Image: {proj.get('docker_image', 'gods-agent-base:py311')}")
+            print(f"   Docker Network Mode: {proj.get('docker_network_mode', 'bridge_local_only')}")
+            print(f"   Docker Auto Start on Project Start: {proj.get('docker_auto_start_on_project_start', True)}")
+            print(f"   Docker Auto Stop on Project Stop: {proj.get('docker_auto_stop_on_project_stop', True)}")
+            print(f"   Docker Workspace Mount Mode: {proj.get('docker_workspace_mount_mode', 'agent_territory_rw')}")
+            print(f"   Docker Readonly Rootfs: {proj.get('docker_readonly_rootfs', False)}")
+            print(f"   Docker CPU Limit: {proj.get('docker_cpu_limit', 1.0)}")
+            print(f"   Docker Memory Limit: {proj.get('docker_memory_limit_mb', 512)} MB")
+            print(f"   Docker Extra Env: {proj.get('docker_extra_env', {})}")
+            print(f"\n🧵 Detach Runtime:")
+            print(f"   Enabled: {proj.get('detach_enabled', True)}")
+            print(f"   Max Running Per Agent: {proj.get('detach_max_running_per_agent', 2)}")
+            print(f"   Max Running Per Project: {proj.get('detach_max_running_per_project', 8)}")
+            print(f"   Queue Max Per Agent: {proj.get('detach_queue_max_per_agent', 8)}")
+            print(f"   TTL: {proj.get('detach_ttl_sec', 1800)}s")
+            print(f"   Stop Grace: {proj.get('detach_stop_grace_sec', 10)}s")
+            print(f"   Log Tail Chars: {proj.get('detach_log_tail_chars', 4000)}")
             
             print(f"\n👥 Active Agents: {', '.join(proj.get('active_agents', []))}")
             
@@ -127,11 +147,65 @@ def cmd_config(args):
                 "pulse_interrupt_mode",
                 "inbox_event_enabled",
                 "pulse_priority_weights",
+                "command_executor",
+                "docker_enabled",
+                "docker_image",
+                "docker_network_mode",
+                "docker_auto_start_on_project_start",
+                "docker_auto_stop_on_project_stop",
+                "docker_workspace_mount_mode",
+                "docker_readonly_rootfs",
+                "docker_extra_env",
+                "docker_cpu_limit",
+                "docker_memory_limit_mb",
+                "detach_enabled",
+                "detach_max_running_per_agent",
+                "detach_max_running_per_project",
+                "detach_queue_max_per_agent",
+                "detach_ttl_sec",
+                "detach_stop_grace_sec",
+                "detach_log_tail_chars",
             }:
                 if direct_key in {"queue_idle_heartbeat_sec", "pulse_event_inject_budget"}:
                     data["projects"][pid][direct_key] = int(args.value)
+                elif direct_key in {"docker_memory_limit_mb"}:
+                    data["projects"][pid][direct_key] = int(args.value)
+                elif direct_key in {
+                    "detach_max_running_per_agent",
+                    "detach_max_running_per_project",
+                    "detach_queue_max_per_agent",
+                    "detach_ttl_sec",
+                    "detach_stop_grace_sec",
+                    "detach_log_tail_chars",
+                }:
+                    data["projects"][pid][direct_key] = int(args.value)
+                elif direct_key in {"docker_cpu_limit"}:
+                    data["projects"][pid][direct_key] = float(args.value)
                 elif direct_key == "inbox_event_enabled":
                     data["projects"][pid][direct_key] = args.value.lower() == "true"
+                elif direct_key in {
+                    "docker_enabled",
+                    "docker_auto_start_on_project_start",
+                    "docker_auto_stop_on_project_stop",
+                    "docker_readonly_rootfs",
+                    "detach_enabled",
+                }:
+                    data["projects"][pid][direct_key] = args.value.lower() == "true"
+                elif direct_key == "command_executor":
+                    if args.value not in {"docker", "local"}:
+                        print("❌ command_executor must be one of: docker, local")
+                        return
+                    data["projects"][pid][direct_key] = args.value
+                elif direct_key == "docker_extra_env":
+                    try:
+                        payload = json.loads(args.value)
+                        if not isinstance(payload, dict):
+                            print("❌ docker_extra_env must be a JSON object")
+                            return
+                        data["projects"][pid][direct_key] = payload
+                    except Exception as e:
+                        print(f"❌ invalid JSON for docker_extra_env: {e}")
+                        return
                 elif direct_key == "pulse_interrupt_mode":
                     if args.value != "after_action":
                         print("❌ pulse_interrupt_mode currently only supports: after_action")
@@ -147,6 +221,8 @@ def cmd_config(args):
                     except Exception as e:
                         print(f"❌ invalid JSON for pulse_priority_weights: {e}")
                         return
+                else:
+                    data["projects"][pid][direct_key] = args.value
 
             # Match key paths
             elif parts[0] == "simulation" and len(parts) >= 2:
@@ -278,6 +354,63 @@ def cmd_config(args):
                 else:
                     print(f"❌ Unknown hermes key: {parts[1]}")
                     return
+            elif parts[0] == "docker" and len(parts) >= 2:
+                if parts[1] == "enabled":
+                    data["projects"][pid]["docker_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "image":
+                    data["projects"][pid]["docker_image"] = args.value
+                elif parts[1] == "network_mode":
+                    data["projects"][pid]["docker_network_mode"] = args.value
+                elif parts[1] == "auto_start":
+                    data["projects"][pid]["docker_auto_start_on_project_start"] = args.value.lower() == "true"
+                elif parts[1] == "auto_stop":
+                    data["projects"][pid]["docker_auto_stop_on_project_stop"] = args.value.lower() == "true"
+                elif parts[1] == "readonly_rootfs":
+                    data["projects"][pid]["docker_readonly_rootfs"] = args.value.lower() == "true"
+                elif parts[1] == "cpu":
+                    data["projects"][pid]["docker_cpu_limit"] = float(args.value)
+                elif parts[1] == "memory_mb":
+                    data["projects"][pid]["docker_memory_limit_mb"] = int(args.value)
+                elif parts[1] == "extra_env":
+                    try:
+                        payload = json.loads(args.value)
+                    except Exception as e:
+                        print(f"❌ invalid JSON for docker.extra_env: {e}")
+                        return
+                    if not isinstance(payload, dict):
+                        print("❌ docker.extra_env must be a JSON object")
+                        return
+                    data["projects"][pid]["docker_extra_env"] = payload
+                else:
+                    print(f"❌ Unknown docker key: {parts[1]}")
+                    return
+            elif parts[0] == "detach" and len(parts) >= 2:
+                if parts[1] == "enabled":
+                    data["projects"][pid]["detach_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "max_running_per_agent":
+                    data["projects"][pid]["detach_max_running_per_agent"] = int(args.value)
+                elif parts[1] == "max_running_per_project":
+                    data["projects"][pid]["detach_max_running_per_project"] = int(args.value)
+                elif parts[1] == "queue_max_per_agent":
+                    data["projects"][pid]["detach_queue_max_per_agent"] = int(args.value)
+                elif parts[1] == "ttl":
+                    data["projects"][pid]["detach_ttl_sec"] = int(args.value)
+                elif parts[1] == "stop_grace":
+                    data["projects"][pid]["detach_stop_grace_sec"] = int(args.value)
+                elif parts[1] == "log_tail_chars":
+                    data["projects"][pid]["detach_log_tail_chars"] = int(args.value)
+                else:
+                    print(f"❌ Unknown detach key: {parts[1]}")
+                    return
+            elif parts[0] == "executor" and len(parts) >= 2:
+                if parts[1] == "command":
+                    if args.value not in {"docker", "local"}:
+                        print("❌ executor.command must be one of: docker, local")
+                        return
+                    data["projects"][pid]["command_executor"] = args.value
+                else:
+                    print(f"❌ Unknown executor key: {parts[1]}")
+                    return
 
             elif parts[0] == "legacy" and len(parts) >= 2:
                 if parts[1] == "social_api":
@@ -405,6 +538,41 @@ def cmd_config(args):
                 print("  hermes.rate (calls/min)")
                 print("  hermes.concurrency (number)")
                 print("  hermes.allow_agent_tool (true/false)")
+                print("  command_executor (docker|local)")
+                print("  docker_enabled (true/false)")
+                print("  docker_image (image tag)")
+                print("  docker_network_mode (bridge_local_only|none)")
+                print("  docker_auto_start_on_project_start (true/false)")
+                print("  docker_auto_stop_on_project_stop (true/false)")
+                print("  docker_workspace_mount_mode (agent_territory_rw)")
+                print("  docker_readonly_rootfs (true/false)")
+                print("  docker_cpu_limit (float)")
+                print("  docker_memory_limit_mb (int)")
+                print("  docker_extra_env ({\"KEY\":\"VALUE\"})")
+                print("  detach_enabled (true/false)")
+                print("  detach_max_running_per_agent (int)")
+                print("  detach_max_running_per_project (int)")
+                print("  detach_queue_max_per_agent (int)")
+                print("  detach_ttl_sec (seconds)")
+                print("  detach_stop_grace_sec (seconds)")
+                print("  detach_log_tail_chars (int)")
+                print("  executor.command (docker|local)")
+                print("  docker.enabled (true/false)")
+                print("  docker.image (image tag)")
+                print("  docker.network_mode (bridge_local_only|none)")
+                print("  docker.auto_start (true/false)")
+                print("  docker.auto_stop (true/false)")
+                print("  docker.readonly_rootfs (true/false)")
+                print("  docker.cpu (float)")
+                print("  docker.memory_mb (int)")
+                print("  docker.extra_env ({\"KEY\":\"VALUE\"})")
+                print("  detach.enabled (true/false)")
+                print("  detach.max_running_per_agent (int)")
+                print("  detach.max_running_per_project (int)")
+                print("  detach.queue_max_per_agent (int)")
+                print("  detach.ttl (seconds)")
+                print("  detach.stop_grace (seconds)")
+                print("  detach.log_tail_chars (int)")
                 print("  legacy.social_api (true/false)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  agent.<agent_id>.phase_strategy (strict_triad|iterative_action|freeform)")

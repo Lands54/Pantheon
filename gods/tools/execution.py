@@ -4,9 +4,7 @@ Command execution with scoped capabilities and runtime safeguards.
 """
 from __future__ import annotations
 
-import os
 import shlex
-import subprocess
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
@@ -14,12 +12,8 @@ from urllib.parse import urlparse
 from langchain.tools import tool
 
 from gods.config import runtime_config
+from gods.runtime.execution_backend import ExecutionLimits, resolve_execution_backend
 from .filesystem import validate_path
-
-try:
-    import resource
-except Exception:  # pragma: no cover
-    resource = None
 
 
 SAFE_BASE_COMMANDS = {
@@ -181,28 +175,6 @@ def _get_agent_lock(project_id: str, caller_id: str) -> threading.Lock:
         return lock
 
 
-def _build_preexec_fn(max_memory_mb: int, max_cpu_sec: int):
-    if resource is None or os.name == "nt":
-        return None
-
-    def _limit():
-        mem_bytes = max_memory_mb * 1024 * 1024
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-        except Exception:
-            pass
-        try:
-            resource.setrlimit(resource.RLIMIT_CPU, (max_cpu_sec, max_cpu_sec))
-        except Exception:
-            pass
-        try:
-            resource.setrlimit(resource.RLIMIT_NOFILE, (128, 128))
-        except Exception:
-            pass
-
-    return _limit
-
-
 @tool
 def run_command(command: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Run an approved command within your project territory, with resource and concurrency limits."""
@@ -260,27 +232,49 @@ def run_command(command: str, caller_id: str = "default", project_id: str = "def
         )
 
     try:
-        result = subprocess.run(
-            parts,
-            cwd=territory,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            preexec_fn=_build_preexec_fn(max_memory_mb, max_cpu_sec),
+        backend = resolve_execution_backend(project_id)
+        result = backend.execute(
+            command_parts=parts,
+            command_text=command,
+            territory=territory,
+            project_id=project_id,
+            agent_id=caller_id,
+            limits=ExecutionLimits(
+                timeout_sec=timeout_sec,
+                max_memory_mb=max_memory_mb,
+                max_cpu_sec=max_cpu_sec,
+            ),
         )
+        if result.error_code:
+            if result.timed_out or result.error_code in {"LOCAL_TIMEOUT", "DOCKER_TIMEOUT"}:
+                return _format_exec_error(
+                    territory,
+                    "Execution Timeout",
+                    result.error_message or f"Command timed out after {timeout_sec}s.",
+                    "Break the task into smaller steps or increase command_timeout_sec via config.",
+                )
+            code = result.error_code
+            msg = result.error_message or "unknown execution backend error"
+            if code in {"DOCKER_NOT_AVAILABLE", "DOCKER_COMMAND_FAILED"}:
+                return _format_exec_error(
+                    territory,
+                    "Execution Backend Error",
+                    f"{code}: {msg}",
+                    "Install/start Docker or set config command_executor=local.",
+                )
+            return _format_exec_error(
+                territory,
+                "Execution Failed",
+                f"{code}: {msg}",
+                "Check command arguments and local environment, then retry.",
+            )
+
         stdout = (result.stdout or "")[:output_limit]
         stderr = (result.stderr or "")[:output_limit]
         return (
-            f"Manifestation Result (exit={result.returncode}):\n"
+            f"Manifestation Result (exit={result.exit_code}):\n"
             f"STDOUT: {stdout}\n"
             f"STDERR: {stderr}"
-        )
-    except subprocess.TimeoutExpired:
-        return _format_exec_error(
-            territory,
-            "Execution Timeout",
-            f"Command timed out after {timeout_sec}s.",
-            "Break the task into smaller steps or increase command_timeout_sec via config.",
         )
     except Exception as e:
         return _format_exec_error(

@@ -11,10 +11,20 @@
             "agent_settings": {
                 "genesis": {
                     "model": "stepfun/step-3.5-flash:free",
-                    "disabled_tools": []
+                    "disabled_tools": [
+                        "check_inbox"
+                    ]
                 }
             },
-            "simulation_enabled": false
+            "simulation_enabled": false,
+            "command_executor": "docker",
+            "docker_enabled": true,
+            "docker_image": "gods-agent-base:py311",
+            "detach_enabled": true,
+            "detach_max_running_per_agent": 2,
+            "detach_max_running_per_project": 8,
+            "detach_queue_max_per_agent": 8,
+            "detach_ttl_sec": 1800
         }
     }
 }

@@ -143,6 +143,8 @@ def ensure_project_and_agents():
     proj = runtime_config.projects[PROJECT_ID]
     proj.name = "Animal World"
     proj.active_agents = list(AGENTS)
+    # Deterministic demo path: use local backend unless explicitly testing docker runtime.
+    proj.command_executor = "local"
     for agent in AGENTS:
         if agent not in proj.agent_settings:
             proj.agent_settings[agent] = AgentModelConfig()

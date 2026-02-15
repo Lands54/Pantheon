@@ -115,3 +115,56 @@ async def get_inbox_events(project_id: str, agent_id: str = "", state: str = "",
         limit=max(1, min(limit, 500)),
     )
     return {"project_id": project_id, "items": [r.to_dict() for r in rows]}
+
+
+@router.get("/{project_id}/runtime/agents")
+async def runtime_agents_status(project_id: str):
+    """List runtime container status for active agents in project."""
+    return project_service.runtime_status(project_id)
+
+
+@router.post("/{project_id}/runtime/agents/{agent_id}/restart")
+async def runtime_restart_agent(project_id: str, agent_id: str):
+    """Restart one active agent runtime container."""
+    return project_service.runtime_restart_agent(project_id, agent_id)
+
+
+@router.post("/{project_id}/runtime/reconcile")
+async def runtime_reconcile(project_id: str):
+    """Reconcile runtime containers against project's active_agents list."""
+    return project_service.runtime_reconcile(project_id)
+
+
+@router.post("/{project_id}/detach/submit")
+async def detach_submit(project_id: str, req: Request):
+    """Submit one detach background command job."""
+    data = await req.json()
+    agent_id = str(data.get("agent_id", "")).strip()
+    command = str(data.get("command", "")).strip()
+    if not agent_id or not command:
+        raise HTTPException(status_code=400, detail="agent_id and command are required")
+    return project_service.detach_submit(project_id, agent_id, command)
+
+
+@router.get("/{project_id}/detach/jobs")
+async def detach_jobs(project_id: str, agent_id: str = "", status: str = "", limit: int = 50):
+    """List detach jobs in one project."""
+    return project_service.detach_list(project_id, agent_id, status, max(1, min(limit, 500)))
+
+
+@router.post("/{project_id}/detach/jobs/{job_id}/stop")
+async def detach_stop(project_id: str, job_id: str):
+    """Stop one detach job."""
+    return project_service.detach_stop(project_id, job_id)
+
+
+@router.post("/{project_id}/detach/reconcile")
+async def detach_reconcile(project_id: str):
+    """Apply ttl and fifo eviction policy once."""
+    return project_service.detach_reconcile(project_id)
+
+
+@router.get("/{project_id}/detach/jobs/{job_id}/logs")
+async def detach_logs(project_id: str, job_id: str):
+    """Read detach log tail."""
+    return project_service.detach_logs(project_id, job_id)

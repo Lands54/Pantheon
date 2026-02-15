@@ -19,6 +19,8 @@ from cli.commands.config import cmd_config
 from cli.commands.check import cmd_check
 from cli.commands.protocol import cmd_protocol
 from cli.commands.mnemosyne import cmd_mnemosyne
+from cli.commands.runtime import cmd_runtime
+from cli.commands.detach import cmd_detach
 from cli.commands.pulse import cmd_pulse
 from cli.commands.inbox import cmd_inbox
 from cli.commands.project import cmd_project as cmd_project_v2
@@ -314,6 +316,29 @@ def main():
     p_mn_read.add_argument("entry_id")
     p_mn_read.add_argument("--vault", choices=["agent", "human", "system"], default="human")
 
+    # runtime container ops
+    p_rt = subparsers.add_parser("runtime", help="Runtime container operations")
+    rt_sub = p_rt.add_subparsers(dest="subcommand")
+    rt_sub.add_parser("status", help="Show per-agent runtime container status")
+    p_rt_restart = rt_sub.add_parser("restart", help="Restart one agent runtime container")
+    p_rt_restart.add_argument("agent")
+    rt_sub.add_parser("reconcile", help="Reconcile runtime containers with active agents")
+
+    # detach background jobs
+    p_detach = subparsers.add_parser("detach", help="Detach background jobs")
+    detach_sub = p_detach.add_subparsers(dest="subcommand")
+    p_detach_submit = detach_sub.add_parser("submit", help="Submit detach job")
+    p_detach_submit.add_argument("agent")
+    p_detach_submit.add_argument("--cmd", required=True)
+    p_detach_list = detach_sub.add_parser("list", help="List detach jobs")
+    p_detach_list.add_argument("--agent", default="")
+    p_detach_list.add_argument("--status", default="")
+    p_detach_list.add_argument("--limit", type=int, default=50)
+    p_detach_stop = detach_sub.add_parser("stop", help="Stop detach job")
+    p_detach_stop.add_argument("job_id")
+    p_detach_logs = detach_sub.add_parser("logs", help="Show detach job log tail")
+    p_detach_logs.add_argument("job_id")
+
     # pulse queue operations
     p_pulse = subparsers.add_parser("pulse", help="Pulse queue operations")
     pulse_sub = p_pulse.add_subparsers(dest="subcommand")
@@ -388,6 +413,12 @@ def main():
     if args.command == "mnemosyne" and not args.subcommand:
         p_mn.print_help()
         sys.exit(0)
+    if args.command == "runtime" and not args.subcommand:
+        p_rt.print_help()
+        sys.exit(0)
+    if args.command == "detach" and not args.subcommand:
+        p_detach.print_help()
+        sys.exit(0)
     if args.command == "pulse" and not args.subcommand:
         p_pulse.print_help()
         sys.exit(0)
@@ -402,6 +433,8 @@ def main():
     elif args.command == "project": cmd_project(args)
     elif args.command == "protocol": cmd_protocol(args)
     elif args.command == "mnemosyne": cmd_mnemosyne(args)
+    elif args.command == "runtime": cmd_runtime(args)
+    elif args.command == "detach": cmd_detach(args)
     elif args.command == "pulse": cmd_pulse(args)
     elif args.command == "inbox": cmd_inbox(args)
     elif args.command == "agent": cmd_agent(args)

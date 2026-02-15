@@ -29,6 +29,21 @@ Gods Platform 采用三层结构：
 - `gods/tools/hermes.py`：协议注册、协议调用、异步任务查询、协议列表。
 - `gods/tools/mnemosyne.py`：Agent 档案持久化读写（agent vault）。
 
+### 2.2.1 命令执行后端（`gods/runtime/`）
+
+- `gods/runtime/execution_backend.py`：执行后端抽象（`local` / `docker`）。
+- `gods/runtime/docker/*`：Agent 容器生命周期与执行管理。
+- `run_command` 通过 backend resolver 路由，不再固定宿主机 subprocess。
+
+### 2.2.2 Detach 后台托管（`gods/runtime/detach/`）
+
+- `models.py`：后台任务状态模型（`queued/running/stopping/stopped/failed/lost`）。
+- `store.py`：项目级 jobs/logs 落盘与文件锁。
+- `policy.py`：FIFO 回收策略（project + agent 双上限）。
+- `runner.py`：后台执行线程（基于 `docker exec`）与停止控制。
+- `service.py`：submit/list/stop/reconcile/startup_lost 统一入口。
+- 一期限制：仅 `command_executor=docker` 可用，local 后端明确拒绝。
+
 ### 2.3 Inbox + Pulse 事件模块（`gods/inbox` + `gods/pulse`）
 
 - `gods/inbox/models.py`：Inbox 事件与 4 态（`pending/delivered/deferred/handled`）。
@@ -58,6 +73,8 @@ Gods Platform 采用三层结构：
 - `projects/{project_id}/agents/{agent_id}/memory.md`：可读记忆日志。
 - `projects/{project_id}/runtime/inbox_events.jsonl`：Inbox 事件存储。
 - `projects/{project_id}/runtime/pulse_events.jsonl`：Pulse 队列存储。
+- `projects/{project_id}/runtime/detach_jobs.jsonl`：Detach 后台任务存储。
+- `projects/{project_id}/runtime/detach_logs/{job_id}.log`：Detach 任务日志。
 - `projects/{project_id}/runtime/locks/*.lock`：Inbox/Pulse 文件锁。
 - `projects/{project_id}/protocols/registry.json`：Hermes 协议注册表。
 - `projects/{project_id}/protocols/invocations.jsonl`：Hermes 调用审计日志。
@@ -72,6 +89,16 @@ Gods Platform 采用三层结构：
 - `api/routes/config.py`：配置读取/保存（密钥脱敏输出）。
 - `api/routes/projects.py`：项目增删。
 - `api/routes/projects.py`：项目增删 + 项目报告生成/查询（`/projects/{project_id}/report/*`）。
+- `api/routes/projects.py`：运行时容器接口：
+  - `GET /projects/{project_id}/runtime/agents`
+  - `POST /projects/{project_id}/runtime/agents/{agent_id}/restart`
+  - `POST /projects/{project_id}/runtime/reconcile`
+- `api/routes/projects.py`：Detach 后台任务接口：
+  - `POST /projects/{project_id}/detach/submit`
+  - `GET /projects/{project_id}/detach/jobs`
+  - `POST /projects/{project_id}/detach/jobs/{job_id}/stop`
+  - `POST /projects/{project_id}/detach/reconcile`
+  - `GET /projects/{project_id}/detach/jobs/{job_id}/logs`
 - `api/routes/projects.py`：Pulse/Inbox 调试接口：
   - `GET /projects/{project_id}/pulse/queue`
   - `POST /projects/{project_id}/pulse/enqueue`
@@ -105,6 +132,7 @@ Gods Platform 采用三层结构：
   - 通信：`broadcast/confess/prayers/check`
   - 配置：`config show/set/models`
   - 事件调试：`pulse queue/push`、`inbox events`
+  - 后台任务：`detach submit/list/stop/logs`
 
 ## 5. 多项目隔离模型
 
@@ -118,6 +146,8 @@ projects/{project_id}/
 ├── runtime/
 │   ├── inbox_events.jsonl
 │   ├── pulse_events.jsonl
+│   ├── detach_jobs.jsonl
+│   ├── detach_logs/{job_id}.log
 │   └── locks/*.lock
 ├── buffers/ (兼容层，逐步淡出)
 │   └── human.jsonl

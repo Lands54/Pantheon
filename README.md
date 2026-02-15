@@ -221,6 +221,43 @@ Project report helpers:
 ./temple.sh project report-show demo_world
 ```
 
+Docker runtime helpers:
+
+```bash
+# Build base image once
+docker build -t gods-agent-base:py311 docker/agent-base
+
+# Inspect runtime containers
+./temple.sh -p demo_world runtime status
+
+# Reconcile containers with active agents
+./temple.sh -p demo_world runtime reconcile
+
+# Fallback to host execution backend
+./temple.sh -p demo_world config set command_executor local
+```
+
+Detach background jobs (Docker backend only):
+
+```bash
+# Submit one background job
+./temple.sh -p demo_world detach submit grass --cmd "python server.py"
+
+# List jobs
+./temple.sh -p demo_world detach list --agent grass
+
+# Stop one job
+./temple.sh -p demo_world detach stop <job_id>
+
+# Read log tail
+./temple.sh -p demo_world detach logs <job_id>
+
+# Tune detach limits
+./temple.sh -p demo_world config set detach_max_running_per_agent 2
+./temple.sh -p demo_world config set detach_max_running_per_project 8
+./temple.sh -p demo_world config set detach_ttl_sec 1800
+```
+
 ---
 
 ## 📂 Project Structure

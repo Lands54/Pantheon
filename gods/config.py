@@ -83,6 +83,28 @@ class ProjectConfig(BaseModel):
     command_max_memory_mb: int = 512
     command_max_cpu_sec: int = 15
     command_max_output_chars: int = 4000
+    # Command execution backend
+    # docker | local
+    command_executor: str = "docker"
+    docker_enabled: bool = True
+    docker_image: str = "gods-agent-base:py311"
+    # bridge_local_only | none
+    docker_network_mode: str = "bridge_local_only"
+    docker_auto_start_on_project_start: bool = True
+    docker_auto_stop_on_project_stop: bool = True
+    docker_workspace_mount_mode: str = "agent_territory_rw"
+    docker_readonly_rootfs: bool = False
+    docker_extra_env: Dict[str, str] = Field(default_factory=dict)
+    docker_cpu_limit: float = 1.0
+    docker_memory_limit_mb: int = 512
+    # Detach runtime governance
+    detach_enabled: bool = True
+    detach_max_running_per_agent: int = 2
+    detach_max_running_per_project: int = 8
+    detach_queue_max_per_agent: int = 8
+    detach_ttl_sec: int = 1800
+    detach_stop_grace_sec: int = 10
+    detach_log_tail_chars: int = 4000
     # Hermes protocol bus controls
     hermes_enabled: bool = True
     hermes_default_timeout_sec: int = 30

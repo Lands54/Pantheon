@@ -10,9 +10,17 @@ from fastapi import HTTPException
 from gods.config import ProjectConfig, runtime_config
 from gods.project.reporting import build_project_report, load_project_report
 from gods.protocols import build_knowledge_graph
+from gods.runtime.detach import DetachError, get_logs as detach_get_logs, list_for_api as detach_list_for_api
+from gods.runtime.detach import reconcile as detach_reconcile
+from gods.runtime.detach import stop as detach_stop
+from gods.runtime.detach import submit as detach_submit
+from gods.runtime.docker import DockerRuntimeManager
 
 
 class ProjectService:
+    def __init__(self):
+        self._docker = DockerRuntimeManager()
+
     def list_projects(self) -> dict[str, Any]:
         return {"projects": runtime_config.projects, "current": runtime_config.current_project}
 
@@ -73,24 +81,122 @@ class ProjectService:
             proj.simulation_enabled = pid == project_id
 
         runtime_config.current_project = project_id
+        proj = runtime_config.projects[project_id]
+        runtime_info = {"enabled": False, "ensured": []}
+        if bool(getattr(proj, "docker_enabled", True)) and str(getattr(proj, "command_executor", "local")) == "docker":
+            if bool(getattr(proj, "docker_auto_start_on_project_start", True)):
+                ok, msg = self._docker.docker_available()
+                runtime_info = {"enabled": True, "available": ok, "detail": msg, "ensured": []}
+                if ok:
+                    for aid in proj.active_agents:
+                        try:
+                            st = self._docker.ensure_agent_runtime(project_id, aid)
+                            runtime_info["ensured"].append(
+                                {
+                                    "agent_id": aid,
+                                    "running": st.running,
+                                    "exists": st.exists,
+                                    "container_name": st.container_name,
+                                }
+                            )
+                        except Exception as e:
+                            runtime_info["ensured"].append({"agent_id": aid, "error": str(e)})
         runtime_config.save()
         return {
             "status": "success",
             "project_id": project_id,
             "simulation_enabled": True,
             "current_project": runtime_config.current_project,
+            "runtime": runtime_info,
         }
 
     def stop_project(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        runtime_config.projects[project_id].simulation_enabled = False
+        proj = runtime_config.projects[project_id]
+        proj.simulation_enabled = False
+        runtime_info = {"stopped": []}
+        if bool(getattr(proj, "docker_enabled", True)) and str(getattr(proj, "command_executor", "local")) == "docker":
+            if bool(getattr(proj, "docker_auto_stop_on_project_stop", True)):
+                for aid in proj.active_agents:
+                    self._docker.stop_agent_runtime(project_id, aid)
+                    runtime_info["stopped"].append(aid)
         runtime_config.save()
         return {
             "status": "success",
             "project_id": project_id,
             "simulation_enabled": False,
             "current_project": runtime_config.current_project,
+            "runtime": runtime_info,
         }
+
+    def runtime_status(self, project_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        proj = runtime_config.projects[project_id]
+        rows = self._docker.list_project_runtimes(project_id, proj.active_agents)
+        ok, msg = self._docker.docker_available()
+        return {"project_id": project_id, "docker_available": ok, "docker_detail": msg, "agents": rows}
+
+    def runtime_restart_agent(self, project_id: str, agent_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        proj = runtime_config.projects[project_id]
+        if agent_id not in proj.active_agents:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' is not active in project '{project_id}'")
+        ok, msg = self._docker.docker_available()
+        if not ok:
+            raise HTTPException(status_code=503, detail=f"Docker unavailable: {msg}")
+        st = self._docker.restart_agent_runtime(project_id, agent_id)
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "exists": st.exists,
+            "running": st.running,
+            "image": st.image,
+            "container_name": st.container_name,
+            "container_id": st.container_id,
+        }
+
+    def runtime_reconcile(self, project_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        proj = runtime_config.projects[project_id]
+        ok, msg = self._docker.docker_available()
+        if not ok:
+            raise HTTPException(status_code=503, detail=f"Docker unavailable: {msg}")
+        return self._docker.reconcile_project(project_id, proj.active_agents)
+
+    def detach_submit(self, project_id: str, agent_id: str, command: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            return detach_submit(project_id=project_id, agent_id=agent_id, command=command)
+        except DetachError as e:
+            raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
+
+    def detach_list(self, project_id: str, agent_id: str, status: str, limit: int) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            return detach_list_for_api(project_id=project_id, agent_id=agent_id, status=status, limit=limit)
+        except DetachError as e:
+            raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
+
+    def detach_stop(self, project_id: str, job_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            return detach_stop(project_id=project_id, job_id=job_id, reason="manual")
+        except DetachError as e:
+            raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
+
+    def detach_reconcile(self, project_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            return detach_reconcile(project_id=project_id)
+        except DetachError as e:
+            raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
+
+    def detach_logs(self, project_id: str, job_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            return detach_get_logs(project_id=project_id, job_id=job_id)
+        except DetachError as e:
+            raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
     def build_report(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
