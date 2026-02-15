@@ -224,6 +224,7 @@ class ProjectService:
             "project_id": project_id,
             "protocol_count": report.get("protocol_count", 0),
             "invocation_count": report.get("invocation_count", 0),
+            "protocol_execution_validation": report.get("protocol_execution_validation", {}),
             "top_protocols": report.get("top_protocols", []),
             "output": report.get("output", {}),
             "mnemosyne_entry_id": report.get("mnemosyne_entry_id", ""),

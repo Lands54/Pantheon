@@ -31,7 +31,29 @@ def test_project_report_build_and_show_api():
             encoding="utf-8",
         )
         (protocol_dir / "contracts.json").write_text(
-            json.dumps({"contracts": [{"title": "Ecosystem Contract", "version": "1.0.0"}]}, ensure_ascii=False),
+            json.dumps(
+                {
+                    "contracts": [
+                        {
+                            "title": "Ecosystem Contract",
+                            "version": "1.0.0",
+                            "obligations": {
+                                "ground": [
+                                    {
+                                        "id": "integrate",
+                                        "provider": {
+                                            "type": "http",
+                                            "url": "http://127.0.0.1:18081/integrate",
+                                            "method": "POST",
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
         with (protocol_dir / "invocations.jsonl").open("w", encoding="utf-8") as f:
@@ -51,6 +73,7 @@ def test_project_report_build_and_show_api():
         assert payload["project_id"] == project_id
         assert payload["protocol_count"] == 1
         assert payload["invocation_count"] == 2
+        assert "protocol_execution_validation" in payload
         assert Path(payload["output"]["json"]).exists()
         assert Path(payload["output"]["md"]).exists()
 
@@ -61,6 +84,7 @@ def test_project_report_build_and_show_api():
         assert report["contract_count"] == 1
         assert report["status_summary"]["succeeded"] == 2
         assert report["port_leases_summary"]["lease_count"] == 1
+        assert report["protocol_execution_validation"]["expected_clauses"] == 1
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

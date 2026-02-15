@@ -16,6 +16,8 @@ def test_build_project_report_empty_project():
         assert report["project_id"] == project_id
         assert report["protocol_count"] == 0
         assert report["invocation_count"] == 0
+        assert "protocol_execution_validation" in report
+        assert report["protocol_execution_validation"]["expected_clauses"] == 0
         assert Path(report["output"]["json"]).exists()
         assert Path(report["output"]["md"]).exists()
         assert Path(report["output"]["mirror_md"]).exists()
@@ -42,7 +44,29 @@ def test_build_project_report_with_data():
             encoding="utf-8",
         )
         (protocols_dir / "contracts.json").write_text(
-            json.dumps({"contracts": [{"title": "Eco Contract", "version": "1.0.0"}]}, ensure_ascii=False),
+            json.dumps(
+                {
+                    "contracts": [
+                        {
+                            "title": "Eco Contract",
+                            "version": "1.0.0",
+                            "obligations": {
+                                "ground": [
+                                    {
+                                        "id": "integrate",
+                                        "provider": {
+                                            "type": "http",
+                                            "url": "http://127.0.0.1:18081/integrate",
+                                            "method": "POST",
+                                        },
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
         (protocols_dir / "invocations.jsonl").write_text(
@@ -72,6 +96,10 @@ def test_build_project_report_with_data():
         assert report["port_leases_summary"]["lease_count"] == 1
         assert report["top_protocols"][0]["protocol"] == "grass.grow"
         assert report["top_callers"][0]["caller_id"] == "ground"
+        val = report["protocol_execution_validation"]
+        assert val["expected_clauses"] == 1
+        assert val["mapped_registry_entries"] == 0
+        assert len(val["missing_registry"]) == 1
         assert report.get("mnemosyne_entry_id")
     finally:
         if base.exists():

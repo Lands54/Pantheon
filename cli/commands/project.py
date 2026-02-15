@@ -7,6 +7,49 @@ import requests
 from cli.utils import get_base_url
 
 
+def _print_protocol_validation_summary(data: dict):
+    val = data.get("protocol_execution_validation", {}) or {}
+    if not val:
+        print("   Protocol Validation: (unavailable from server response)")
+        print("   Hint: restart API server to load the latest report schema.")
+        return
+    summary = val.get("summary", {}) or {}
+    status = str(summary.get("status", "unknown")).lower()
+    icon = "✅" if status == "pass" else ("⚠️" if status == "warn" else "❌")
+    print(f"   Protocol Validation: {icon} {status}")
+    print(
+        "   Structural OK: "
+        f"{summary.get('structural_ok', False)} | "
+        f"Invocations: {summary.get('has_invocations', False)} | "
+        f"Dormant Clauses: {summary.get('dormant_clause_count', 0)} | "
+        f"Unhealthy Services: {summary.get('unhealthy_service_count', 0)}"
+    )
+
+    issues: list[str] = []
+    for item in (val.get("missing_registry") or [])[:5]:
+        issues.append(f"missing registry: {item.get('function_id', '')}")
+    for item in (val.get("registry_mismatch") or [])[:5]:
+        issues.append(
+            "registry mismatch: "
+            f"{item.get('function_id', '')} "
+            f"(contract={item.get('contract_provider', '')}, registry={item.get('registry_provider', '')})"
+        )
+    for item in (val.get("orphan_invocations") or [])[:5]:
+        issues.append(f"orphan invocation: {item.get('name', '')}")
+    for item in (val.get("dormant_clauses") or [])[:5]:
+        issues.append(f"dormant clause: {item.get('function_id', '')}")
+    for item in (val.get("unhealthy_services") or [])[:5]:
+        issues.append(
+            f"unhealthy service: {item.get('url', '')} "
+            f"(status={item.get('status_code', 0)} error={item.get('error', '')})"
+        )
+
+    if issues:
+        print("   Top Issues:")
+        for line in issues[:5]:
+            print(f"   - {line}")
+
+
 def cmd_project(args):
     """Manage Projects."""
     base_url = get_base_url()
@@ -115,6 +158,7 @@ def cmd_project(args):
                 print(f"   MD: {output.get('md')}")
                 if output.get("mirror_md"):
                     print(f"   Mirror: {output.get('mirror_md')}")
+                _print_protocol_validation_summary(data)
                 print(f"   Mnemosyne Entry: {data.get('mnemosyne_entry_id')}")
             else:
                 print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")

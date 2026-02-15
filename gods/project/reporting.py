@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +85,224 @@ def _mnemosyne_summary(project_id: str) -> dict[str, int]:
     return result
 
 
+def _to_function_id(owner: str, clause_id: str) -> str:
+    owner = str(owner or "").strip()
+    clause_id = str(clause_id or "").strip()
+    if not owner or not clause_id:
+        return ""
+    return f"{owner}.{clause_id}"
+
+
+def _extract_contract_clauses(contract_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for contract in contract_rows:
+        title = str(contract.get("title", ""))
+        version = str(contract.get("version", ""))
+        obligations = contract.get("obligations", {}) or {}
+        if not isinstance(obligations, dict):
+            continue
+        for owner, rows in obligations.items():
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                provider = row.get("provider", {}) or {}
+                clause_id = str(row.get("id", "")).strip()
+                item = {
+                    "title": title,
+                    "version": version,
+                    "owner_agent": str(owner),
+                    "clause_id": clause_id,
+                    "function_id": _to_function_id(str(owner), clause_id),
+                    "provider_url": str(provider.get("url", "")),
+                    "provider_method": str(provider.get("method", "POST")).upper(),
+                }
+                out.append(item)
+    return out
+
+
+def _index_registry(protocol_rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    by_fn: dict[str, dict[str, Any]] = {}
+    by_url_method: dict[str, dict[str, Any]] = {}
+    for row in protocol_rows:
+        fn = str(row.get("function_id", "")).strip()
+        if fn:
+            by_fn[fn] = row
+        provider = row.get("provider", {}) or {}
+        url = str(provider.get("url", "")).strip()
+        method = str(provider.get("method", "POST")).upper().strip()
+        if url:
+            by_url_method[f"{method} {url}"] = row
+    return by_fn, by_url_method
+
+
+def _function_id_candidates(function_id: str) -> set[str]:
+    fn = str(function_id or "").strip()
+    if not fn:
+        return set()
+    last = fn.split(".")[-1]
+    compact = fn.replace(".", "_")
+    return {
+        fn,
+        compact,
+        f".{fn}",
+        f".{compact}",
+        f"_{last}",
+        f".{last}",
+    }
+
+
+def _count_invocations_for_clause(invocations: list[dict[str, Any]], protocol_name: str, function_id: str) -> int:
+    c = 0
+    name_exact = str(protocol_name or "").strip()
+    fn_tokens = _function_id_candidates(function_id)
+    for row in invocations:
+        name = str(row.get("name", "")).strip()
+        if not name:
+            continue
+        if name_exact and name == name_exact:
+            c += 1
+            continue
+        if any(tok and tok in name for tok in fn_tokens):
+            c += 1
+    return c
+
+
+def _host_health_url(raw_url: str) -> str | None:
+    u = str(raw_url or "").strip()
+    if not u:
+        return None
+    try:
+        parsed = urllib.parse.urlparse(u)
+    except Exception:
+        return None
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    host = (parsed.hostname or "").strip().lower()
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        return None
+    port = parsed.port
+    netloc = f"{host}:{port}" if port else host
+    return f"{parsed.scheme}://{netloc}/health"
+
+
+def _http_health_check(url: str, timeout_sec: float = 1.5) -> dict[str, Any]:
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            code = int(getattr(resp, "status", 0) or 0)
+            return {"url": url, "ok": 200 <= code < 300, "status_code": code, "error": ""}
+    except urllib.error.HTTPError as e:
+        return {"url": url, "ok": False, "status_code": int(getattr(e, "code", 0) or 0), "error": str(e)}
+    except Exception as e:
+        return {"url": url, "ok": False, "status_code": 0, "error": str(e)}
+
+
+def _build_protocol_execution_validation(
+    contract_rows: list[dict[str, Any]],
+    protocol_rows: list[dict[str, Any]],
+    invocation_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    clauses = _extract_contract_clauses(contract_rows)
+    by_fn, by_url_method = _index_registry(protocol_rows)
+
+    missing_registry: list[dict[str, Any]] = []
+    registry_mismatch: list[dict[str, Any]] = []
+    mapped: list[dict[str, Any]] = []
+
+    for c in clauses:
+        fn = c.get("function_id", "")
+        key = f"{c.get('provider_method')} {c.get('provider_url')}".strip()
+        matched = by_fn.get(str(fn)) or by_url_method.get(key)
+        if not matched:
+            missing_registry.append(
+                {
+                    "function_id": fn,
+                    "owner_agent": c.get("owner_agent", ""),
+                    "provider": key,
+                }
+            )
+            continue
+        provider = matched.get("provider", {}) or {}
+        mkey = f"{str(provider.get('method', 'POST')).upper()} {str(provider.get('url', '')).strip()}"
+        if key and mkey and key != mkey:
+            registry_mismatch.append(
+                {
+                    "function_id": fn,
+                    "contract_provider": key,
+                    "registry_provider": mkey,
+                    "protocol_name": matched.get("name", ""),
+                }
+            )
+        mapped.append(
+            {
+                "function_id": fn,
+                "protocol_name": str(matched.get("name", "")),
+                "owner_agent": c.get("owner_agent", ""),
+                "provider_url": c.get("provider_url", ""),
+            }
+        )
+
+    orphan_invocations = []
+    known_names = {str(x.get("name", "")) for x in protocol_rows}
+    for row in invocation_rows:
+        nm = str(row.get("name", ""))
+        if nm and nm not in known_names:
+            orphan_invocations.append({"name": nm, "status": str(row.get("status", ""))})
+
+    invocation_coverage: list[dict[str, Any]] = []
+    dormant = []
+    for row in mapped:
+        cnt = _count_invocations_for_clause(invocation_rows, row.get("protocol_name", ""), row.get("function_id", ""))
+        item = {
+            "function_id": row.get("function_id", ""),
+            "protocol_name": row.get("protocol_name", ""),
+            "count": cnt,
+        }
+        invocation_coverage.append(item)
+        if cnt == 0:
+            dormant.append(item)
+
+    health_targets = sorted({u for u in [_host_health_url(x.get("provider_url", "")) for x in mapped] if u})
+    health_checks = [_http_health_check(u) for u in health_targets]
+    unhealthy = [x for x in health_checks if not x.get("ok")]
+
+    expected_clauses = len(clauses)
+    mapped_count = len(mapped)
+    result = {
+        "expected_clauses": expected_clauses,
+        "mapped_registry_entries": mapped_count,
+        "missing_registry": missing_registry,
+        "registry_mismatch": registry_mismatch,
+        "orphan_invocations": orphan_invocations,
+        "invocation_coverage": invocation_coverage,
+        "dormant_clauses": dormant,
+        "service_health_checks": health_checks,
+        "unhealthy_services": unhealthy,
+    }
+    structural_ok = not (missing_registry or registry_mismatch or orphan_invocations)
+    has_invocations = len(invocation_rows) > 0
+    has_dormant = len(dormant) > 0
+    has_unhealthy = len(unhealthy) > 0
+    if not structural_ok:
+        status = "fail"
+    elif has_unhealthy or (has_invocations and has_dormant) or not has_invocations:
+        status = "warn"
+    else:
+        status = "pass"
+
+    result["summary"] = {
+        "ok": status == "pass",
+        "status": status,
+        "structural_ok": structural_ok,
+        "has_invocations": has_invocations,
+        "dormant_clause_count": len(dormant),
+        "unhealthy_service_count": len(unhealthy),
+    }
+    return result
+
+
 def _markdown_from_report(report: dict[str, Any]) -> str:
     lines: list[str] = []
     lines.append(f"# Project Report: {report['project_id']}")
@@ -116,6 +337,31 @@ def _markdown_from_report(report: dict[str, Any]) -> str:
         for owner, cnt in report["port_leases_summary"]["owners"].items():
             lines.append(f"- {owner}: {cnt}")
     lines.append("")
+    lines.append("## Protocol Execution Validation")
+    val = report.get("protocol_execution_validation", {}) or {}
+    summary = val.get("summary", {}) or {}
+    lines.append(f"- Validation Status: {summary.get('status', 'unknown')}")
+    lines.append(f"- Structural OK: {summary.get('structural_ok', False)}")
+    lines.append(f"- Clauses mapped: {val.get('mapped_registry_entries', 0)}/{val.get('expected_clauses', 0)}")
+    lines.append(f"- Dormant clauses: {summary.get('dormant_clause_count', 0)}")
+    lines.append(f"- Unhealthy services: {summary.get('unhealthy_service_count', 0)}")
+    if val.get("missing_registry"):
+        lines.append("- Missing registry mappings:")
+        for item in val.get("missing_registry", [])[:10]:
+            lines.append(f"  - {item.get('function_id')}: {item.get('provider')}")
+    if val.get("registry_mismatch"):
+        lines.append("- Registry/provider mismatches:")
+        for item in val.get("registry_mismatch", [])[:10]:
+            lines.append(
+                "  - "
+                + f"{item.get('function_id')}: contract={item.get('contract_provider')} "
+                + f"registry={item.get('registry_provider')}"
+            )
+    if val.get("orphan_invocations"):
+        lines.append("- Orphan invocations (name not in registry):")
+        for item in val.get("orphan_invocations", [])[:10]:
+            lines.append(f"  - {item.get('name')} [{item.get('status')}]")
+    lines.append("")
     lines.append("## Mnemosyne Archive Snapshot")
     mnemo = report["mnemosyne_summary"]
     lines.append(f"- human: {mnemo.get('human', 0)}")
@@ -131,6 +377,12 @@ def _markdown_from_report(report: dict[str, Any]) -> str:
         lines.append("- Check: verify active port leases still correspond to running services.")
     if report["invocation_count"] > 0 and not report["top_callers"]:
         lines.append("- Check: caller_id missing in invocation rows.")
+    if val.get("missing_registry"):
+        lines.append("- Risk: some contract clauses are not mapped to registry protocols.")
+    if val.get("orphan_invocations"):
+        lines.append("- Risk: invocation names exist that are absent from current registry.")
+    if summary.get("unhealthy_service_count", 0) > 0:
+        lines.append("- Risk: one or more protocol provider services failed /health checks.")
     if len(lines) > 0 and lines[-1] == "## Risks & Suggested Next Checks":
         lines.append("- No immediate risks detected from available project data.")
     return "\n".join(lines) + "\n"
@@ -160,6 +412,11 @@ def build_project_report(project_id: str, write_mirror: bool = True) -> dict[str
             "owners": owners,
         },
         "mnemosyne_summary": _mnemosyne_summary(project_id),
+        "protocol_execution_validation": _build_protocol_execution_validation(
+            contract_rows=contract_rows,
+            protocol_rows=protocol_rows,
+            invocation_rows=invocation_rows,
+        ),
         "output": {},
     }
 
