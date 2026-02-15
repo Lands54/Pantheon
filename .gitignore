@@ -12,9 +12,11 @@ reports/
 experiments/
 projects/test_*/
 projects/unit_*/
-projects/animal_world_hermes/
-projects/animal_world_hermes_test/
-projects/prompt_override_test/
+# projects: keep templates in git, ignore runtime worlds
+projects/*
+!projects/.gitkeep
+!projects/templates/
+!projects/templates/**
 projects/**/debug/
 projects/**/buffers/*.jsonl
 projects/**/buffers/*_inbox_guard.json
