@@ -12,46 +12,40 @@
 ## 2. Hermes 提供的能力
 
 1. 协议注册：把一个能力声明为可调用协议。
-2. 协议调用：`sync` 或 `async` 调用协议。
-3. 路由调用：按 `target_agent + function_id` 直接路由。
+2. 协议调用：`sync` 或 `async` 调用协议（通过代码/SDK）。
+3. 路由调用：按 `target_agent + function_id` 直接路由（通过代码/SDK）。
 4. 契约管理：提交契约 JSON、承诺加入、解析每个承诺人的职责。
 5. 运行可观测：每次注册/调用都会进入 Hermes 日志和事件流。
 6. 端口租约：启动本机 HTTP 服务前先向 Hermes 申请端口，避免冲突。
 
-## 3. 常用工具（Agent 内）
+## 3. 常用工具（Agent 内，治理面）
 
 1. `register_protocol`
 - 作用：注册一个协议定义到 Hermes。
 
-2. `call_protocol`
-- 作用：按协议名调用。
-
-3. `route_protocol`
-- 作用：按目标神和函数名路由调用（`Hermes(target_agent,function,payload)`）。
-
-4. `check_protocol_job`
-- 作用：查询异步调用状态。
-
-5. `list_protocols`
+2. `list_protocols`
 - 作用：列出当前项目所有协议。
 
-6. `register_contract`
+3. `register_contract`
 - 作用：提交结构化契约 JSON。
 
-7. `commit_contract`
+4. `commit_contract`
 - 作用：当前 Agent 承诺加入契约版本。
 
-8. `resolve_contract`
+5. `resolve_contract`
 - 作用：解析契约后每个承诺人应实现的职责。
 
-9. `reserve_port`
+6. `reserve_port`
 - 作用：申请本机端口租约（Project 级）。
 
-10. `release_port`
+7. `release_port`
 - 作用：释放端口租约。
 
-11. `list_port_leases`
+8. `list_port_leases`
 - 作用：查看当前项目已租约端口。
+
+说明：
+- 协议“执行调用”不再通过 Agent tool，统一由业务代码通过 `HermesClient` 完成。
 
 ## 4. 标准工作流
 
@@ -64,8 +58,8 @@
 ### 4.2 调用协议
 
 1. 先 `list_protocols` 确认名称和版本。
-2. `call_protocol(mode="sync")` 获取直接结果。
-3. 长任务用 `mode="async"`，然后 `check_protocol_job` 轮询状态。
+2. 在业务代码里使用 `HermesClient.invoke(mode="sync")` 获取直接结果。
+3. 长任务用 `mode="async"`，然后 `HermesClient.wait_job` 等待完成。
 
 ### 4.3 路由调用（神间语义）
 
@@ -74,7 +68,7 @@
 - `function_id`: 函数标识（如 `check_fire_speed`）
 
 2. 调用时使用：
-- `route_protocol(target_agent="fire_god", function_id="check_fire_speed", payload_json="{...}")`
+- `HermesClient.route(target_agent="fire_god", function_id="check_fire_speed", payload={...})`
 
 Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
 

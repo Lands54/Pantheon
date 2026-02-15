@@ -24,9 +24,9 @@ from .filesystem import (
 from .execution import run_command
 from .hermes import (
     register_protocol,
-    call_protocol,
-    route_protocol,
-    check_protocol_job,
+    call_protocol,  # exported for direct import, not in default agent toolset
+    route_protocol,  # exported for direct import, not in default agent toolset
+    check_protocol_job,  # exported for direct import, not in default agent toolset
     list_protocols,
     register_contract,
     commit_contract,
@@ -54,9 +54,6 @@ GODS_TOOLS = [
     multi_replace,
     list_dir,
     register_protocol,
-    call_protocol,
-    route_protocol,
-    check_protocol_job,
     list_protocols,
     register_contract,
     commit_contract,
