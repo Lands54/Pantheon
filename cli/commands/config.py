@@ -32,6 +32,10 @@ def cmd_config(args):
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
             print(f"   Interval: {proj.get('simulation_interval_min', 10)}-{proj.get('simulation_interval_max', 40)}s")
             print(f"   Autonomous Batch Size: {proj.get('autonomous_batch_size', 4)}")
+            print(f"   Queue Idle Heartbeat: {proj.get('queue_idle_heartbeat_sec', 60)}s")
+            print(f"   Event Inject Budget: {proj.get('pulse_event_inject_budget', 3)}")
+            print(f"   Interrupt Mode: {proj.get('pulse_interrupt_mode', 'after_action')}")
+            print(f"   Inbox Event Enabled: {proj.get('inbox_event_enabled', True)}")
             
             print(f"\n📊 Memory:")
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
@@ -115,9 +119,37 @@ def cmd_config(args):
             
             # Parse key path (e.g., "simulation.enabled" or "agent.genesis.model")
             parts = args.key.split('.')
-            
+            direct_key = args.key.strip()
+
+            if direct_key in {
+                "queue_idle_heartbeat_sec",
+                "pulse_event_inject_budget",
+                "pulse_interrupt_mode",
+                "inbox_event_enabled",
+                "pulse_priority_weights",
+            }:
+                if direct_key in {"queue_idle_heartbeat_sec", "pulse_event_inject_budget"}:
+                    data["projects"][pid][direct_key] = int(args.value)
+                elif direct_key == "inbox_event_enabled":
+                    data["projects"][pid][direct_key] = args.value.lower() == "true"
+                elif direct_key == "pulse_interrupt_mode":
+                    if args.value != "after_action":
+                        print("❌ pulse_interrupt_mode currently only supports: after_action")
+                        return
+                    data["projects"][pid][direct_key] = args.value
+                elif direct_key == "pulse_priority_weights":
+                    try:
+                        payload = json.loads(args.value)
+                        if not isinstance(payload, dict):
+                            print("❌ pulse_priority_weights must be a JSON object")
+                            return
+                        data["projects"][pid][direct_key] = payload
+                    except Exception as e:
+                        print(f"❌ invalid JSON for pulse_priority_weights: {e}")
+                        return
+
             # Match key paths
-            if parts[0] == "simulation" and len(parts) >= 2:
+            elif parts[0] == "simulation" and len(parts) >= 2:
                 if parts[1] == "enabled":
                     data["projects"][pid]["simulation_enabled"] = args.value.lower() == "true"
                 elif parts[1] == "min":
@@ -191,6 +223,31 @@ def cmd_config(args):
                 else:
                     print(f"❌ Unknown phase key: {parts[1]}")
                     return
+            elif parts[0] == "pulse" and len(parts) >= 2:
+                if parts[1] == "idle_heartbeat":
+                    data["projects"][pid]["queue_idle_heartbeat_sec"] = int(args.value)
+                elif parts[1] == "inject_budget":
+                    data["projects"][pid]["pulse_event_inject_budget"] = int(args.value)
+                elif parts[1] == "interrupt_mode":
+                    if args.value != "after_action":
+                        print("❌ pulse.interrupt_mode currently only supports: after_action")
+                        return
+                    data["projects"][pid]["pulse_interrupt_mode"] = args.value
+                elif parts[1] == "inbox_event":
+                    data["projects"][pid]["inbox_event_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "weights":
+                    try:
+                        payload = json.loads(args.value)
+                    except Exception as e:
+                        print(f"❌ invalid JSON for pulse.weights: {e}")
+                        return
+                    if not isinstance(payload, dict):
+                        print("❌ pulse.weights must be a JSON object")
+                        return
+                    data["projects"][pid]["pulse_priority_weights"] = payload
+                else:
+                    print(f"❌ Unknown pulse key: {parts[1]}")
+                    return
             elif parts[0] == "debug" and len(parts) >= 2:
                 if parts[1] == "trace":
                     data["projects"][pid]["debug_trace_enabled"] = args.value.lower() == "true"
@@ -247,6 +304,41 @@ def cmd_config(args):
                     data["projects"][pid]["agent_settings"][agent_id]["phase_strategy"] = args.value
                 elif setting == "phase_enabled":
                     data["projects"][pid]["agent_settings"][agent_id]["phase_mode_enabled"] = args.value.lower() == "true"
+                elif setting == "disabled_tools":
+                    raw = str(args.value or "").strip()
+                    if raw.lower() in {"", "none", "null", "[]"}:
+                        tools = []
+                    else:
+                        tools = [x.strip() for x in raw.split(",") if x.strip()]
+                    # keep insertion order while removing duplicates
+                    seen = set()
+                    normalized = []
+                    for t in tools:
+                        if t in seen:
+                            continue
+                        seen.add(t)
+                        normalized.append(t)
+                    data["projects"][pid]["agent_settings"][agent_id]["disabled_tools"] = normalized
+                elif setting == "disable_tool":
+                    tool_name = str(args.value or "").strip()
+                    if not tool_name:
+                        print("❌ agent.<id>.disable_tool requires a tool name")
+                        return
+                    current = data["projects"][pid]["agent_settings"][agent_id].get("disabled_tools", [])
+                    if not isinstance(current, list):
+                        current = []
+                    if tool_name not in current:
+                        current.append(tool_name)
+                    data["projects"][pid]["agent_settings"][agent_id]["disabled_tools"] = current
+                elif setting == "enable_tool":
+                    tool_name = str(args.value or "").strip()
+                    if not tool_name:
+                        print("❌ agent.<id>.enable_tool requires a tool name")
+                        return
+                    current = data["projects"][pid]["agent_settings"][agent_id].get("disabled_tools", [])
+                    if not isinstance(current, list):
+                        current = []
+                    data["projects"][pid]["agent_settings"][agent_id]["disabled_tools"] = [t for t in current if t != tool_name]
                 else:
                     print(f"❌ Unknown agent setting: {setting}")
                     return
@@ -279,11 +371,21 @@ def cmd_config(args):
                 print("  simulation.max (seconds)")
                 print("  simulation.parallel (true/false) [deprecated/no-op]")
                 print("  simulation.batch (number)")
+                print("  queue_idle_heartbeat_sec (seconds)")
+                print("  pulse_event_inject_budget (number)")
+                print("  pulse_interrupt_mode (after_action)")
+                print("  inbox_event_enabled (true/false)")
+                print("  pulse_priority_weights ({\"inbox_event\":100,...})")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
                 print("  memory.compact_trigger (chars)")
                 print("  memory.compact_keep (chars)")
                 print("  tools.loop_max (number)")
+                print("  pulse.idle_heartbeat (seconds)")
+                print("  pulse.inject_budget (number)")
+                print("  pulse.interrupt_mode (after_action)")
+                print("  pulse.inbox_event (true/false)")
+                print("  pulse.weights ({\"inbox_event\":100,...})")
                 print("  phase.enabled (true/false)")
                 print("  phase.strategy (strict_triad|iterative_action|freeform)")
                 print("  phase.interaction_max (number)")
@@ -307,6 +409,9 @@ def cmd_config(args):
                 print("  agent.<agent_id>.model (model name)")
                 print("  agent.<agent_id>.phase_strategy (strict_triad|iterative_action|freeform)")
                 print("  agent.<agent_id>.phase_enabled (true/false)")
+                print("  agent.<agent_id>.disabled_tools (comma-separated, e.g. check_inbox,send_message)")
+                print("  agent.<agent_id>.disable_tool (single tool name, append)")
+                print("  agent.<agent_id>.enable_tool (single tool name, remove)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return
             

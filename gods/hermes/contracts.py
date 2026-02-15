@@ -35,6 +35,31 @@ class HermesContracts:
             parts = ["contract", parts[0] if parts else "x"]
         return ".".join(parts)
 
+    def _required_committers(self, row: dict[str, Any]) -> list[str]:
+        required = {str(row.get("submitter", "")).strip()}
+        required.update(str(x).strip() for x in row.get("proposed_committers", []) if str(x).strip())
+        return sorted(x for x in required if x)
+
+    def _commit_snapshot(self, row: dict[str, Any]) -> dict[str, Any]:
+        required = self._required_committers(row)
+        committed = sorted(str(x).strip() for x in row.get("committers", []) if str(x).strip())
+        committed_set = set(committed)
+        missing = [x for x in required if x not in committed_set]
+        return {
+            "required_committers": required,
+            "committed_committers": committed,
+            "missing_committers": missing,
+            "required_count": len(required),
+            "committed_count": len(committed),
+            "missing_count": len(missing),
+            "is_fully_committed": len(missing) == 0,
+        }
+
+    def _attach_commit_snapshot(self, row: dict[str, Any]) -> dict[str, Any]:
+        out = copy.deepcopy(row)
+        out.update(self._commit_snapshot(out))
+        return out
+
     def _extract_io(self, clause: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         io = clause.get("io", {}) if isinstance(clause.get("io"), dict) else {}
         req = clause.get("request_schema") or io.get("request_schema") or {"type": "object"}
@@ -259,7 +284,7 @@ class HermesContracts:
             },
         )
         payload["registered_protocols"] = registered_protocols
-        return payload
+        return self._attach_commit_snapshot(payload)
 
     def get(self, project_id: str, title: str, version: str) -> dict[str, Any]:
         """
@@ -268,7 +293,7 @@ class HermesContracts:
         data = store.load_contracts(project_id)
         for row in data.get("contracts", []):
             if row.get("title") == title and row.get("version") == version:
-                return row
+                return self._attach_commit_snapshot(row)
         raise HermesError(HERMES_BAD_REQUEST, f"contract not found: {title}@{version}")
 
     def list(self, project_id: str, include_disabled: bool = False) -> list[dict]:
@@ -276,6 +301,7 @@ class HermesContracts:
         Lists all contracts available in a project.
         """
         rows = store.load_contracts(project_id).get("contracts", [])
+        rows = [self._attach_commit_snapshot(r) for r in rows]
         if include_disabled:
             return rows
         return [r for r in rows if str(r.get("status", "active")) == "active"]
@@ -300,10 +326,20 @@ class HermesContracts:
             idx, row = found
             if row.get("status", "active") != "active":
                 raise HermesError(HERMES_BAD_REQUEST, "contract is disabled; commit is not allowed")
-            committers = set(row.get("committers", []))
+            required = set(self._required_committers(row))
+            if agent_id not in required:
+                raise HermesError(
+                    HERMES_BAD_REQUEST,
+                    f"agent '{agent_id}' is not allowed to commit this contract",
+                )
+            before = self._commit_snapshot(row)
+            committers = set(str(x).strip() for x in row.get("committers", []) if str(x).strip())
             committers.add(agent_id)
             row["committers"] = sorted(committers)
             row["updated_at"] = time.time()
+            after = self._commit_snapshot(row)
+            if after["is_fully_committed"] and not before["is_fully_committed"]:
+                row["activated_at"] = time.time()
             contracts[idx] = row
             data["contracts"] = contracts
             store.save_contracts(project_id, data)
@@ -322,10 +358,16 @@ class HermesContracts:
         hermes_events.publish(
             "contract_committed",
             project_id,
-            {"title": title, "version": version, "agent_id": agent_id, "registered_protocols": registered_protocols},
+            {
+                "title": title,
+                "version": version,
+                "agent_id": agent_id,
+                "registered_protocols": registered_protocols,
+                "commit_snapshot": self._commit_snapshot(row),
+            },
         )
         row["registered_protocols"] = registered_protocols
-        return row
+        return self._attach_commit_snapshot(row)
 
     def disable(self, project_id: str, title: str, version: str, agent_id: str, reason: str = "") -> dict[str, Any]:
         """
@@ -391,36 +433,4 @@ class HermesContracts:
                 "status": row.get("status", "active"),
             },
         )
-        return row
-
-    def resolve(self, project_id: str, title: str, version: str) -> dict[str, Any]:
-        """
-        Resolves the effective obligations for all committers of a contract.
-        """
-        row = copy.deepcopy(self.get(project_id, title, version))
-        default_ob = row.get("default_obligations", [])
-        obligations = row.get("obligations", {})
-        committers = row.get("committers", [])
-
-        resolved: dict[str, list[dict]] = {}
-        for agent in committers:
-            own = obligations.get(agent)
-            if isinstance(own, list) and own:
-                resolved[agent] = own
-            else:
-                resolved[agent] = default_ob
-
-        out = {
-            "title": row.get("title"),
-            "version": row.get("version"),
-            "description": row.get("description", ""),
-            "submitter": row.get("submitter"),
-            "status": row.get("status"),
-            "committers": committers,
-            "resolved_obligations": resolved,
-            # Contract-first alias: obligation == executable clause.
-            "resolved_clauses": resolved,
-        }
-        if row.get("status") == "disabled":
-            out["warning"] = "contract is disabled"
-        return out
+        return self._attach_commit_snapshot(row)

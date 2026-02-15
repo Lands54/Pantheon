@@ -29,7 +29,17 @@ Gods Platform 采用三层结构：
 - `gods/tools/hermes.py`：协议注册、协议调用、异步任务查询、协议列表。
 - `gods/tools/mnemosyne.py`：Agent 档案持久化读写（agent vault）。
 
-### 2.3 Hermes 协议总线（`gods/hermes/`）
+### 2.3 Inbox + Pulse 事件模块（`gods/inbox` + `gods/pulse`）
+
+- `gods/inbox/models.py`：Inbox 事件与 4 态（`pending/delivered/deferred/handled`）。
+- `gods/inbox/store.py`：`projects/{project_id}/runtime/inbox_events.jsonl` 读写与状态迁移（文件锁）。
+- `gods/inbox/service.py`：消息入队、批量注入、handled 回执。
+- `gods/pulse/models.py`：Pulse 事件（`inbox_event/timer/manual/system`）与状态。
+- `gods/pulse/queue.py`：`projects/{project_id}/runtime/pulse_events.jsonl` 队列、优先级出队、去重。
+- `gods/pulse/policy.py`：空队列保底心跳与注入预算策略（配置驱动）。
+- `gods/pulse/scheduler_hooks.py`：调度前注入与 `after_action` 软打断注入。
+
+### 2.4 Hermes 协议总线（`gods/hermes/`）
 
 - `models.py`：协议/调用/任务模型定义。
 - `registry.py`：项目级协议注册与检索（精确 `name + version`）。
@@ -41,11 +51,14 @@ Gods Platform 采用三层结构：
 - `limits.py`：协议级并发与速率限制。
 - `contracts.py`：结构化契约注册、承诺、职责解析（default + agent-specific）。
 
-### 2.4 配置与持久化
+### 2.5 配置与持久化
 
 - `gods/config.py`：`config.json` 的加载、迁移、保存。
 - `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
 - `projects/{project_id}/agents/{agent_id}/memory.md`：可读记忆日志。
+- `projects/{project_id}/runtime/inbox_events.jsonl`：Inbox 事件存储。
+- `projects/{project_id}/runtime/pulse_events.jsonl`：Pulse 队列存储。
+- `projects/{project_id}/runtime/locks/*.lock`：Inbox/Pulse 文件锁。
 - `projects/{project_id}/protocols/registry.json`：Hermes 协议注册表。
 - `projects/{project_id}/protocols/invocations.jsonl`：Hermes 调用审计日志。
 - `projects/{project_id}/protocols/jobs/*.json`：Hermes 异步任务状态。
@@ -59,6 +72,10 @@ Gods Platform 采用三层结构：
 - `api/routes/config.py`：配置读取/保存（密钥脱敏输出）。
 - `api/routes/projects.py`：项目增删。
 - `api/routes/projects.py`：项目增删 + 项目报告生成/查询（`/projects/{project_id}/report/*`）。
+- `api/routes/projects.py`：Pulse/Inbox 调试接口：
+  - `GET /projects/{project_id}/pulse/queue`
+  - `POST /projects/{project_id}/pulse/enqueue`
+  - `GET /projects/{project_id}/inbox/events`
 - `api/routes/agents.py`：Agent 增删。
 - `api/routes/hermes.py`：协议注册、调用、任务查询、审计查询。
   - 额外支持：`/hermes/route`（按 `target_agent + function_id` 路由调用）
@@ -67,7 +84,7 @@ Gods Platform 采用三层结构：
 - `api/routes/mnemosyne.py`：Mnemosyne 档案写入/查询/读取。
 - `api/routes/communication.py`：
   - `/broadcast`：SSE 输出多 Agent 讨论流。
-  - `/confess`：向指定 Agent 私聊并可触发即时 pulse（`silent=false`）。
+  - `/confess`：向指定 Agent 私聊并写入 Inbox Event；默认同时入队 `inbox_event` pulse（`silent=false`）。
   - `/prayers/check`：读取 Agent 发给人类的消息。
 
 ## 3.5 服务层（`api/services/`）
@@ -87,6 +104,7 @@ Gods Platform 采用三层结构：
   - Agent 管理：`list/activate/deactivate/agent view|edit`
   - 通信：`broadcast/confess/prayers/check`
   - 配置：`config show/set/models`
+  - 事件调试：`pulse queue/push`、`inbox events`
 
 ## 5. 多项目隔离模型
 
@@ -97,9 +115,11 @@ projects/{project_id}/
 ├── agents/{agent_id}/
 │   ├── agent.md
 │   └── memory.md
-├── buffers/
-│   ├── {agent_id}.jsonl
-│   ├── {agent_id}_read.jsonl
+├── runtime/
+│   ├── inbox_events.jsonl
+│   ├── pulse_events.jsonl
+│   └── locks/*.lock
+├── buffers/ (兼容层，逐步淡出)
 │   └── human.jsonl
 ├── protocols/
 │   ├── registry.json
@@ -110,8 +130,8 @@ projects/{project_id}/
 
 ## 6. 数据流（关键路径）
 
-1. 人类发起 `broadcast` 或 `confess`。  
-2. API 构造 `GodsState`，调用 LangGraph 或直接触发 Agent pulse。  
-3. Agent 先 `check_inbox`，再结合 `agent.md` + `memory.md` 进行推理。  
-4. 工具调用结果写入消息流与记忆文件。  
-5. `broadcast` 场景通过 SSE 实时返回客户端。  
+1. 人类/Agent 发送私信 -> 写入 `inbox_events.jsonl`（`pending`）。  
+2. 同步写入 `pulse_events.jsonl`（`inbox_event`，高优先级）。  
+3. 调度器优先消费 Pulse 队列；空队列时按 `queue_idle_heartbeat_sec` 注入 `timer` pulse。  
+4. pulse 开始前注入 Inbox 事件；工具返回后执行 `after_action` 软打断探针。  
+5. pulse 完成后将已注入消息标记为 `handled`；Agent 记忆持续写入 `memory.md`。  

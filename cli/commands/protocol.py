@@ -180,14 +180,6 @@ def cmd_protocol(args):
         )
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
-    elif args.subcommand == "contract-resolve":
-        res = requests.get(
-            f"{base_url}/hermes/contracts/resolved",
-            params={"project_id": pid, "title": args.title, "version": args.version},
-            timeout=20,
-        )
-        print(json.dumps(res.json(), ensure_ascii=False, indent=2))
-
     elif args.subcommand == "contract-list":
         res = requests.get(
             f"{base_url}/hermes/contracts/list",

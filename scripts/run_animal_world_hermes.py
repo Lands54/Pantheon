@@ -167,27 +167,74 @@ def run_demo(project_id: str = "animal_world_hermes", steps: int = 40, seed: int
         reg("tiger.hunt", "tiger", "hunt", "tiger")
 
         contract = {
-            "name": "ecosystem.core",
+            "title": "ecosystem.core",
             "version": "1.0.0",
+            "description": "Core ecosystem contract for ground/grass/sheep/tiger routing.",
             "submitter": "ground",
-            "committers": ["ground"],
+            "committers": ["ground", "grass", "sheep", "tiger"],
             "status": "active",
-            "default_obligations": [
-                {
-                    "id": "sync_state",
-                    "summary": "return state_patch based on current state",
-                    "io": {
-                        "request_schema": {"type": "object"},
-                        "response_schema": {"type": "object"},
-                    },
-                    "runtime": {"mode": "sync", "timeout_sec": 10},
-                }
-            ],
+            "default_obligations": [],
             "obligations": {
-                "ground": [{"id": "balance"}],
-                "grass": [{"id": "grow"}],
-                "sheep": [{"id": "graze"}],
-                "tiger": [{"id": "hunt"}],
+                "ground": [
+                    {
+                        "id": "balance",
+                        "provider": {
+                            "type": "http",
+                            "url": f"http://127.0.0.1:{ports['ground']}/fn/balance",
+                            "method": "POST",
+                        },
+                        "io": {
+                            "request_schema": {"type": "object"},
+                            "response_schema": {"type": "object"},
+                        },
+                        "runtime": {"mode": "sync", "timeout_sec": 10},
+                    }
+                ],
+                "grass": [
+                    {
+                        "id": "grow",
+                        "provider": {
+                            "type": "http",
+                            "url": f"http://127.0.0.1:{ports['grass']}/fn/grow",
+                            "method": "POST",
+                        },
+                        "io": {
+                            "request_schema": {"type": "object"},
+                            "response_schema": {"type": "object"},
+                        },
+                        "runtime": {"mode": "sync", "timeout_sec": 10},
+                    }
+                ],
+                "sheep": [
+                    {
+                        "id": "graze",
+                        "provider": {
+                            "type": "http",
+                            "url": f"http://127.0.0.1:{ports['sheep']}/fn/graze",
+                            "method": "POST",
+                        },
+                        "io": {
+                            "request_schema": {"type": "object"},
+                            "response_schema": {"type": "object"},
+                        },
+                        "runtime": {"mode": "sync", "timeout_sec": 10},
+                    }
+                ],
+                "tiger": [
+                    {
+                        "id": "hunt",
+                        "provider": {
+                            "type": "http",
+                            "url": f"http://127.0.0.1:{ports['tiger']}/fn/hunt",
+                            "method": "POST",
+                        },
+                        "io": {
+                            "request_schema": {"type": "object"},
+                            "response_schema": {"type": "object"},
+                        },
+                        "runtime": {"mode": "sync", "timeout_sec": 10},
+                    }
+                ],
             },
         }
         hermes_service.contracts.register(project_id, contract)
@@ -224,7 +271,11 @@ def run_demo(project_id: str = "animal_world_hermes", steps: int = 40, seed: int
                 state[key] = round(max(0.0, float(state[key])), 4)
             history.append({"step": step, **state})
 
-        resolved = hermes_service.contracts.resolve(project_id, "ecosystem.core", "1.0.0")
+        listed = hermes_service.contracts.list(project_id, include_disabled=True)
+        contract_snapshot = next(
+            (x for x in listed if x.get("title") == "ecosystem.core" and x.get("version") == "1.0.0"),
+            {},
+        )
         invocations = hermes_service.list_invocations(project_id, limit=10000)
 
         out_dir = Path("reports") / "animal_world_hermes_run"
@@ -236,7 +287,7 @@ def run_demo(project_id: str = "animal_world_hermes", steps: int = 40, seed: int
             "final_state": state,
             "history_tail": history[-10:],
             "route_invocation_count": len(invocations),
-            "resolved_contract": resolved,
+            "contract_snapshot": contract_snapshot,
             "ports": ports,
         }
         out_file.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")

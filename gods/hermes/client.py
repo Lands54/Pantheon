@@ -142,18 +142,6 @@ class HermesClient:
         r.raise_for_status()
         return r.json()
 
-    def resolve_contract(self, project_id: str, title: str, version: str) -> dict[str, Any]:
-        """
-        Resolves effective obligations for a contract.
-        """
-        r = self._request(
-            "GET",
-            "/hermes/contracts/resolved",
-            params={"project_id": project_id, "title": title, "version": version},
-        )
-        r.raise_for_status()
-        return r.json()
-
     def list_contracts(self, project_id: str, include_disabled: bool = False) -> dict[str, Any]:
         """
         Lists contracts, optionally including disabled contracts.

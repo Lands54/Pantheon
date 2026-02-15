@@ -8,6 +8,8 @@ from pathlib import Path
 
 from langchain.tools import tool
 
+from gods.inbox import enqueue_message
+from gods.pulse import get_priority_weights, is_inbox_event_enabled
 from gods.tools.comm_common import format_comm_error
 
 
@@ -32,19 +34,17 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
                 project_id,
             )
 
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        buffer_dir = project_root / "projects" / project_id / "buffers"
-        buffer_dir.mkdir(parents=True, exist_ok=True)
-
-        target_buffer = buffer_dir / f"{to_id}.jsonl"
-        msg_data = {"timestamp": time.time(), "from": caller_id, "type": "private", "content": message}
-
-        with open(target_buffer, "a", encoding="utf-8") as f:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(json.dumps(msg_data, ensure_ascii=False) + "\n")
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        weights = get_priority_weights(project_id)
+        trigger = is_inbox_event_enabled(project_id)
+        enqueue_message(
+            project_id=project_id,
+            agent_id=to_id,
+            sender=caller_id,
+            content=message,
+            msg_type="private",
+            trigger_pulse=trigger,
+            pulse_priority=int(weights.get("inbox_event", 100)),
+        )
         return f"Revelation sent to {to_id}"
     except Exception as e:
         return format_comm_error(

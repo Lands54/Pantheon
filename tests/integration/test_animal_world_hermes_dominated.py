@@ -18,4 +18,4 @@ def test_animal_world_hermes_dominated_run():
     assert out_file.exists()
     data = json.loads(out_file.read_text(encoding="utf-8"))
     assert data["project_id"] == "animal_world_hermes_test"
-    assert "resolved_contract" in data
+    assert "contract_snapshot" in data

@@ -30,7 +30,6 @@ from .hermes import (
     list_protocols,  # deprecated compatibility tool, not in default agent toolset
     register_contract,
     commit_contract,
-    resolve_contract,
     list_contracts,
     disable_contract,
     reserve_port,
@@ -61,7 +60,6 @@ GODS_TOOLS = [
     list_dir,
     register_contract,
     commit_contract,
-    resolve_contract,
     list_contracts,
     disable_contract,
     reserve_port,
@@ -97,7 +95,6 @@ __all__ = [
     'list_protocols',
     'register_contract',
     'commit_contract',
-    'resolve_contract',
     'list_contracts',
     'disable_contract',
     'reserve_port',

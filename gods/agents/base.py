@@ -14,6 +14,7 @@ from gods.config import runtime_config
 from gods.agents.phase_runtime import AgentPhaseRuntime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
+from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
 from pathlib import Path
 
 
@@ -70,8 +71,11 @@ class GodAgent:
         Constructs a hint for the agent about its inbox accessibility.
         """
         if is_tool_disabled(self.project_id, self.agent_id, "check_inbox"):
-            return "Inbox access is disabled by policy. Do NOT call check_inbox. Continue local work."
-        return "Inbox is not pre-fetched. Use check_inbox tool when needed."
+            return (
+                "Inbox events are pre-injected by scheduler. "
+                "check_inbox is disabled by policy (debug fallback only)."
+            )
+        return "Inbox events are pre-injected by scheduler. Use check_inbox only for audit fallback."
 
     def _build_behavior_directives(self) -> str:
         """
@@ -161,6 +165,9 @@ class GodAgent:
                         state["abstained"].append(self.agent_id)
                     state["next_step"] = "abstained"
                     return state
+                injected = inject_inbox_after_action_if_any(state, self.project_id, self.agent_id)
+                if injected > 0:
+                    self._append_to_memory(f"[EVENT_INJECTED] {injected} inbox event(s) appended after action.")
 
             # refresh local memory snapshot for next loop iteration
             local_memory = self._load_local_memory()
@@ -331,7 +338,17 @@ class GodAgent:
             for msg in recent_messages
         ])
         
-        tools_desc = "\n".join([f"- [[{t.name}({', '.join(t.args)})]]: {t.description}" for t in self.get_tools()])
+        disabled = set()
+        proj = runtime_config.projects.get(self.project_id)
+        if proj:
+            settings = proj.agent_settings.get(self.agent_id)
+            if settings:
+                disabled = set(settings.disabled_tools or [])
+        items = []
+        for t in self.get_tools():
+            mark = " (DISABLED: event-inbox policy)" if t.name == "check_inbox" and t.name in disabled else ""
+            items.append(f"- [[{t.name}({', '.join(t.args)})]]: {t.description}{mark}")
+        tools_desc = "\n".join(items)
         
         return prompt_registry.render(
             "agent_context",

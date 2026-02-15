@@ -19,6 +19,8 @@ from cli.commands.config import cmd_config
 from cli.commands.check import cmd_check
 from cli.commands.protocol import cmd_protocol
 from cli.commands.mnemosyne import cmd_mnemosyne
+from cli.commands.pulse import cmd_pulse
+from cli.commands.inbox import cmd_inbox
 from cli.commands.project import cmd_project as cmd_project_v2
 from cli.commands.agent import cmd_agent as cmd_agent_v2
 from cli.commands.communication import (
@@ -191,7 +193,13 @@ def main():
     config_sub = p_config.add_subparsers(dest="subcommand")
     config_sub.add_parser("show", help="Show current configuration")
     p_config_set = config_sub.add_parser("set", help="Set configuration value")
-    p_config_set.add_argument("key", help="Config key (e.g., simulation.enabled, agent.genesis.model)")
+    p_config_set.add_argument(
+        "key",
+        help=(
+            "Config key (e.g., simulation.enabled, agent.genesis.model, "
+            "agent.genesis.disabled_tools, agent.genesis.disable_tool, agent.genesis.enable_tool)"
+        ),
+    )
     p_config_set.add_argument("value", help="Config value")
     config_sub.add_parser("models", help="List available models")
 
@@ -257,9 +265,6 @@ def main():
     p_contract_commit.add_argument("--title", required=True)
     p_contract_commit.add_argument("--version", required=True)
     p_contract_commit.add_argument("--agent", required=True)
-    p_contract_resolve = proto_sub.add_parser("contract-resolve", help="Resolve contract obligations")
-    p_contract_resolve.add_argument("--title", required=True)
-    p_contract_resolve.add_argument("--version", required=True)
     p_contract_list = proto_sub.add_parser("contract-list", help="List contracts")
     p_contract_list.add_argument("--include-disabled", action="store_true")
     p_contract_disable = proto_sub.add_parser("contract-disable", help="Exit commitment; auto-disable when no committers remain")
@@ -308,6 +313,25 @@ def main():
     p_mn_read = mn_sub.add_parser("read", help="Read one archive entry")
     p_mn_read.add_argument("entry_id")
     p_mn_read.add_argument("--vault", choices=["agent", "human", "system"], default="human")
+
+    # pulse queue operations
+    p_pulse = subparsers.add_parser("pulse", help="Pulse queue operations")
+    pulse_sub = p_pulse.add_subparsers(dest="subcommand")
+    p_pulse_queue = pulse_sub.add_parser("queue", help="Show pulse queue events")
+    p_pulse_queue.add_argument("--agent", default="")
+    p_pulse_queue.add_argument("--status", default="queued")
+    p_pulse_queue.add_argument("--limit", type=int, default=50)
+    p_pulse_push = pulse_sub.add_parser("push", help="Push manual/system pulse event")
+    p_pulse_push.add_argument("agent")
+    p_pulse_push.add_argument("--type", default="manual", choices=["manual", "system", "timer", "inbox_event"])
+
+    # inbox event operations
+    p_inbox = subparsers.add_parser("inbox", help="Inbox event operations")
+    inbox_sub = p_inbox.add_subparsers(dest="subcommand")
+    p_inbox_events = inbox_sub.add_parser("events", help="Show inbox event records")
+    p_inbox_events.add_argument("--agent", default="")
+    p_inbox_events.add_argument("--state", default="")
+    p_inbox_events.add_argument("--limit", type=int, default=50)
 
     # activate / deactivate
     subparsers.add_parser("activate").add_argument("id")
@@ -364,6 +388,12 @@ def main():
     if args.command == "mnemosyne" and not args.subcommand:
         p_mn.print_help()
         sys.exit(0)
+    if args.command == "pulse" and not args.subcommand:
+        p_pulse.print_help()
+        sys.exit(0)
+    if args.command == "inbox" and not args.subcommand:
+        p_inbox.print_help()
+        sys.exit(0)
     
     if args.command == "init": cmd_init(args)
     elif args.command == "list": cmd_list(args)
@@ -372,6 +402,8 @@ def main():
     elif args.command == "project": cmd_project(args)
     elif args.command == "protocol": cmd_protocol(args)
     elif args.command == "mnemosyne": cmd_mnemosyne(args)
+    elif args.command == "pulse": cmd_pulse(args)
+    elif args.command == "inbox": cmd_inbox(args)
     elif args.command == "agent": cmd_agent(args)
     elif args.command == "broadcast": cmd_broadcast(args)
     elif args.command == "test": cmd_test(args)

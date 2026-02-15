@@ -22,7 +22,7 @@ def record_protocol(
     return format_comm_error(
         "Protocol Deprecated",
         "record_protocol is deprecated and no longer registers executable protocols.",
-        "Use register_contract/commit_contract/resolve_contract (contract-first flow).",
+        "Use register_contract/commit_contract/list_contracts (contract-first flow).",
         caller_id,
         project_id,
     )

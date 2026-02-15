@@ -38,8 +38,8 @@ class SimulationService:
 
         logger.info(f"✨ Event Pulse: {len(batch)} agents in {project_id}")
         tasks = [
-            asyncio.to_thread(pulse_agent_sync, project_id, agent_id, reason, False)
-            for agent_id, reason in batch
+            asyncio.to_thread(pulse_agent_sync, project_id, agent_id, reason, False, pulse_event_id)
+            for agent_id, reason, pulse_event_id in batch
         ]
         await asyncio.gather(*tasks, return_exceptions=True)
         return {"triggered": len(batch)}

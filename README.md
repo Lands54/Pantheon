@@ -70,15 +70,20 @@ An agent is an autonomous entity with:
 - **Directives**: High-level goals (e.g., "Designing a library system" or "Surviving as a Sheep").
 
 ### 3. The Protocol (`Negotiation`)
-Agents use tools like `record_protocol` to formalize their interactions.
-> *Example*: In the `animal_world_emergent` simulation, the **Sheep** and **Tiger** agents autonomously negotiated a `hunting_protocol`, agreeing on "detection range" and "energy cost" parameters without human hardcoding.
+Agents negotiate and register executable contracts/protocol clauses through Hermes.
+> *Example*: agents can register contract obligations, commit responsibility, and route runtime calls via Hermes.
 
 ### 4. The Pulse (`Runtime`)
 Pantheon uses a "Pulse" to wake up agents. A Pulse is a single execution cycle where an agent:
-1. **Perceives** its inbox and file changes.
+1. **Perceives** injected event inbox and file changes.
 2. **Reasons** about its next step.
 3. **Acts** (calls tools).
 4. **Sleeps** until the next Pulse.
+
+Event behavior:
+- Inbox delivery is event-driven (`inbox_events.jsonl` + `pulse_events.jsonl`).
+- Empty queue gets a configurable idle heartbeat (`queue_idle_heartbeat_sec`, default `60`).
+- `check_inbox` is retained as debug/audit fallback and is disabled by default.
 
 ---
 
@@ -92,9 +97,11 @@ The `temple.sh` script is your divine scepter for controlling the simulation.
 |---------|-------------|
 | `./temple.sh project list` | Show all available worlds. |
 | `./temple.sh project switch <name>` | Set the active world context. |
-| `./temple.sh agent list` | List all living agents in the current world. |
-| `./temple.sh confess --to <agent> "msg"` | Send a divine instruction (God mode). |
-| `./temple.sh check inbox` | Read messages sent to you by agents. |
+| `./temple.sh list` | List active/latent agents in current world. |
+| `./temple.sh confess <agent> "msg"` | Send a private instruction to an agent. |
+| `./temple.sh pulse queue -p <project>` | Inspect pulse event queue. |
+| `./temple.sh pulse push <agent> --type manual -p <project>` | Manually enqueue one pulse event. |
+| `./temple.sh inbox events --agent <agent> -p <project>` | Inspect inbox event records. |
 
 ### Runtime Strategies
 
@@ -107,6 +114,11 @@ You can configure how agents think during a Pulse:
 ```bash
 # Set strategy for a project
 ./temple.sh --project demo_world config set phase.strategy iterative_action
+
+# Event queue controls
+./temple.sh --project demo_world config set queue_idle_heartbeat_sec 60
+./temple.sh --project demo_world config set pulse_event_inject_budget 3
+./temple.sh --project demo_world config set pulse_interrupt_mode after_action
 ```
 
 ### Hermes Protocol Bus (v0.1)
@@ -165,7 +177,7 @@ Example:
 # Contract lifecycle
 ./temple.sh -p demo_world protocol contract-register --file contract.json
 ./temple.sh -p demo_world protocol contract-commit --title "Ecosystem Contract" --version 1.0.0 --agent tiger
-./temple.sh -p demo_world protocol contract-resolve --title "Ecosystem Contract" --version 1.0.0
+./temple.sh -p demo_world protocol contract-list
 
 # Port lease management (avoid localhost port collisions)
 ./temple.sh -p demo_world protocol port-reserve --owner grass_api

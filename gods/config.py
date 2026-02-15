@@ -3,7 +3,7 @@ Gods Platform - Runtime Configuration (Persistent)
 """
 import os
 import json
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
 from pathlib import Path
 
@@ -14,7 +14,8 @@ class AgentModelConfig(BaseModel):
     Configuration for an agent's model settings.
     """
     model: str = "stepfun/step-3.5-flash:free"
-    disabled_tools: List[str] = []
+    # Event-driven inbox is default path; check_inbox is opt-in for debug/audit.
+    disabled_tools: List[str] = Field(default_factory=lambda: ["check_inbox"])
     # Optional agent-level phase runtime overrides (fallback to project defaults when None).
     phase_mode_enabled: Optional[bool] = None
     phase_strategy: Optional[str] = None
@@ -35,6 +36,18 @@ class ProjectConfig(BaseModel):
     autonomous_batch_size: int = 4
     simulation_interval_min: int = 10
     simulation_interval_max: int = 40
+    # Event queue idle heartbeat (seconds) when no queued pulse exists.
+    queue_idle_heartbeat_sec: int = 60
+    # Max inbox events injected in one pulse.
+    pulse_event_inject_budget: int = 3
+    # Supported: after_action
+    pulse_interrupt_mode: str = "after_action"
+    # Priority weights by pulse event type.
+    pulse_priority_weights: Dict[str, int] = Field(
+        default_factory=lambda: {"inbox_event": 100, "manual": 80, "system": 60, "timer": 10}
+    )
+    # Master switch for event-driven inbox delivery.
+    inbox_event_enabled: bool = True
     summarize_threshold: int = 12
     summarize_keep_count: int = 5
     # Memory compression controls (full-read mode)

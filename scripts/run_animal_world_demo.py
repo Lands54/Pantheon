@@ -206,7 +206,7 @@ def record_protocols():
                 "project_id": PROJECT_ID,
             }
         )
-        if "Protocol recorded" not in res:
+        if ("Protocol recorded" not in res) and ("Protocol Deprecated" not in res):
             raise RuntimeError(f"记录协议失败: {res}")
 
 

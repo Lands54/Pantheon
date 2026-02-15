@@ -14,7 +14,7 @@ def _switch_project(project_id: str):
     client.post("/config/save", json=cfg)
 
 
-def test_hermes_contract_resolve_and_route_http():
+def test_hermes_contract_commit_snapshot_and_route_http():
     project_id = "test_hermes_contract_route"
     old_project = runtime_config.current_project
     try:
@@ -26,7 +26,7 @@ def test_hermes_contract_resolve_and_route_http():
             "title": "Ecosystem Contract",
             "description": "Defines cross-agent ecosystem obligations and runtime clauses.",
             "submitter": "ground",
-            "committers": ["grass"],
+            "committers": ["grass", "tiger"],
             "status": "active",
             "default_obligations": [
                 {
@@ -66,31 +66,32 @@ def test_hermes_contract_resolve_and_route_http():
         reg = client.post("/hermes/contracts/register", json={"project_id": project_id, "contract": contract})
         assert reg.status_code == 200
         assert reg.json()["contract"]["committers"] == ["ground"]
+        assert reg.json()["contract"]["missing_committers"] == ["grass", "tiger"]
 
         commit_grass = client.post(
             "/hermes/contracts/commit",
             json={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0", "agent_id": "grass"},
         )
         assert commit_grass.status_code == 200
+        assert commit_grass.json()["contract"]["missing_committers"] == ["tiger"]
 
         commit = client.post(
             "/hermes/contracts/commit",
             json={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0", "agent_id": "tiger"},
         )
         assert commit.status_code == 200
+        assert commit.json()["contract"]["is_fully_committed"] is True
+        assert commit.json()["contract"]["missing_committers"] == []
 
-        resolved = client.get(
-            "/hermes/contracts/resolved",
-            params={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0"},
+        listed_after_commit = client.get(
+            "/hermes/contracts/list",
+            params={"project_id": project_id},
         )
-        assert resolved.status_code == 200
-        data = resolved.json()["resolved"]
+        assert listed_after_commit.status_code == 200
+        data = listed_after_commit.json()["contracts"][0]
         assert data["title"] == "Ecosystem Contract"
-        assert "cross-agent ecosystem obligations" in data["description"]
-        assert "grass" in data["resolved_obligations"]
-        assert "tiger" in data["resolved_obligations"]
-        tiger_ids = [x.get("id") for x in data["resolved_obligations"]["tiger"]]
-        assert "sync_state" in tiger_ids
+        assert data["is_fully_committed"] is True
+        assert data["missing_committers"] == []
 
         disable_tiger = client.post(
             "/hermes/contracts/disable",
@@ -123,13 +124,6 @@ def test_hermes_contract_resolve_and_route_http():
             json={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0", "agent_id": "wolf"},
         )
         assert commit_disabled.status_code == 400
-
-        resolved_disabled = client.get(
-            "/hermes/contracts/resolved",
-            params={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0"},
-        )
-        assert resolved_disabled.status_code == 200
-        assert resolved_disabled.json()["resolved"]["warning"] == "contract is disabled"
 
         listed_default = client.get("/hermes/contracts/list", params={"project_id": project_id})
         assert listed_default.status_code == 200

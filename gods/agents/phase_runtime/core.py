@@ -17,6 +17,7 @@ from gods.prompts import prompt_registry
 from gods.agents.tool_policy import SOCIAL_TOOLS, get_disabled_tools
 from gods.agents.debug_trace import PulseTraceLogger
 from gods.agents.runtime_policy import resolve_phase_strategy
+from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
 from gods.agents.phase_runtime.policy import (
     AgentPhase,
     PhaseToolPolicy,
@@ -354,6 +355,11 @@ class AgentPhaseRuntime:
                             args_full=args,
                             block_reason=block_reason,
                         )
+                        injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
+                        if injected > 0:
+                            self.agent._append_to_memory(
+                                f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                            )
                         continue
                     obs = self.agent.execute_tool(tool_name, args)
                     policy.record(tool_name, args)
@@ -369,6 +375,11 @@ class AgentPhaseRuntime:
                         obs_preview=PulseTraceLogger.clip(obs),
                         obs_full=obs,
                     )
+                    injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
+                    if injected > 0:
+                        self.agent._append_to_memory(
+                            f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                        )
 
                 # OBSERVE
                 # Rule: observe phase can only finalize; all other tools are blocked.
@@ -590,6 +601,11 @@ class AgentPhaseRuntime:
                         args_full=args,
                         block_reason=block_reason,
                     )
+                    injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
+                    if injected > 0:
+                        self.agent._append_to_memory(
+                            f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                        )
                     continue
 
                 obs = self.agent.execute_tool(tool_name, args)
@@ -605,6 +621,11 @@ class AgentPhaseRuntime:
                     obs_preview=PulseTraceLogger.clip(obs),
                     obs_full=obs,
                 )
+                injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
+                if injected > 0:
+                    self.agent._append_to_memory(
+                        f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                    )
 
             # Stage 3: OBSERVE (only finalize is allowed)
             observe_phase = phases[2]

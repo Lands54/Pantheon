@@ -173,7 +173,7 @@ def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str 
 
 @tool
 def list_protocols(caller_id: str = "default", project_id: str = "default") -> str:
-    """Deprecated compatibility path. Prefer contract-list and contract-resolve."""
+    """Deprecated compatibility path. Prefer contract-list with commit status fields."""
     try:
         from gods.hermes import hermes_service
 
@@ -182,7 +182,7 @@ def list_protocols(caller_id: str = "default", project_id: str = "default") -> s
         return json.dumps(
             {
                 "deprecated": True,
-                "message": "Prefer contract-list / contract-resolve for external orchestration.",
+                "message": "Prefer contract-list for external orchestration and missing-committer checks.",
                 "protocols": rows,
             },
             ensure_ascii=False,
@@ -227,22 +227,6 @@ def commit_contract(title: str, version: str, caller_id: str = "default", projec
 
 
 @tool
-def resolve_contract(title: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
-    """Resolve per-committer obligations for a contract."""
-    try:
-        from gods.hermes import hermes_service
-        from gods.hermes.errors import HermesError
-
-        pid = _resolve_project(project_id)
-        out = hermes_service.contracts.resolve(pid, title, version)
-        return json.dumps({"ok": True, "resolved": out}, ensure_ascii=False)
-    except HermesError as e:
-        return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
-
-
-@tool
 def list_contracts(
     include_disabled: bool = False,
     caller_id: str = "default",
@@ -264,6 +248,10 @@ def list_contracts(
                     "title": row.get("title", ""),
                     "description": row.get("description", ""),
                     "status": row.get("status", ""),
+                    "required_committers": row.get("required_committers", []),
+                    "committed_committers": row.get("committed_committers", []),
+                    "missing_committers": row.get("missing_committers", []),
+                    "is_fully_committed": row.get("is_fully_committed", False),
                 }
             )
         return json.dumps({"ok": True, "contracts": brief}, ensure_ascii=False)

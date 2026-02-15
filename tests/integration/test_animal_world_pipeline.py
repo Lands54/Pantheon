@@ -16,11 +16,9 @@ def test_animal_world_pipeline_generates_outputs():
         run_animal_world()
         report = Path("projects/animal_world/agents/ground/animal_world_output.json")
         graph = Path("projects/animal_world/knowledge/knowledge_graph.json")
-        proto = Path("projects/animal_world/protocols/events.jsonl")
 
         assert report.exists()
         assert graph.exists()
-        assert proto.exists()
 
         data = json.loads(report.read_text(encoding="utf-8"))
         assert data["final_state"]["sheep"] > 0

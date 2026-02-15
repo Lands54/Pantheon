@@ -284,7 +284,7 @@ flowchart LR
     CommitA["agent A commit"] --> C1["/hermes/contracts/commit"]
     CommitB["agent B commit"] --> C1
     C1 --> Store
-    Resolver["caller resolve"] --> Res["/hermes/contracts/resolved?title=&version="]
+    Resolver["caller list"] --> Res["/hermes/contracts/list?project_id=..."]
     Res --> Eff["effective obligations\n(agent-specific > default)"]
 ```
 
@@ -357,7 +357,7 @@ sequenceDiagram
     grass->>hermes: "contract-commit"
     sheep->>hermes: "contract-commit"
     tiger->>hermes: "contract-commit"
-    ground->>hermes: "contract-resolve"
+    ground->>hermes: "contract-list (check missing_committers)"
 
     Note over ground,hermes: "resolved obligations -> implementation plan"
 ```

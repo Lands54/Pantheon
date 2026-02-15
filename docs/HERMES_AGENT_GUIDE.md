@@ -26,7 +26,7 @@
 2. `commit_contract`
 - 作用：当前 Agent 承诺加入契约版本。
 
-3. `resolve_contract`
+3. `list_contracts`（查看缺签与激活状态）
 - 作用：解析契约后每个承诺人应实现的职责。
 
 4. `list_contracts`
@@ -54,11 +54,11 @@
 
 1. 先设计契约与条款（每个条款包含可执行 provider/schema/runtime）。
 2. 使用 `register_contract` 提交契约。
-3. 相关承诺人执行 `commit_contract`，再 `resolve_contract` 获取职责分配。
+3. 相关承诺人执行 `commit_contract`，系统自动在全员提交后生效。
 
 ### 4.2 调用协议
 
-1. 先 `resolve_contract` 明确条款与 owner/function_id。
+1. 先 `list_contracts` 确认 `missing_committers=[]` 且 `is_fully_committed=true`。
 2. 在业务代码里使用 `HermesClient.invoke(mode="sync")` 或 `route(...)` 获取结果。
 3. 长任务用 `mode="async"`，然后 `HermesClient.wait_job` 等待完成。
 
@@ -119,7 +119,7 @@ Hermes 会自动匹配该神的该函数的当前可用协议并执行。
 ### 状态规则（active / disabled）
 
 1. `commit_contract` 仅允许在 `active` 契约上执行。
-2. `disabled` 契约仍可 `resolve_contract`，但会返回 warning。
+2. `disabled` 契约不会接受新的 commit；请通过 `contract-list --include-disabled` 检查状态与缺签信息。
 3. `disable_contract` 的语义是“退出承诺”；当承诺人变为 0 时契约自动 disabled。
 
 ## 6. Provider 策略
@@ -148,7 +148,7 @@ Hermes 会自动匹配该神的该函数的当前可用协议并执行。
 
 1. `HERMES_PROTOCOL_NOT_FOUND`
 - 原因：协议名错误或未注册。
-- 处理：先 `resolve_contract` 或查 Hermes 协议清单后重试。
+- 处理：先 `list_contracts` 确认 commit 状态与缺签名单，再重试。
 
 2. `HERMES_SCHEMA_INVALID`
 - 原因：payload 或返回结果不符合 schema。

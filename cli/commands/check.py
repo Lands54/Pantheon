@@ -29,7 +29,6 @@ def cmd_check(args):
     
     # Read agent's memory
     memory_file = agent_dir / "memory.md"
-    inbox_file = agent_dir / "inbox.jsonl"
     
     print(f"\n📬 Checking {agent_id}'s activity in {pid}...\n")
 
@@ -53,22 +52,23 @@ def cmd_check(args):
     except Exception:
         pass
     
-    # Show inbox status
-    if inbox_file.exists():
-        with open(inbox_file, 'r') as f:
-            lines = f.readlines()
-            pending = len(lines)
-            print(f"📥 Inbox: {pending} pending message(s)")
-    else:
-        # Check buffers directory for pending messages
-        buffer_path = Path(f"projects/{pid}/buffers/{agent_id}.jsonl")
-        if buffer_path.exists():
-            with open(buffer_path, 'r') as f:
-                lines = f.readlines()
-                pending = len(lines)
-                print(f"📥 Inbox: {pending} pending message(s)")
-        else:
-            print(f"📥 Inbox: Empty")
+    # Show inbox event status
+    try:
+        pending_res = requests.get(
+            f"{base_url}/projects/{pid}/inbox/events",
+            params={"agent_id": agent_id, "state": "pending", "limit": 500},
+            timeout=4,
+        )
+        deferred_res = requests.get(
+            f"{base_url}/projects/{pid}/inbox/events",
+            params={"agent_id": agent_id, "state": "deferred", "limit": 500},
+            timeout=4,
+        )
+        pending_n = len((pending_res.json() or {}).get("items", []))
+        deferred_n = len((deferred_res.json() or {}).get("items", []))
+        print(f"📥 Inbox Events: pending={pending_n}, deferred={deferred_n}")
+    except Exception:
+        print("📥 Inbox Events: unavailable")
     
     # Show read receipts
     read_path = Path(f"projects/{pid}/buffers/{agent_id}_read.jsonl")

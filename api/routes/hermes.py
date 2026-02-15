@@ -199,16 +199,6 @@ async def list_contracts(project_id: str | None = None, include_disabled: bool =
     return {"project_id": pid, "contracts": hermes_service.contracts.list(pid, include_disabled=include_disabled)}
 
 
-@router.get("/contracts/resolved")
-async def resolve_contract(title: str, version: str, project_id: str | None = None) -> dict:
-    pid = _pick_project(project_id)
-    try:
-        data = hermes_service.contracts.resolve(pid, title, version)
-        return {"project_id": pid, "resolved": data}
-    except HermesError as e:
-        raise HTTPException(status_code=400, detail=e.to_dict())
-
-
 @router.post("/contracts/disable")
 async def disable_contract(req: ContractDisableRequest) -> dict:
     pid = _pick_project(req.project_id)
