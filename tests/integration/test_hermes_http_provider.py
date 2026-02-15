@@ -56,7 +56,6 @@ def test_hermes_http_provider_sync():
 
         spec = {
             "name": "bridge.echo",
-            "version": "1.0.0",
             "mode": "both",
             "provider": {
                 "type": "http",
@@ -87,7 +86,6 @@ def test_hermes_http_provider_sync():
                 "project_id": project_id,
                 "caller_id": "tester",
                 "name": "bridge.echo",
-                "version": "1.0.0",
                 "mode": "sync",
                 "payload": {"msg": "hello"},
             },

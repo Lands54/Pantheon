@@ -317,7 +317,7 @@ flowchart TD
 flowchart TD
     Resolve["resolve contract"] --> Plan["agent gets obligations list"]
     Plan --> Impl["agent implements function / endpoint"]
-    Impl --> Proto["register_protocol(name@version, provider)"]
+    Impl --> Proto["register_protocol(name, provider)"]
     Proto --> Invoke["other agent invoke/route by protocol"]
     Invoke --> Audit["invocations.jsonl + job logs"]
     Audit --> Report["project report + mnemosyne archive"]

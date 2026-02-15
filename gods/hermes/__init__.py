@@ -65,7 +65,15 @@ class HermesService:
 
         candidates = [
             p for p in self.registry.list(project_id)
-            if p.status == "active" and p.owner_agent == target_agent and p.function_id == function_id
+            if (
+                p.status == "active"
+                and p.owner_agent == target_agent
+                and (
+                    p.function_id == function_id
+                    or p.function_id == f"{target_agent}.{function_id}"
+                    or p.function_id.endswith(f".{function_id}")
+                )
+            )
         ]
         if not candidates:
             raise HermesError(
@@ -73,19 +81,12 @@ class HermesService:
                 f"no routed protocol for {target_agent}.{function_id} in project '{project_id}'",
             )
 
-        # Choose highest semver x.y.z
-        def semver_key(v: str):
-            try:
-                a, b, c = v.split(".")
-                return (int(a), int(b), int(c))
-            except Exception:
-                return (0, 0, 0)
-        best = sorted(candidates, key=lambda p: semver_key(p.version), reverse=True)[0]
+        # Name is unique in registry; choose latest updated active candidate defensively.
+        best = sorted(candidates, key=lambda p: float(p.updated_at), reverse=True)[0]
         req = InvokeRequest(
             project_id=project_id,
             caller_id=caller_id,
             name=best.name,
-            version=best.version,
             mode=("async" if mode == "async" else "sync"),
             payload=payload or {},
         )

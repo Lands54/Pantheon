@@ -50,7 +50,6 @@ class HermesExecutor:
                 "project_id": req.project_id,
                 "caller_id": req.caller_id,
                 "name": req.name,
-                "version": req.version,
                 "mode": req.mode,
                 "ok": ok,
                 "status": status,
@@ -66,7 +65,6 @@ class HermesExecutor:
             {
                 "caller_id": req.caller_id,
                 "name": req.name,
-                "version": req.version,
                 "mode": req.mode,
                 "ok": ok,
                 "status": status,
@@ -80,9 +78,9 @@ class HermesExecutor:
         Performs a synchronous protocol invocation, including validation and rate limiting.
         """
         start = time.time()
-        spec = self.registry.get(req.project_id, req.name, req.version)
+        spec = self.registry.get(req.project_id, req.name)
         if spec.status != "active":
-            raise HermesError("HERMES_PROTOCOL_DISABLED", f"Protocol {req.name}@{req.version} is {spec.status}")
+            raise HermesError("HERMES_PROTOCOL_DISABLED", f"Protocol {req.name} is {spec.status}")
         if spec.mode == "async":
             raise HermesError("HERMES_MODE_MISMATCH", "Protocol only supports async mode")
         if spec.provider.type == "agent_tool" and not allow_agent_tool_provider(req.project_id):
@@ -92,7 +90,7 @@ class HermesExecutor:
                 retryable=False,
             )
 
-        self.limiter.acquire(req.project_id, req.name, req.version, spec.limits.max_concurrency, spec.limits.rate_per_minute)
+        self.limiter.acquire(req.project_id, req.name, spec.limits.max_concurrency, spec.limits.rate_per_minute)
         try:
             validate_schema(req.payload, spec.request_schema)
 
@@ -116,7 +114,6 @@ class HermesExecutor:
                 ok=True,
                 project_id=req.project_id,
                 name=req.name,
-                version=req.version,
                 mode="sync",
                 result=provider_result,
                 latency_ms=latency_ms,
@@ -128,13 +125,12 @@ class HermesExecutor:
                 ok=False,
                 project_id=req.project_id,
                 name=req.name,
-                version=req.version,
                 mode="sync",
                 error=e.to_dict(),
                 latency_ms=latency_ms,
             )
         finally:
-            self.limiter.release(req.project_id, req.name, req.version)
+            self.limiter.release(req.project_id, req.name)
 
     def _save_job(self, job: JobRecord):
         """
@@ -154,7 +150,6 @@ class HermesExecutor:
             project_id=job.project_id,
             caller_id=job.caller_id,
             name=job.name,
-            version=job.version,
             mode="sync",
             payload=job.payload,
         )
@@ -164,7 +159,7 @@ class HermesExecutor:
         hermes_events.publish(
             "job_updated",
             job.project_id,
-            {"job_id": job.job_id, "name": job.name, "version": job.version, "status": job.status},
+            {"job_id": job.job_id, "name": job.name, "status": job.status},
         )
 
         result = self.invoke_sync(req)
@@ -181,7 +176,7 @@ class HermesExecutor:
         hermes_events.publish(
             "job_updated",
             job.project_id,
-            {"job_id": job.job_id, "name": job.name, "version": job.version, "status": job.status},
+            {"job_id": job.job_id, "name": job.name, "status": job.status},
         )
 
         # also write async envelope invocation
@@ -190,7 +185,6 @@ class HermesExecutor:
                 "project_id": job.project_id,
                 "caller_id": job.caller_id,
                 "name": job.name,
-                "version": job.version,
                 "mode": "async",
                 "payload": job.payload,
             }),
@@ -206,7 +200,7 @@ class HermesExecutor:
         """
         Performs an asynchronous protocol invocation by creating a background job.
         """
-        spec = self.registry.get(req.project_id, req.name, req.version)
+        spec = self.registry.get(req.project_id, req.name)
         if spec.mode == "sync":
             raise HermesError("HERMES_MODE_MISMATCH", "Protocol only supports sync mode")
 
@@ -215,7 +209,6 @@ class HermesExecutor:
             project_id=req.project_id,
             caller_id=req.caller_id,
             name=req.name,
-            version=req.version,
             payload=req.payload,
             status="queued",
         )
@@ -223,14 +216,13 @@ class HermesExecutor:
         hermes_events.publish(
             "job_updated",
             job.project_id,
-            {"job_id": job.job_id, "name": job.name, "version": job.version, "status": job.status},
+            {"job_id": job.job_id, "name": job.name, "status": job.status},
         )
         self._pool.submit(self._run_job, job.project_id, job.job_id)
         return InvokeResult(
             ok=True,
             project_id=req.project_id,
             name=req.name,
-            version=req.version,
             mode="async",
             job_id=job.job_id,
         )

@@ -5,7 +5,7 @@ import re
 import time
 from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 ProviderType = Literal["agent_tool", "http"]
@@ -37,7 +37,6 @@ class ProtocolLimits(BaseModel):
 
 class ProtocolSpec(BaseModel):
     name: str
-    version: str = "1.0.0"
     description: str = ""
     mode: ProtocolMode = "both"
     status: Literal["active", "deprecated", "disabled"] = "active"
@@ -58,25 +57,35 @@ class ProtocolSpec(BaseModel):
             raise ValueError("protocol name must match namespace.action format, e.g. grass.scan")
         return value
 
-    @field_validator("version")
-    @classmethod
-    def validate_version(cls, v: str):
-        value = (v or "").strip()
-        if not re.fullmatch(r"\d+\.\d+\.\d+", value):
-            raise ValueError("version must be semver like 1.0.0")
-        return value
-
     @field_validator("owner_agent", "function_id")
     @classmethod
     def normalize_optional_ids(cls, v: str):
         return (v or "").strip()
+
+    @model_validator(mode="after")
+    def derive_function_id(self):
+        """
+        Enforce system-derived function_id: owner_agent + '.' + action(name tail).
+        """
+        owner = (self.owner_agent or "").strip()
+        if not owner:
+            self.function_id = ""
+            return self
+        pname = (self.name or "").strip()
+        if pname.startswith(f"{owner}."):
+            self.function_id = pname
+            return self
+        action = pname.split(".")[-1] if pname else "action"
+        if action.startswith(f"{owner}_"):
+            action = action[len(owner) + 1 :]
+        self.function_id = f"{owner}.{action}"
+        return self
 
 
 class InvokeRequest(BaseModel):
     project_id: str
     caller_id: str
     name: str
-    version: str = "1.0.0"
     mode: Literal["sync", "async"] = "sync"
     payload: Dict[str, Any] = Field(default_factory=dict)
 
@@ -85,7 +94,6 @@ class InvokeResult(BaseModel):
     ok: bool
     project_id: str
     name: str
-    version: str
     mode: Literal["sync", "async"]
     result: Any = None
     error: Optional[Dict[str, Any]] = None
@@ -98,7 +106,6 @@ class JobRecord(BaseModel):
     project_id: str
     caller_id: str
     name: str
-    version: str
     mode: Literal["async"] = "async"
     payload: Dict[str, Any] = Field(default_factory=dict)
     status: JobStatus = "queued"

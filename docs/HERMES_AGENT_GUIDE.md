@@ -7,7 +7,7 @@
 1. 所有协议都是 **Project 级隔离**。
 2. 跨代理能力调用优先走 Hermes，不要假设对方文件结构。
 3. 当前默认策略下，`agent_tool` provider 禁用；优先使用 `http` provider。
-4. 协议名必须是 `namespace.action`，版本必须是 `x.y.z`（如 `1.0.0`）。
+4. 协议名必须是 `namespace.action`，Hermes 内部按名称维护单一当前定义（无协议版本号）。
 
 ## 2. Hermes 提供的能力
 
@@ -64,14 +64,14 @@
 
 ### 4.3 路由调用（神间语义）
 
-1. 协议注册时写入：
+1. 协议注册时仅需提供：
 - `owner_agent`: 该函数归属神
-- `function_id`: 函数标识（如 `check_fire_speed`）
+- `function_id` 由 Hermes 自动生成：`owner_agent + "." + name尾段`（无需手填）
 
 2. 调用时使用：
 - `HermesClient.route(target_agent="fire_god", function_id="check_fire_speed", payload={...})`
 
-Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
+Hermes 会自动匹配该神的该函数的当前可用协议并执行。
 
 ## 5. 契约 JSON（推荐结构）
 
@@ -147,7 +147,7 @@ Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
 ## 7. 常见错误与修复
 
 1. `HERMES_PROTOCOL_NOT_FOUND`
-- 原因：协议名/版本错误或未注册。
+- 原因：协议名错误或未注册。
 - 处理：先 `resolve_contract` 或查 Hermes 协议清单后重试。
 
 2. `HERMES_SCHEMA_INVALID`

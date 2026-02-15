@@ -27,7 +27,7 @@ def test_project_report_build_and_show_api():
         protocol_dir = Path("projects") / project_id / "protocols"
         protocol_dir.mkdir(parents=True, exist_ok=True)
         (protocol_dir / "registry.json").write_text(
-            json.dumps({"protocols": [{"name": "ground.integrate", "version": "1.0.0"}]}, ensure_ascii=False),
+            json.dumps({"protocols": [{"name": "ground.integrate"}]}, ensure_ascii=False),
             encoding="utf-8",
         )
         (protocol_dir / "contracts.json").write_text(
@@ -35,8 +35,8 @@ def test_project_report_build_and_show_api():
             encoding="utf-8",
         )
         with (protocol_dir / "invocations.jsonl").open("w", encoding="utf-8") as f:
-            f.write(json.dumps({"name": "ground.integrate", "version": "1.0.0", "status": "succeeded", "caller_id": "sheep"}) + "\n")
-            f.write(json.dumps({"name": "ground.integrate", "version": "1.0.0", "status": "succeeded", "caller_id": "tiger"}) + "\n")
+            f.write(json.dumps({"name": "ground.integrate", "status": "succeeded", "caller_id": "sheep"}) + "\n")
+            f.write(json.dumps({"name": "ground.integrate", "status": "succeeded", "caller_id": "tiger"}) + "\n")
 
         runtime_dir = Path("projects") / project_id / "runtime"
         runtime_dir.mkdir(parents=True, exist_ok=True)

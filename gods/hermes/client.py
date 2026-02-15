@@ -62,9 +62,9 @@ class HermesClient:
         r.raise_for_status()
         return r.json()
 
-    def invoke(self, project_id: str, caller_id: str, name: str, payload: dict[str, Any], version: str = "1.0.0", mode: str = "sync") -> dict[str, Any]:
+    def invoke(self, project_id: str, caller_id: str, name: str, payload: dict[str, Any], mode: str = "sync") -> dict[str, Any]:
         """
-        Invokes a specific protocol by name and version.
+        Invokes a specific protocol by name.
         """
         r = self._request(
             "POST",
@@ -73,7 +73,6 @@ class HermesClient:
                 "project_id": project_id,
                 "caller_id": caller_id,
                 "name": name,
-                "version": version,
                 "mode": mode,
                 "payload": payload,
             },

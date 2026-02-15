@@ -104,11 +104,10 @@ class HermesContracts:
         namespace = self._normalize_contract_ns(contract_title)
         action = self._slug(f"{owner_agent}_{function_id}")
         protocol_name = str(clause.get("protocol_name") or f"{namespace}.{action}").strip().lower()
-        protocol_version = str(clause.get("protocol_version") or contract_version).strip()
+        _ = contract_version  # reserved for contract lifecycle only; protocols are versionless.
 
         return ProtocolSpec(
             name=protocol_name,
-            version=protocol_version,
             description=str(clause.get("summary") or clause.get("description") or "").strip(),
             mode=runtime["mode"],
             status="active",
@@ -145,7 +144,6 @@ class HermesContracts:
             out.append(
                 {
                     "name": spec.name,
-                    "version": spec.version,
                     "owner_agent": spec.owner_agent,
                     "function_id": spec.function_id,
                 }
@@ -175,6 +173,12 @@ class HermesContracts:
         if not isinstance(default_ob, list) or not isinstance(obligations, dict) or not isinstance(committers, list):
             raise HermesError(HERMES_BAD_REQUEST, "invalid contract shape: default_obligations(list), obligations(dict), committers(list)")
         if not default_ob and not any(isinstance(v, list) and v for v in obligations.values()):
+            # Common mistake: submit descriptive obligations (functions/commitments) instead of executable clauses.
+            if any(isinstance(v, dict) and ("functions" in v or "commitments" in v) for v in obligations.values()):
+                raise HermesError(
+                    HERMES_BAD_REQUEST,
+                    "contract obligations are descriptive, not executable. Use list clauses with provider/io/runtime, e.g. obligations.agent=[{id,provider,io,runtime}]",
+                )
             raise HermesError(HERMES_BAD_REQUEST, "contract must contain at least one executable clause")
 
         with store.contract_lock(project_id):
@@ -182,8 +186,7 @@ class HermesContracts:
             contracts = data.get("contracts", [])
 
             now = time.time()
-            committer_set = {str(x).strip() for x in committers if str(x).strip()}
-            committer_set.add(submitter)
+            proposed_committers = sorted(list({str(x).strip() for x in committers if str(x).strip()}))
             payload = {
                 "title": title,
                 "version": version,
@@ -192,7 +195,10 @@ class HermesContracts:
                 "status": status,
                 "default_obligations": default_ob,
                 "obligations": obligations,
-                "committers": sorted(list(committer_set)),
+                # Registration stage only commits submitter.
+                "committers": [submitter],
+                # Keep proposal intent for observability, but does not auto-join anyone.
+                "proposed_committers": proposed_committers,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -360,8 +366,6 @@ class HermesContracts:
                 for i, p in enumerate(protocols):
                     pname = str(p.get("name", ""))
                     if not pname.startswith(namespace):
-                        continue
-                    if str(p.get("version", "")) != version:
                         continue
                     if p.get("status") != "disabled":
                         p["status"] = "disabled"

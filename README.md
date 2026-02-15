@@ -164,8 +164,8 @@ Example:
 
 # Contract lifecycle
 ./temple.sh -p demo_world protocol contract-register --file contract.json
-./temple.sh -p demo_world protocol contract-commit --name eco.protocol --version 1.0.0 --agent tiger
-./temple.sh -p demo_world protocol contract-resolve --name eco.protocol --version 1.0.0
+./temple.sh -p demo_world protocol contract-commit --title "Ecosystem Contract" --version 1.0.0 --agent tiger
+./temple.sh -p demo_world protocol contract-resolve --title "Ecosystem Contract" --version 1.0.0
 
 # Port lease management (avoid localhost port collisions)
 ./temple.sh -p demo_world protocol port-reserve --owner grass_api

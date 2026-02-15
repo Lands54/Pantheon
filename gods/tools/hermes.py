@@ -19,7 +19,6 @@ def _resolve_project(project_id: str | None) -> str:
 @tool
 def register_protocol(
     name: str,
-    version: str,
     description: str,
     caller_id: str,
     provider_tool: str = "",
@@ -65,7 +64,6 @@ def register_protocol(
 
         spec = ProtocolSpec(
             name=name,
-            version=version or "1.0.0",
             description=description,
             mode="both",
             provider=provider,
@@ -74,7 +72,7 @@ def register_protocol(
         )
         hermes_service.register(pid, spec)
         return (
-            f"Protocol registered: {name}@{spec.version}\n"
+            f"Protocol registered: {name}\n"
             "[DEPRECATED] register_protocol is compatibility-only. "
             "Prefer register_contract with executable clauses."
         )
@@ -89,7 +87,6 @@ def call_protocol(
     name: str,
     payload_json: str,
     mode: str = "sync",
-    version: str = "1.0.0",
     caller_id: str = "default",
     project_id: str = "default",
 ) -> str:
@@ -105,11 +102,10 @@ def call_protocol(
             project_id=pid,
             caller_id=caller_id,
             name=name,
-            version=version,
             mode=("async" if mode == "async" else "sync"),
             payload=payload,
         )
-        spec = hermes_service.registry.get(pid, req.name, req.version)
+        spec = hermes_service.registry.get(pid, req.name)
         if spec.provider.type == "agent_tool" and not allow_agent_tool_provider(pid):
             return json.dumps(
                 {

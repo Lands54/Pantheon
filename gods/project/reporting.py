@@ -61,8 +61,7 @@ def _top_protocols(invocations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_protocol: dict[str, int] = {}
     for row in invocations:
         name = str(row.get("name", "unknown"))
-        version = str(row.get("version", "unknown"))
-        k = f"{name}@{version}"
+        k = name
         by_protocol[k] = by_protocol.get(k, 0) + 1
     sorted_rows = sorted(by_protocol.items(), key=lambda x: x[1], reverse=True)[:TOP_N]
     return [{"protocol": k, "count": v} for k, v in sorted_rows]

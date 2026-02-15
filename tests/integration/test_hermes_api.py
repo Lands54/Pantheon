@@ -33,7 +33,6 @@ def test_hermes_register_and_invoke_sync_async():
 
         spec = {
             "name": "alpha.list",
-            "version": "1.0.0",
             "mode": "both",
             "provider": {
                 "type": "agent_tool",
@@ -57,7 +56,6 @@ def test_hermes_register_and_invoke_sync_async():
                 "project_id": project_id,
                 "caller_id": "tester",
                 "name": "alpha.list",
-                "version": "1.0.0",
                 "mode": "sync",
                 "payload": {"path": "."},
             },
@@ -71,7 +69,6 @@ def test_hermes_register_and_invoke_sync_async():
                 "project_id": project_id,
                 "caller_id": "tester",
                 "name": "alpha.list",
-                "version": "1.0.0",
                 "mode": "async",
                 "payload": {"path": "."},
             },
@@ -95,24 +92,18 @@ def test_hermes_register_and_invoke_sync_async():
         assert hist.status_code == 200
         assert len(hist.json().get("invocations", [])) >= 1
 
-        # Register new active version; old active version should be auto-disabled.
+        # Re-registering same name replaces executable definition.
         spec_v2 = dict(spec)
-        spec_v2["version"] = "1.1.0"
+        spec_v2["provider"] = dict(spec["provider"])
+        spec_v2["provider"]["tool_name"] = "read_file"
         reg2 = client.post("/hermes/register", json={"project_id": project_id, "spec": spec_v2})
         assert reg2.status_code == 200
         listed = client.get("/hermes/list", params={"project_id": project_id})
         assert listed.status_code == 200
         rows = listed.json().get("protocols", [])
-        active = [r for r in rows if r.get("name") == "alpha.list" and r.get("status") == "active"]
-        assert len(active) == 1
-        assert active[0]["version"] == "1.1.0"
-
-        # Same version with different executable content must be rejected.
-        bad = dict(spec_v2)
-        bad["provider"] = dict(spec_v2["provider"])
-        bad["provider"]["tool_name"] = "read_file"
-        bad_reg = client.post("/hermes/register", json={"project_id": project_id, "spec": bad})
-        assert bad_reg.status_code == 400
+        alpha_rows = [r for r in rows if r.get("name") == "alpha.list"]
+        assert len(alpha_rows) == 1
+        assert alpha_rows[0]["provider"]["tool_name"] == "read_file"
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")
@@ -128,7 +119,6 @@ def test_hermes_agent_tool_disabled_by_default():
 
         spec = {
             "name": "alpha.list",
-            "version": "1.0.0",
             "mode": "both",
             "provider": {
                 "type": "agent_tool",

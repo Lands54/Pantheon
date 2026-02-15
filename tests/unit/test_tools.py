@@ -79,12 +79,14 @@ def test_memory_files_are_hidden_and_protected():
     (agent_dir / "agent.md").write_text("profile", encoding="utf-8")
     (agent_dir / "runtime_state.json").write_text("{}", encoding="utf-8")
     (agent_dir / "normal.txt").write_text("ok", encoding="utf-8")
+    (agent_dir / "debug").mkdir(parents=True, exist_ok=True)
 
     listed = list_dir.invoke({"path": ".", "caller_id": caller_id, "project_id": project_id})
     assert "memory.md" not in listed
     assert "memory_archive.md" not in listed
     assert "agent.md" not in listed
     assert "runtime_state.json" not in listed
+    assert "debug" not in listed
     assert "normal.txt" in listed
 
     read_res = read_file.invoke({"path": "memory.md", "caller_id": caller_id, "project_id": project_id})

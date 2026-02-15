@@ -31,7 +31,7 @@ def cmd_protocol(args):
             return
         for row in rows:
             provider = row.get("provider", {})
-            print(f"- {row.get('name')}@{row.get('version')} [{row.get('status')}]")
+            print(f"- {row.get('name')} [{row.get('status')}]")
             ptype = provider.get("type", "agent_tool")
             if ptype == "http":
                 print(f"  provider=http:{provider.get('method', 'POST')} {provider.get('url')}")
@@ -70,11 +70,9 @@ def cmd_protocol(args):
 
         spec = {
             "name": args.name,
-            "version": args.version,
             "description": args.description,
             "mode": args.mode,
             "owner_agent": args.owner_agent,
-            "function_id": args.function_id,
             "provider": provider,
             "request_schema": req_schema,
             "response_schema": resp_schema,
@@ -89,7 +87,7 @@ def cmd_protocol(args):
         if res.status_code != 200:
             print(f"❌ Register failed: {res.text}")
             return
-        print(f"✅ Protocol registered: {args.name}@{args.version} in {pid}")
+        print(f"✅ Protocol registered: {args.name} in {pid}")
 
     elif args.subcommand == "clause-template":
         req_schema = json.loads(args.request_schema) if args.request_schema else {"type": "object"}
@@ -134,7 +132,6 @@ def cmd_protocol(args):
             "project_id": pid,
             "caller_id": args.caller,
             "name": args.name,
-            "version": args.version,
             "mode": args.mode,
             "payload": payload,
         }

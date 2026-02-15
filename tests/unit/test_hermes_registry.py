@@ -6,7 +6,6 @@ from pathlib import Path
 
 from gods.hermes.registry import HermesRegistry
 from gods.hermes.models import ProtocolSpec
-from gods.hermes.errors import HermesError
 
 
 def test_hermes_registry_register_and_get():
@@ -16,7 +15,6 @@ def test_hermes_registry_register_and_get():
         reg = HermesRegistry()
         spec = ProtocolSpec(
             name="grass.get_biomass",
-            version="1.0.0",
             provider={
                 "type": "agent_tool",
                 "project_id": project_id,
@@ -27,7 +25,7 @@ def test_hermes_registry_register_and_get():
             response_schema={"type": "object", "required": ["result"], "properties": {"result": {"type": "string"}}},
         )
         reg.register(project_id, spec)
-        loaded = reg.get(project_id, "grass.get_biomass", "1.0.0")
+        loaded = reg.get(project_id, "grass.get_biomass")
         assert loaded.name == "grass.get_biomass"
         assert loaded.provider.agent_id == "grass"
     finally:
@@ -35,14 +33,13 @@ def test_hermes_registry_register_and_get():
             shutil.rmtree(base)
 
 
-def test_hermes_registry_auto_disables_old_active_version():
+def test_hermes_registry_re_register_overwrites_same_name():
     project_id = f"hermes_reg_{uuid.uuid4().hex[:8]}"
     base = Path("projects") / project_id
     try:
         reg = HermesRegistry()
         v1 = ProtocolSpec(
             name="grass.sync_state",
-            version="1.0.0",
             provider={
                 "type": "http",
                 "project_id": project_id,
@@ -54,7 +51,6 @@ def test_hermes_registry_auto_disables_old_active_version():
         )
         v2 = ProtocolSpec(
             name="grass.sync_state",
-            version="1.1.0",
             provider={
                 "type": "http",
                 "project_id": project_id,
@@ -67,22 +63,21 @@ def test_hermes_registry_auto_disables_old_active_version():
         reg.register(project_id, v1)
         reg.register(project_id, v2)
         rows = reg.list(project_id)
-        active = [r for r in rows if r.name == "grass.sync_state" and r.status == "active"]
-        assert len(active) == 1
-        assert active[0].version == "1.1.0"
+        same = [r for r in rows if r.name == "grass.sync_state"]
+        assert len(same) == 1
+        assert same[0].provider.url.endswith("/sync/v2")
     finally:
         if base.exists():
             shutil.rmtree(base)
 
 
-def test_hermes_registry_same_version_conflicting_content_rejected():
+def test_hermes_registry_re_register_different_content_is_allowed():
     project_id = f"hermes_reg_{uuid.uuid4().hex[:8]}"
     base = Path("projects") / project_id
     try:
         reg = HermesRegistry()
         a = ProtocolSpec(
             name="grass.scan",
-            version="1.0.0",
             provider={
                 "type": "http",
                 "project_id": project_id,
@@ -94,7 +89,6 @@ def test_hermes_registry_same_version_conflicting_content_rejected():
         )
         b = ProtocolSpec(
             name="grass.scan",
-            version="1.0.0",
             provider={
                 "type": "http",
                 "project_id": project_id,
@@ -105,11 +99,9 @@ def test_hermes_registry_same_version_conflicting_content_rejected():
             response_schema={"type": "object"},
         )
         reg.register(project_id, a)
-        try:
-            reg.register(project_id, b)
-            assert False, "expected conflicting same-version register to fail"
-        except HermesError as e:
-            assert "conflict" in e.message.lower()
+        reg.register(project_id, b)
+        loaded = reg.get(project_id, "grass.scan")
+        assert loaded.provider.url.endswith("/b")
     finally:
         if base.exists():
             shutil.rmtree(base)

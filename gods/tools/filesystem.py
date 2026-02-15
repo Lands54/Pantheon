@@ -8,6 +8,7 @@ import os
 from langchain.tools import tool
 
 RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_state.json"}
+HIDDEN_DIR_NAMES = {"debug"}
 
 
 def _is_reserved_path(path: Path, agent_territory: Path) -> bool:
@@ -359,7 +360,9 @@ def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "def
 
         items = sorted([
             item for item in os.listdir(dir_path)
-            if (not item.startswith('.')) and (item not in RESERVED_SYSTEM_FILES)
+            if (not item.startswith('.'))
+            and (item not in RESERVED_SYSTEM_FILES)
+            and (item not in HIDDEN_DIR_NAMES)
         ])
         if not items:
             return _cwd_prefix(agent_territory, "[EMPTY] No visible files or directories.")

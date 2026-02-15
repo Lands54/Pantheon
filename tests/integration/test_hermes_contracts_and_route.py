@@ -65,7 +65,13 @@ def test_hermes_contract_resolve_and_route_http():
         }
         reg = client.post("/hermes/contracts/register", json={"project_id": project_id, "contract": contract})
         assert reg.status_code == 200
-        assert reg.json()["contract"]["committers"] == ["grass", "ground"]
+        assert reg.json()["contract"]["committers"] == ["ground"]
+
+        commit_grass = client.post(
+            "/hermes/contracts/commit",
+            json={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0", "agent_id": "grass"},
+        )
+        assert commit_grass.status_code == 200
 
         commit = client.post(
             "/hermes/contracts/commit",
@@ -139,11 +145,9 @@ def test_hermes_contract_resolve_and_route_http():
         # Register route-able HTTP protocol for fire god check
         spec = {
             "name": "fire.check_speed",
-            "version": "1.0.0",
             "description": "placeholder",
             "mode": "both",
             "owner_agent": "fire_god",
-            "function_id": "check_fire_speed",
             "provider": {
                 "type": "http",
                 "project_id": project_id,
@@ -159,13 +163,13 @@ def test_hermes_contract_resolve_and_route_http():
         routed = client.post(
             "/hermes/route",
             json={
-                "project_id": project_id,
-                "caller_id": "ground",
-                "target_agent": "fire_god",
-                "function_id": "check_fire_speed",
-                "mode": "sync",
-                "payload": {"v": 3},
-            },
+                    "project_id": project_id,
+                    "caller_id": "ground",
+                    "target_agent": "fire_god",
+                    "function_id": "check_speed",
+                    "mode": "sync",
+                    "payload": {"v": 3},
+                },
         )
         # route is resolved; invoke fails due to unreachable url, but must return Hermes error shape
         assert routed.status_code == 200

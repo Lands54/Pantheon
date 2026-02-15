@@ -38,7 +38,7 @@ def test_build_project_report_with_data():
         protocols_dir = base / "protocols"
         protocols_dir.mkdir(parents=True, exist_ok=True)
         (protocols_dir / "registry.json").write_text(
-            json.dumps({"protocols": [{"name": "grass.grow", "version": "1.0.0"}]}, ensure_ascii=False),
+            json.dumps({"protocols": [{"name": "grass.grow"}]}, ensure_ascii=False),
             encoding="utf-8",
         )
         (protocols_dir / "contracts.json").write_text(
@@ -48,8 +48,8 @@ def test_build_project_report_with_data():
         (protocols_dir / "invocations.jsonl").write_text(
             "\n".join(
                 [
-                    json.dumps({"name": "grass.grow", "version": "1.0.0", "status": "succeeded", "caller_id": "ground"}),
-                    json.dumps({"name": "grass.grow", "version": "1.0.0", "status": "failed", "caller_id": "ground"}),
+                    json.dumps({"name": "grass.grow", "status": "succeeded", "caller_id": "ground"}),
+                    json.dumps({"name": "grass.grow", "status": "failed", "caller_id": "ground"}),
                 ]
             )
             + "\n",
@@ -70,7 +70,7 @@ def test_build_project_report_with_data():
         assert report["status_summary"]["succeeded"] == 1
         assert report["status_summary"]["failed"] == 1
         assert report["port_leases_summary"]["lease_count"] == 1
-        assert report["top_protocols"][0]["protocol"] == "grass.grow@1.0.0"
+        assert report["top_protocols"][0]["protocol"] == "grass.grow"
         assert report["top_callers"][0]["caller_id"] == "ground"
         assert report.get("mnemosyne_entry_id")
     finally:

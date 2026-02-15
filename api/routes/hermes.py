@@ -62,7 +62,6 @@ class InvokeProtocolRequest(BaseModel):
     project_id: str | None = None
     caller_id: str
     name: str
-    version: str = "1.0.0"
     mode: str = "sync"
     payload: dict = Field(default_factory=dict)
 
@@ -118,11 +117,10 @@ async def invoke_protocol(req: InvokeProtocolRequest) -> dict:
             project_id=pid,
             caller_id=req.caller_id,
             name=req.name,
-            version=req.version,
             mode=req.mode,
             payload=req.payload,
         )
-        spec = hermes_service.registry.get(pid, invoke_req.name, invoke_req.version)
+        spec = hermes_service.registry.get(pid, invoke_req.name)
         if spec.provider.type == "agent_tool" and not allow_agent_tool_provider(pid):
             raise HermesError(
                 "HERMES_AGENT_TOOL_DISABLED",

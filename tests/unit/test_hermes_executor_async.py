@@ -22,7 +22,6 @@ def test_hermes_executor_async_job_lifecycle():
         exe = HermesExecutor()
         spec = ProtocolSpec(
             name="alpha.list",
-            version="1.0.0",
             mode="both",
             provider={
                 "type": "agent_tool",
@@ -40,7 +39,6 @@ def test_hermes_executor_async_job_lifecycle():
                 project_id=project_id,
                 caller_id="tester",
                 name="alpha.list",
-                version="1.0.0",
                 mode="async",
                 payload={"path": "."},
             )

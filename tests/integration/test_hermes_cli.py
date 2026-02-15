@@ -37,7 +37,6 @@ def test_cli_protocol_register_and_list(monkeypatch, capsys):
         subcommand="register",
         project=None,
         name="alpha.list",
-        version="1.0.0",
         description="",
         mode="both",
         provider="agent_tool",
