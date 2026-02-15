@@ -47,6 +47,21 @@ class SimulationService:
             return {"triggered": 0}
 
         project_id = runtime_config.current_project
+        requires_docker = bool(getattr(proj, "docker_enabled", True)) and str(
+            getattr(proj, "command_executor", "local")
+        ) == "docker"
+        if requires_docker:
+            ok, msg = self._docker.docker_available()
+            if not ok:
+                proj.simulation_enabled = False
+                runtime_config.save()
+                logger.error(
+                    "Simulation auto-stopped: project '%s' requires docker runtime but docker is unavailable (%s)",
+                    project_id,
+                    msg,
+                )
+                return {"triggered": 0, "error": f"docker_unavailable: {msg}", "project_id": project_id}
+
         active_agents = list(proj.active_agents)
         batch_size = max(1, int(getattr(proj, "autonomous_batch_size", 4)))
         # Scheduler prioritizes inbox-driven agents before heartbeat candidates.

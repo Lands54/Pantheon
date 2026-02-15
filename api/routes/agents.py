@@ -30,7 +30,9 @@ async def create_agent(req: CreateAgentRequest):
         raise HTTPException(status_code=400, detail="Agent exists")
     
     agent_dir.mkdir(parents=True)
-    (agent_dir / "agent.md").write_text(req.directives, encoding="utf-8")
+    profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{req.agent_id}.md"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text(req.directives, encoding="utf-8")
     
     proj = runtime_config.projects[project_id]
     if req.agent_id not in proj.agent_settings:
@@ -48,6 +50,9 @@ async def delete_agent(agent_id: str):
         raise HTTPException(status_code=404)
     
     shutil.rmtree(agent_dir)
+    profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+    if profile.exists():
+        profile.unlink()
     proj = runtime_config.projects[project_id]
     if agent_id in proj.active_agents:
         proj.active_agents.remove(agent_id)

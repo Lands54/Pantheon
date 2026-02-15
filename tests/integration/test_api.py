@@ -3,7 +3,8 @@ Integration Tests for API Routes
 """
 import pytest
 from fastapi.testclient import TestClient
-from api.server import app
+from api.app import app
+from api.services import project_service
 
 client = TestClient(app)
 
@@ -135,8 +136,8 @@ def test_get_agents_status():
     assert "agents" in data
 
 
-def test_legacy_social_routes_disabled_by_default():
-    """Legacy social API should be disabled unless explicitly enabled."""
+def test_removed_legacy_social_routes_not_exposed():
+    """Legacy social routes are removed and must stay unavailable."""
     response = client.get("/prayers/check")
     assert response.status_code == 404
 
@@ -146,6 +147,12 @@ def test_project_start_stop_endpoints():
     test_project_id = "test_start_stop_world"
     client.post("/projects/create", json={"id": test_project_id})
     try:
+        # Keep this test independent from host docker runtime availability.
+        cfg = client.get("/config").json()
+        cfg["projects"][test_project_id]["command_executor"] = "local"
+        cfg["projects"][test_project_id]["docker_enabled"] = False
+        client.post("/config/save", json=cfg)
+
         # Start target project (exclusive)
         response = client.post(f"/projects/{test_project_id}/start")
         assert response.status_code == 200
@@ -170,5 +177,27 @@ def test_project_start_stop_endpoints():
         assert payload["status"] == "success"
         assert payload["project_id"] == test_project_id
         assert payload["simulation_enabled"] is False
+    finally:
+        client.delete(f"/projects/{test_project_id}")
+
+
+def test_project_start_fails_when_docker_unavailable(monkeypatch):
+    """When project requires docker runtime and docker is unavailable, start should fail and keep simulation off."""
+    test_project_id = "test_start_docker_unavailable"
+    client.post("/projects/create", json={"id": test_project_id})
+    try:
+        cfg = client.get("/config").json()
+        cfg["projects"][test_project_id]["command_executor"] = "docker"
+        cfg["projects"][test_project_id]["docker_enabled"] = True
+        client.post("/config/save", json=cfg)
+
+        monkeypatch.setattr(project_service._docker, "docker_available", lambda: (False, "docker daemon down"))
+
+        response = client.post(f"/projects/{test_project_id}/start")
+        assert response.status_code == 503
+        assert "Docker unavailable" in response.json().get("detail", "")
+
+        cfg2 = client.get("/config").json()
+        assert cfg2["projects"][test_project_id]["simulation_enabled"] is False
     finally:
         client.delete(f"/projects/{test_project_id}")

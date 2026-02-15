@@ -28,6 +28,8 @@ def test_project_config_defaults():
     assert config.pulse_interrupt_mode == "after_action"
     assert config.inbox_event_enabled is True
     assert config.phase_act_productive_from_interaction == 2
+    assert config.context_strategy == "structured_v1"
+    assert config.context_token_budget_total == 32000
 
 
 def test_project_config_custom():

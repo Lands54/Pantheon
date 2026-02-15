@@ -46,7 +46,6 @@
 
 说明：
 - 协议“执行调用”不再通过 Agent tool，统一由业务代码通过 `HermesClient` 完成。
-- `register_protocol/list_protocols/record_protocol` 为兼容层，默认不在 Agent 工具集中。
 
 ## 4. 标准工作流
 
@@ -186,11 +185,6 @@ Hermes 会自动匹配该神的该函数的当前可用协议并执行。
 - `reports/project_{project_id}_latest.md`（镜像）
 
 4. 报告会自动落档到 Mnemosyne human vault，便于人类审阅与追踪。
-
-## 8.6 兼容层说明
-
-1. `legacy social api` 处于 deprecated 兼容层，默认关闭。
-2. `simulation.parallel` 保留为兼容字段，当前实现中视为 no-op。
 
 ## 9. 一句话模板（给 Agent）
 

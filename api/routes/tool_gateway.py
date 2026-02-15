@@ -33,17 +33,6 @@ class SendMessageRequest(BaseModel):
     project_id: str | None = None
 
 
-class RecordProtocolRequest(BaseModel):
-    subject: str
-    topic: str
-    relation: str
-    object: str
-    clause: str
-    counterparty: str = ""
-    status: str = "agreed"
-    project_id: str | None = None
-
-
 def _pick_project(project_id: str | None) -> str:
     pid = project_id or runtime_config.current_project
     if pid not in runtime_config.projects:
@@ -95,19 +84,3 @@ async def gw_send_message(req: SendMessageRequest) -> dict:
     )
     return {"project_id": pid, "from_id": req.from_id, "to_id": req.to_id, "result": text}
 
-
-@router.post("/record_protocol")
-async def gw_record_protocol(req: RecordProtocolRequest) -> dict:
-    pid = _pick_project(req.project_id)
-    subject_dir = Path("projects") / pid / "agents" / req.subject
-    if not subject_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Subject agent '{req.subject}' not found in '{pid}'")
-    _ = req  # keep endpoint payload compatibility, behavior is now contract-first guidance
-    return {
-        "project_id": pid,
-        "subject": req.subject,
-        "result": (
-            "DEPRECATED: /tool-gateway/record_protocol is disabled. "
-            "Use Hermes contract endpoints: /hermes/contracts/register, /commit, /resolved."
-        ),
-    }

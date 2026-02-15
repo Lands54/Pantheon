@@ -11,13 +11,8 @@ __all__ = [
     "AgentPhaseRuntime",
     "AgentPhase",
     "PhaseToolPolicy",
-    "_base_phases",
+    "base_phases",
     "PHASE_STRATEGIES",
     "PHASE_STRATEGY_ITERATIVE_ACTION",
     "PHASE_STRATEGY_STRICT_TRIAD",
 ]
-
-
-def _base_phases():
-    """Backward-compatible alias for tests and legacy imports."""
-    return base_phases()

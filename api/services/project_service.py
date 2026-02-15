@@ -15,6 +15,7 @@ from gods.runtime.detach import reconcile as detach_reconcile
 from gods.runtime.detach import stop as detach_stop
 from gods.runtime.detach import submit as detach_submit
 from gods.runtime.docker import DockerRuntimeManager
+from gods.janus import janus_service
 
 
 class ProjectService:
@@ -35,9 +36,10 @@ class ProjectService:
 
         agent_dir = Path("projects") / pid / "agents" / "genesis"
         agent_dir.mkdir(parents=True, exist_ok=True)
-        agent_md = agent_dir / "agent.md"
-        if not agent_md.exists():
-            agent_md.write_text(
+        profile = Path("projects") / pid / "mnemosyne" / "agent_profiles" / "genesis.md"
+        if not profile.exists():
+            profile.parent.mkdir(parents=True, exist_ok=True)
+            profile.write_text(
                 "# GENESIS\nYou are the first Being of this new world. Observe, evolve, and manifest.",
                 encoding="utf-8",
             )
@@ -76,6 +78,21 @@ class ProjectService:
 
     def start_project(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
+        target = runtime_config.projects[project_id]
+        requires_docker = bool(getattr(target, "docker_enabled", True)) and str(
+            getattr(target, "command_executor", "local")
+        ) == "docker"
+        if requires_docker:
+            ok, msg = self._docker.docker_available()
+            if not ok:
+                # Hard guard: never keep simulation enabled when docker runtime is unavailable.
+                target.simulation_enabled = False
+                runtime_config.save()
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Docker unavailable. Project '{project_id}' stopped: {msg}",
+                )
+
         # Single-active-project runtime policy: starting one project pauses all others.
         for pid, proj in runtime_config.projects.items():
             proj.simulation_enabled = pid == project_id
@@ -210,6 +227,24 @@ class ProjectService:
             "top_protocols": report.get("top_protocols", []),
             "output": report.get("output", {}),
             "mnemosyne_entry_id": report.get("mnemosyne_entry_id", ""),
+        }
+
+    def context_preview(self, project_id: str, agent_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        row = janus_service.context_preview(project_id, agent_id)
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "preview": row,
+        }
+
+    def context_reports(self, project_id: str, agent_id: str, limit: int) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = janus_service.context_reports(project_id, agent_id, limit=max(1, min(limit, 500)))
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "reports": rows,
         }
 
     def get_report(self, project_id: str) -> dict[str, Any]:

@@ -44,8 +44,9 @@ def test_memory_is_delivered_to_next_pulse():
     agent_id = "carrier"
     agent_dir = Path("projects") / project_id / "agents" / agent_id
     agent_dir.mkdir(parents=True, exist_ok=True)
-    (agent_dir / "agent.md").write_text("# carrier\nmemory test", encoding="utf-8")
-    (agent_dir / "memory.md").write_text("", encoding="utf-8")
+    profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text("# carrier\nmemory test", encoding="utf-8")
 
     old_project = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
@@ -74,7 +75,7 @@ def test_memory_is_delivered_to_next_pulse():
         }
         agent.process(state1)
 
-        mem_text = (agent_dir / "memory.md").read_text(encoding="utf-8")
+        mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
         assert "[[ACTION]] list_dir" in mem_text
 
         # Pulse 2: with no tool calls, verify model still receives prior memory in system context.

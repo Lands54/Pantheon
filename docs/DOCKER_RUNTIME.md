@@ -49,7 +49,7 @@ Project config supports:
 - `./temple.sh runtime restart <agent> -p <project>`
 - `./temple.sh runtime reconcile -p <project>`
 
-## Fallback
+## Backend Switch
 
 Set:
 
@@ -57,4 +57,4 @@ Set:
 ./temple.sh -p <project> config set command_executor local
 ```
 
-This restores host `subprocess` execution backend.
+This switches execution to host `subprocess` backend.

@@ -1,0 +1,30 @@
+from langchain_core.messages import HumanMessage
+
+from gods.janus.models import ContextBuildRequest
+from gods.janus.strategies.structured_v1 import StructuredV1ContextStrategy
+
+
+def test_structured_v1_uses_dynamic_recent_budget_not_fixed_8(tmp_path, monkeypatch):
+    req = ContextBuildRequest(
+        project_id="p_struct_budget",
+        agent_id="a",
+        state={"messages": [HumanMessage(content=("x" * 50), name="h") for _ in range(30)], "context": "obj"},
+        directives="# a",
+        local_memory="local mem",
+        inbox_hint="inbox",
+        phase_name="act",
+        tools_desc="- [[list_dir(path)]]",
+        context_cfg={
+            "budget_task_state": 1000,
+            "budget_observations": 1000,
+            "budget_inbox": 1000,
+            "budget_recent_messages": 2000,
+            "recent_message_limit": 30,
+            "observation_window": 10,
+            "include_inbox_status_hints": True,
+        },
+    )
+    res = StructuredV1ContextStrategy().build(req)
+    assert res.strategy_used == "structured_v1"
+    assert len(res.recent_messages) > 8
+    assert res.token_usage["recent_messages"] == len(res.recent_messages)

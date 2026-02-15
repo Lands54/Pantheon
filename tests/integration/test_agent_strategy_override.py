@@ -31,8 +31,9 @@ def test_agent_level_phase_strategy_override_to_freeform():
     agent_id = "solo"
     agent_dir = Path("projects") / project_id / "agents" / agent_id
     agent_dir.mkdir(parents=True, exist_ok=True)
-    (agent_dir / "agent.md").write_text("# solo\noverride test", encoding="utf-8")
-    (agent_dir / "memory.md").write_text("", encoding="utf-8")
+    profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text("# solo\noverride test", encoding="utf-8")
 
     old_project = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
@@ -64,7 +65,7 @@ def test_agent_level_phase_strategy_override_to_freeform():
         out = agent.process(state)
         assert out["next_step"] == "finish"
 
-        mem_text = (agent_dir / "memory.md").read_text(encoding="utf-8")
+        mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
         assert "[MODE] freeform" in mem_text
         assert "[[ACTION]] list_dir" in mem_text
     finally:

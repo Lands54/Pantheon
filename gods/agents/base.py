@@ -1,9 +1,9 @@
 """
-Gods Platform - Agent Node Definitions
-Agents load their core logic directly from their respective agents/{id}/agent.md files.
+Gods Platform - Agent Node Definitions.
 """
 import uuid
 import re
+import time
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from gods.state import GodsState
 from gods.agents.brain import GodBrain
@@ -15,13 +15,15 @@ from gods.agents.phase_runtime import AgentPhaseRuntime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
 from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
+from gods.janus import janus_service, record_observation, ContextBuildRequest, ObservationRecord
+from gods.janus.journal import profile_path
 from pathlib import Path
 
 
 class GodAgent:
     """
     Dynamic Agent that derives identity and behavior from filesystem metadata.
-    Source of truth: projects/{project_id}/agents/{agent_id}/agent.md
+    Source of truth: projects/{project_id}/mnemosyne/agent_profiles/{agent_id}.md
     """
     def __init__(self, agent_id: str, project_id: str = "default"):
         """
@@ -30,9 +32,8 @@ class GodAgent:
         self.agent_id = agent_id
         self.project_id = project_id
         self.agent_dir = Path(f"projects/{project_id}/agents/{agent_id}")
-        self.agent_md = self.agent_dir / "agent.md"
-        
-        # Load behavior description from agent.md
+
+        # Load behavior description from Mnemosyne profile only.
         self.directives = self._load_directives()
         self._ensure_memory_seeded()
         
@@ -41,17 +42,30 @@ class GodAgent:
 
     def _load_directives(self) -> str:
         """
-        Loads the core mission and logic for the agent from its agent.md file.
+        Loads the core mission and logic from Mnemosyne profile.
         """
-        if self.agent_md.exists():
-            return self.agent_md.read_text(encoding="utf-8")
-        return f"Agent ID: {self.agent_id}\n(No agent.md found. Please create one in {self.agent_md})"
+        p = profile_path(self.project_id, self.agent_id)
+        if p.exists():
+            try:
+                text = p.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
+            except Exception:
+                pass
+        return (
+            f"Agent ID: {self.agent_id}\n"
+            "No Mnemosyne profile found. Write directives to "
+            f"projects/{self.project_id}/mnemosyne/agent_profiles/{self.agent_id}.md"
+        )
+
+    def _chronicle_path(self) -> Path:
+        return Path("projects") / self.project_id / "mnemosyne" / "chronicles" / f"{self.agent_id}.md"
 
     def _ensure_memory_seeded(self):
         """
-        Seeds the agent's memory with a snapshot of its directives if it doesn't already exist.
+        Seeds Mnemosyne chronicle with a directives snapshot if empty.
         """
-        mem_path = self.agent_dir / "memory.md"
+        mem_path = self._chronicle_path()
         if mem_path.exists():
             try:
                 if mem_path.stat().st_size > 0:
@@ -59,9 +73,10 @@ class GodAgent:
             except Exception:
                 return
         self.agent_dir.mkdir(parents=True, exist_ok=True)
+        mem_path.parent.mkdir(parents=True, exist_ok=True)
         seed = (
             "### SYSTEM_SEED\n"
-            "Directives snapshot (from agent.md):\n\n"
+            "Directives snapshot (from Mnemosyne profile):\n\n"
             f"{self.directives}\n\n---\n"
         )
         mem_path.write_text(seed, encoding="utf-8")
@@ -98,7 +113,7 @@ class GodAgent:
 
     def process(self, state: GodsState) -> GodsState:
         """
-        Main execution loop for the agent, handling either phase-based or legacy autonomous pulses.
+        Main execution loop for the agent, handling either phase runtime or freeform autonomous pulses.
         """
         proj = runtime_config.projects.get(self.project_id)
         phase_mode_enabled = resolve_phase_mode_enabled(self.project_id, self.agent_id)
@@ -116,7 +131,7 @@ class GodAgent:
                 inbox_msgs=inbox_msgs,
             )
 
-        # --- Legacy loop ---
+        # --- Freeform loop ---
         max_tool_rounds = int(getattr(proj, "tool_loop_max", 8) if proj else 8)
         max_tool_rounds = max(1, min(max_tool_rounds, 64))
         inbox_msgs = self._build_inbox_context_hint()
@@ -128,8 +143,18 @@ class GodAgent:
         print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
 
         for _ in range(max_tool_rounds):
-            context = self.build_context(state, simulation_directives, local_memory, inbox_msgs)
-            llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
+            req = ContextBuildRequest(
+                project_id=self.project_id,
+                agent_id=self.agent_id,
+                state=state,
+                directives=simulation_directives,
+                local_memory=local_memory,
+                inbox_hint=inbox_msgs,
+                phase_name="freeform",
+                phase_block="",
+                tools_desc=self._render_tools_desc(),
+            )
+            llm_messages, _ = janus_service.build_llm_messages(req)
             response = self.brain.think_with_tools(
                 llm_messages,
                 self.get_tools(),
@@ -179,9 +204,9 @@ class GodAgent:
 
     def _load_local_memory(self) -> str:
         """
-        Loads the agent's local memory from memory.md, applying compaction if necessary.
+        Loads local memory chronicle from Mnemosyne, applying compaction if necessary.
         """
-        mem_path = self.agent_dir / "memory.md"
+        mem_path = self._chronicle_path()
         self._maybe_compact_memory(mem_path)
         if mem_path.exists():
             return mem_path.read_text(encoding="utf-8")
@@ -189,10 +214,11 @@ class GodAgent:
 
     def _append_to_memory(self, text: str):
         """
-        Appends a new entry to the agent's persistent memory file.
+        Appends a new entry to the agent's Mnemosyne chronicle file.
         """
         from datetime import datetime
-        mem_path = self.agent_dir / "memory.md"
+        mem_path = self._chronicle_path()
+        mem_path.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry = f"\n### 📖 Entry [{timestamp}]\n{text or ''}\n\n---\n"
         with open(mem_path, "a", encoding="utf-8") as f:
@@ -238,7 +264,7 @@ class GodAgent:
             "---\n"
         )
 
-        archive_path = self.agent_dir / "memory_archive.md"
+        archive_path = mem_path.parent / f"{self.agent_id}_archive.md"
         with open(archive_path, "a", encoding="utf-8") as af:
             af.write(old)
             if not old.endswith("\n"):
@@ -286,10 +312,12 @@ class GodAgent:
         if proj:
             settings = proj.agent_settings.get(self.agent_id)
             if settings and name in settings.disabled_tools:
-                return (
+                blocked = (
                     f"Divine Restriction: The tool '{name}' has been disabled for you by the High Overseer.\n"
                     "Suggested next step: choose another available tool aligned with your current phase."
                 )
+                self._record_observation(name, args, blocked, status="blocked")
+                return blocked
 
         args['caller_id'] = self.agent_id
         args['project_id'] = self.project_id
@@ -301,23 +329,58 @@ class GodAgent:
                         result = ensure_cwd_prefix(result)
                     if name != "check_inbox":
                         reset_inbox_guard(self.agent_id, self.project_id)
+                    status = "ok"
+                    low = str(result).lower()
+                    if "tool execution error" in low or "error" in low:
+                        status = "error"
+                    if "divine restriction" in low or "policy block" in low:
+                        status = "blocked"
+                    self._record_observation(name, args, result, status=status)
                     return result
                 except Exception as e:
-                    return (
+                    err = (
                         f"Tool Execution Error: failed to run '{name}'. Reason: {str(e)}\n"
                         "Suggested next step: verify required arguments and retry once."
                     )
+                    self._record_observation(name, args, err, status="error")
+                    return err
         available = ", ".join([t.name for t in self.get_tools()])
-        return (
+        unknown = (
             f"Tool Error: Unknown tool '{name}'.\n"
             f"Suggested next step: choose one from [{available}]."
         )
+        self._record_observation(name, args, unknown, status="error")
+        return unknown
+
+    def _record_observation(self, name: str, args: dict, result: str, status: str):
+        try:
+            args_summary = str(args)[:240]
+            result_summary = str(result)[:500]
+            record_observation(
+                ObservationRecord(
+                    project_id=self.project_id,
+                    agent_id=self.agent_id,
+                    tool_name=name,
+                    args_summary=args_summary,
+                    result_summary=result_summary,
+                    status=status,
+                    timestamp=time.time(),
+                )
+            )
+        except Exception:
+            pass
 
     def get_tools(self):
         """
         Returns the list of tools available to this agent.
         """
-        return GODS_TOOLS
+        disabled: set[str] = set()
+        proj = runtime_config.projects.get(self.project_id)
+        if proj:
+            settings = proj.agent_settings.get(self.agent_id)
+            if settings:
+                disabled = set(settings.disabled_tools or [])
+        return [t for t in GODS_TOOLS if t.name not in disabled]
 
     def build_context(
         self,
@@ -338,17 +401,7 @@ class GodAgent:
             for msg in recent_messages
         ])
         
-        disabled = set()
-        proj = runtime_config.projects.get(self.project_id)
-        if proj:
-            settings = proj.agent_settings.get(self.agent_id)
-            if settings:
-                disabled = set(settings.disabled_tools or [])
-        items = []
-        for t in self.get_tools():
-            mark = " (DISABLED: event-inbox policy)" if t.name == "check_inbox" and t.name in disabled else ""
-            items.append(f"- [[{t.name}({', '.join(t.args)})]]: {t.description}{mark}")
-        tools_desc = "\n".join(items)
+        tools_desc = self._render_tools_desc()
         
         return prompt_registry.render(
             "agent_context",
@@ -364,6 +417,12 @@ class GodAgent:
             phase_block=phase_block,
             phase_name=phase_name,
         )
+
+    def _render_tools_desc(self) -> str:
+        items = []
+        for t in self.get_tools():
+            items.append(f"- [[{t.name}({', '.join(t.args)})]]: {t.description}")
+        return "\n".join(items)
 
 # Factory function for LangGraph nodes
 def create_god_node(agent_id: str):
@@ -384,7 +443,7 @@ def create_god_node(agent_id: str):
         return agent.process(state)
     return node_func
 
-# Forward compatibility for existing hardcoded node names
+# Node helpers
 def genesis_node(state: GodsState) -> GodsState:
     """
     Node function specialized for the 'genesis' agent.

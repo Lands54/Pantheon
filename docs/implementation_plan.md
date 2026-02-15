@@ -6,7 +6,7 @@
 ## 1. 核心组件开发
 
 ### 1.1 `Platform Core` (Python 实现)
-- **Registry**: 扫描 `agents/` 目录，加载所有 `agent.md`。
+- **Registry**: 扫描 `agents/` 目录，加载所有 `mnemosyne/agent_profiles/{agent}.md`。
 - **Message Bus**: 实现 `agents/{id}/.agent/inbox.jsonl` 作为消息接收端。
 - **Call Parser**: 正则解析 `[[...]]` 格式的指令。
 
@@ -19,9 +19,9 @@
 - `broadcast_message(from, group, content)`
 
 ## 2. 交互逻辑
-1. **监听**: 平台监听每个 Agent 的 `workspace` 变动或 `agent.md` 的状态更新。
+1. **监听**: 平台监听每个 Agent 的 `workspace` 变动或 agent profile 状态更新。
 2. **触发**: 检测到 `[[call]]` 时，平台接管并执行路由。
-3. **反馈**: 平台将结果写入 Agent 的 `inbox` 或 `agent.md` 的 `Memory` 部分。
+3. **反馈**: 平台将结果写入 Agent 的 `inbox` 或 `mnemosyne/chronicles/{agent}.md`。
 
 ## 3. 具体任务清单 (Phase 1)
 - [ ] 编写 `platform/registry.py`: 扫描并注册 Agent。

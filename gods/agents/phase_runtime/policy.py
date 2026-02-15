@@ -68,7 +68,7 @@ class PhaseToolPolicy:
         phase_allow_map: Dict[str, set],
         disabled_tools: set,
         max_repeat_same_call: int = 2,
-        explore_budget: int = 9999,  # kept for backward-compatible ctor shape
+        explore_budget: int = 9999,
     ):
         """
         Initializes the policy engine with allowed maps and restriction settings.

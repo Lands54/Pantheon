@@ -28,11 +28,6 @@ class ConfigService:
             "openrouter_api_key": self.mask_api_key(runtime_config.openrouter_api_key),
             "has_openrouter_api_key": bool(runtime_config.openrouter_api_key),
             "current_project": runtime_config.current_project,
-            "enable_legacy_social_api": runtime_config.enable_legacy_social_api,
-            "deprecated": {
-                "enable_legacy_social_api": "deprecated-compat",
-                "projects.*.autonomous_parallel": "deprecated-noop",
-            },
             "projects": runtime_config.projects,
             "available_agents": get_available_agents(),
             "all_tools": [t.name for t in GODS_TOOLS],
@@ -46,8 +41,6 @@ class ConfigService:
                 runtime_config.openrouter_api_key = incoming
         if "current_project" in data:
             runtime_config.current_project = data["current_project"]
-        if "enable_legacy_social_api" in data:
-            runtime_config.enable_legacy_social_api = bool(data["enable_legacy_social_api"])
         if "projects" in data:
             for pid, pdata in data["projects"].items():
                 runtime_config.projects[pid] = ProjectConfig(**pdata)

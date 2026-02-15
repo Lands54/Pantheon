@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from api.server import app
+from api.app import app
 from gods.config import runtime_config
 
 
@@ -55,7 +55,7 @@ def test_tool_gateway_send_and_check_inbox_roundtrip():
         client.delete(f"/projects/{project_id}")
 
 
-def test_tool_gateway_list_agents_and_record_protocol_deprecated():
+def test_tool_gateway_list_agents_and_record_protocol_removed():
     project_id = "test_tool_gateway_world_2"
     old_project = runtime_config.current_project
     try:
@@ -68,23 +68,8 @@ def test_tool_gateway_list_agents_and_record_protocol_deprecated():
         assert list_res.status_code == 200
         assert "alpha" in list_res.json()["result"]
 
-        proto_res = client.post(
-            "/tool-gateway/record_protocol",
-            json={
-                "subject": "alpha",
-                "topic": "io",
-                "relation": "list_dir",
-                "object": "storage",
-                "clause": "use jsonl",
-                "project_id": project_id,
-            },
-        )
-        assert proto_res.status_code == 200
-        assert "DEPRECATED" in proto_res.json()["result"]
-        assert "/hermes/contracts/register" in proto_res.json()["result"]
-
-        registry_file = Path("projects") / project_id / "protocols" / "registry.json"
-        assert not registry_file.exists()
+        proto_res = client.post("/tool-gateway/record_protocol", json={"project_id": project_id})
+        assert proto_res.status_code in {404, 405}
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

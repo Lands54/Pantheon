@@ -4,7 +4,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from api.server import app
+from api.app import app
 from gods.runtime.detach.models import DetachStatus
 from gods.runtime.detach.service import reconcile
 from gods.runtime.detach.store import create_job, transition_job, update_job

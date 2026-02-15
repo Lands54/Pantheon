@@ -14,11 +14,13 @@ set -euo pipefail
 #   BASE_URL=http://localhost:8000
 #   GODS_SERVER_LOG=/tmp/gods_server.log
 #   GODS_SERVER_PID=/tmp/gods_server.pid
+#   GODS_DOCKER_IMAGE=gods-agent-base:py311
 
 PROJECT_ID="${1:-animal_world_lab}"
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 SERVER_LOG="${GODS_SERVER_LOG:-/tmp/gods_server.log}"
 SERVER_PID_FILE="${GODS_SERVER_PID:-/tmp/gods_server.pid}"
+DOCKER_IMAGE="${GODS_DOCKER_IMAGE:-gods-agent-base:py311}"
 
 echo "==> Restarting server..."
 
@@ -63,7 +65,7 @@ for i in $(seq 1 80); do
 done
 
 echo "==> Initializing project: ${PROJECT_ID}"
-python - <<'PY'
+BASE_URL="${BASE_URL}" PROJECT_ID="${PROJECT_ID}" DOCKER_IMAGE="${DOCKER_IMAGE}" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -71,6 +73,7 @@ import requests
 
 base = os.environ.get("BASE_URL", "http://localhost:8000")
 project_id = os.environ.get("PROJECT_ID", "animal_world_lab")
+docker_image = os.environ.get("DOCKER_IMAGE", "gods-agent-base:py311")
 
 agents = {
     "ground": "# Ground\n你负责系统集成、状态汇总、启动验证与总线治理。",
@@ -193,6 +196,17 @@ proj["simulation_enabled"] = False
 proj["simulation_interval_min"] = 8
 proj["simulation_interval_max"] = 12
 proj["phase_strategy"] = "freeform"
+# Force docker runtime backend for agent command execution.
+proj["command_executor"] = "docker"
+proj["docker_enabled"] = True
+proj["docker_image"] = docker_image
+proj["docker_network_mode"] = "bridge_local_only"
+proj["docker_auto_start_on_project_start"] = True
+proj["docker_auto_stop_on_project_stop"] = True
+proj["docker_workspace_mount_mode"] = "agent_territory_rw"
+proj["docker_readonly_rootfs"] = False
+proj["docker_cpu_limit"] = 1.0
+proj["docker_memory_limit_mb"] = 512
 req("POST", "/config/save", json=cfg).raise_for_status()
 
 req("POST", f"/projects/{project_id}/start").raise_for_status()

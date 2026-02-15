@@ -18,15 +18,14 @@ Gods Platform 采用三层结构：
 - `gods/agents/base.py`：`GodAgent`，每个 Agent 的主脉冲循环。
 - `gods/agents/brain.py`：`GodBrain`，按项目+Agent 动态解析模型并调用 OpenRouter。
 - `gods/agents/phase_runtime/`：阶段运行时包（`core/policy/strategies`）。
-- `gods/workflow.py`：LangGraph 编排（公共讨论与私聊流程）+ SQLite checkpoint。
 - `gods/state.py`：统一状态定义（`GodsState`）。
 
 ### 2.2 工具系统
 
-- `gods/tools/communication.py`：通信工具兼容导出（实现拆分到 `comm_inbox/comm_human/comm_protocol`）。
+- `gods/tools/communication.py`：通信工具导出（实现拆分到 `comm_inbox/comm_human`）。
 - `gods/tools/filesystem.py`：Agent 领地内文件读写与精确替换。
 - `gods/tools/execution.py`：受限命令执行（黑名单+禁止复杂 shell 符号）。
-- `gods/tools/hermes.py`：协议注册、协议调用、异步任务查询、协议列表。
+- `gods/tools/hermes.py`：协议调用、路由、契约提交与端口租约。
 - `gods/tools/mnemosyne.py`：Agent 档案持久化读写（agent vault）。
 
 ### 2.2.1 命令执行后端（`gods/runtime/`）
@@ -70,7 +69,7 @@ Gods Platform 采用三层结构：
 
 - `gods/config.py`：`config.json` 的加载、迁移、保存。
 - `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
-- `projects/{project_id}/agents/{agent_id}/memory.md`：可读记忆日志。
+- `projects/{project_id}/mnemosyne/chronicles/{agent_id}.md`：可读记忆日志。
 - `projects/{project_id}/runtime/inbox_events.jsonl`：Inbox 事件存储。
 - `projects/{project_id}/runtime/pulse_events.jsonl`：Pulse 队列存储。
 - `projects/{project_id}/runtime/detach_jobs.jsonl`：Detach 后台任务存储。
@@ -85,7 +84,6 @@ Gods Platform 采用三层结构：
 ## 3. API 层（`api/`）
 
 - `api/app.py`：FastAPI 应用装配入口（路由注册、生命周期挂载）。
-- `api/server.py`：兼容包装层（保留旧导入，不承载业务）。
 - `api/routes/config.py`：配置读取/保存（密钥脱敏输出）。
 - `api/routes/projects.py`：项目增删。
 - `api/routes/projects.py`：项目增删 + 项目报告生成/查询（`/projects/{project_id}/report/*`）。
@@ -141,16 +139,17 @@ Gods Platform 采用三层结构：
 ```text
 projects/{project_id}/
 ├── agents/{agent_id}/
-│   ├── agent.md
-│   └── memory.md
+│   └── runtime_state.json
+├── mnemosyne/
+│   ├── agent_profiles/{agent_id}.md
+│   ├── chronicles/{agent_id}.md
+│   └── {agent|human|system}/
 ├── runtime/
 │   ├── inbox_events.jsonl
 │   ├── pulse_events.jsonl
 │   ├── detach_jobs.jsonl
 │   ├── detach_logs/{job_id}.log
 │   └── locks/*.lock
-├── buffers/ (兼容层，逐步淡出)
-│   └── human.jsonl
 ├── protocols/
 │   ├── registry.json
 │   ├── invocations.jsonl
@@ -164,4 +163,4 @@ projects/{project_id}/
 2. 同步写入 `pulse_events.jsonl`（`inbox_event`，高优先级）。  
 3. 调度器优先消费 Pulse 队列；空队列时按 `queue_idle_heartbeat_sec` 注入 `timer` pulse。  
 4. pulse 开始前注入 Inbox 事件；工具返回后执行 `after_action` 软打断探针。  
-5. pulse 完成后将已注入消息标记为 `handled`；Agent 记忆持续写入 `memory.md`。  
+5. pulse 完成后将已注入消息标记为 `handled`；Agent 记忆持续写入 `mnemosyne/chronicles/{agent_id}.md`。  

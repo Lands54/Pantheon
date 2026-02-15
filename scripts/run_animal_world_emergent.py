@@ -7,7 +7,7 @@ This script only:
 2) enables autonomous simulation
 3) seeds one kickoff message per agent inbox
 
-After this, platform scheduler (api/server.py) owns all further execution.
+After this, platform scheduler (server.py) owns all further execution.
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def _agent_directive(agent_id: str, role: str) -> str:
 - 你可以自发决定下一步任务，不等待人类逐条指令。
 - 你只允许修改你自己领地 `projects/{PROJECT_ID}/agents/{agent_id}/` 下的代码与文件，不得越界。
 - 你可以通过私聊与他者协作协商模块接口；接口可用 HTTP、本地文件、消息协议或你们自选方案。
-- 达成双边/多边共识后，请调用 [[record_protocol(topic="...", relation="...", object="...", clause="...", counterparty="...")]] 记录协议。
+- 达成双边/多边共识后，请调用 [[register_contract(contract_json="...")]] 并让各方 [[commit_contract(...)]]。
 - 当你需要他者实现某模块时，优先通过 [[send_message(to_id="...", message="...")]] 协商。
 - 你可以用 run_command 在自己领地执行 Python 项目操作。
 """
@@ -59,7 +59,6 @@ def setup_project(reset: bool = True):
     proj.name = "Animal World Emergent"
     proj.active_agents = list(AGENTS)
     proj.simulation_enabled = True
-    proj.autonomous_parallel = True
     proj.autonomous_batch_size = len(AGENTS)
     proj.simulation_interval_min = 3
     proj.simulation_interval_max = 8
@@ -83,8 +82,9 @@ def setup_project(reset: bool = True):
     for agent in AGENTS:
         agent_dir = proj_root / "agents" / agent
         agent_dir.mkdir(parents=True, exist_ok=True)
-        (agent_dir / "agent.md").write_text(_agent_directive(agent, roles[agent]), encoding="utf-8")
-        (agent_dir / "memory.md").write_text("", encoding="utf-8")
+        profile = proj_root / "mnemosyne" / "agent_profiles" / f"{agent}.md"
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        profile.write_text(_agent_directive(agent, roles[agent]), encoding="utf-8")
 
 
 def seed_kickoff_messages():
@@ -109,7 +109,7 @@ def seed_kickoff_messages():
             "timestamp": now,
             "from": "High Overseer",
             "type": "seed",
-            "content": f"{MISSION}。{content} 达成协议后请 record_protocol。",
+            "content": f"{MISSION}。{content} 达成协议后请 register_contract + commit_contract。",
         }
         with inbox.open("a", encoding="utf-8") as f:
             f.write(json.dumps(msg, ensure_ascii=False) + "\n")
@@ -123,9 +123,8 @@ def main():
         "project_id": PROJECT_ID,
         "mode": "platform_autonomous",
         "simulation_enabled": True,
-        "autonomous_parallel": True,
         "autonomous_batch_size": len(AGENTS),
-        "next_step": "启动/保持 api/server.py 运行，平台将自动调度。",
+        "next_step": "启动/保持 server.py 运行，平台将自动调度。",
         "check_commands": [
             f"./temple.sh project switch {PROJECT_ID}",
             "./temple.sh check sheep",

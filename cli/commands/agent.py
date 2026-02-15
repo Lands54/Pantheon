@@ -8,7 +8,7 @@ from pathlib import Path
 def cmd_agent(args):
     """View or edit Agent directives."""
     pid = args.project or "default"
-    agent_file = Path(f"projects/{pid}/agents/{args.id}/agent.md")
+    agent_file = Path(f"projects/{pid}/mnemosyne/agent_profiles/{args.id}.md")
 
     if not agent_file.exists():
         print(f"❌ Being '{args.id}' not found in world '{pid}'.")

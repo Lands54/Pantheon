@@ -17,72 +17,6 @@ def _resolve_project(project_id: str | None) -> str:
 
 
 @tool
-def register_protocol(
-    name: str,
-    description: str,
-    caller_id: str,
-    provider_tool: str = "",
-    request_schema_json: str = "{\"type\":\"object\"}",
-    response_schema_json: str = "{\"type\":\"object\"}",
-    provider_type: str = "agent_tool",
-    provider_url: str = "",
-    provider_method: str = "POST",
-    project_id: str = "default",
-) -> str:
-    """Deprecated compatibility path. Prefer contract-first registration flow."""
-    try:
-        from gods.hermes import hermes_service
-        from gods.hermes.errors import HermesError
-        from gods.hermes.models import ProtocolSpec
-
-        pid = _resolve_project(project_id)
-        req_schema = json.loads(request_schema_json) if request_schema_json.strip() else {"type": "object"}
-        resp_schema = json.loads(response_schema_json) if response_schema_json.strip() else {"type": "object"}
-        if provider_type == "http":
-            if not provider_url.strip():
-                return "Protocol Error: provider_url is required for provider_type=http"
-            provider = {
-                "type": "http",
-                "project_id": pid,
-                "url": provider_url.strip(),
-                "method": (provider_method or "POST").upper(),
-            }
-        else:
-            if not allow_agent_tool_provider(pid):
-                return (
-                    "Protocol Error: agent_tool provider is disabled by policy for this project. "
-                    "Use provider_type=http or enable hermes_allow_agent_tool_provider."
-                )
-            if not provider_tool.strip():
-                return "Protocol Error: provider_tool is required for provider_type=agent_tool"
-            provider = {
-                "type": "agent_tool",
-                "project_id": pid,
-                "agent_id": caller_id,
-                "tool_name": provider_tool,
-            }
-
-        spec = ProtocolSpec(
-            name=name,
-            description=description,
-            mode="both",
-            provider=provider,
-            request_schema=req_schema,
-            response_schema=resp_schema,
-        )
-        hermes_service.register(pid, spec)
-        return (
-            f"Protocol registered: {name}\n"
-            "[DEPRECATED] register_protocol is compatibility-only. "
-            "Prefer register_contract with executable clauses."
-        )
-    except HermesError as e:
-        return f"Protocol Error: {e.code} - {e.message}"
-    except Exception as e:
-        return f"Protocol Error: {str(e)}"
-
-
-@tool
 def call_protocol(
     name: str,
     payload_json: str,
@@ -167,26 +101,6 @@ def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str 
         if not job:
             return json.dumps({"ok": False, "error": f"job not found: {job_id}"}, ensure_ascii=False)
         return json.dumps({"ok": True, "job": job.model_dump()}, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
-
-
-@tool
-def list_protocols(caller_id: str = "default", project_id: str = "default") -> str:
-    """Deprecated compatibility path. Prefer contract-list with commit status fields."""
-    try:
-        from gods.hermes import hermes_service
-
-        pid = _resolve_project(project_id)
-        rows = [p.model_dump() for p in hermes_service.list(pid)]
-        return json.dumps(
-            {
-                "deprecated": True,
-                "message": "Prefer contract-list for external orchestration and missing-committer checks.",
-                "protocols": rows,
-            },
-            ensure_ascii=False,
-        )
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 

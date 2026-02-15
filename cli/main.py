@@ -21,6 +21,7 @@ from cli.commands.protocol import cmd_protocol
 from cli.commands.mnemosyne import cmd_mnemosyne
 from cli.commands.runtime import cmd_runtime
 from cli.commands.detach import cmd_detach
+from cli.commands.context import cmd_context
 from cli.commands.pulse import cmd_pulse
 from cli.commands.inbox import cmd_inbox
 from cli.commands.project import cmd_project as cmd_project_v2
@@ -229,22 +230,6 @@ def main():
     # protocol (Hermes bus)
     p_protocol = subparsers.add_parser("protocol", help="Hermes protocol bus operations")
     proto_sub = p_protocol.add_subparsers(dest="subcommand")
-    proto_sub.add_parser("list", help="List registered protocols")
-    p_proto_register = proto_sub.add_parser("register", help="Register executable protocol")
-    p_proto_register.add_argument("--name", required=True)
-    p_proto_register.add_argument("--description", default="")
-    p_proto_register.add_argument("--mode", choices=["sync", "async", "both"], default="both")
-    p_proto_register.add_argument("--provider", choices=["agent_tool", "http"], default="http")
-    p_proto_register.add_argument("--owner-agent", default="", help="Routing owner agent id")
-    p_proto_register.add_argument("--agent", help="Provider agent id (agent_tool)")
-    p_proto_register.add_argument("--tool", help="Provider tool name (agent_tool)")
-    p_proto_register.add_argument("--url", help="Provider URL (http)")
-    p_proto_register.add_argument("--method", default="POST", help="Provider HTTP method (http)")
-    p_proto_register.add_argument("--request-schema", default='{\"type\":\"object\"}')
-    p_proto_register.add_argument("--response-schema", default='{\"type\":\"object\",\"required\":[\"result\"],\"properties\":{\"result\":{\"type\":\"string\"}}}')
-    p_proto_register.add_argument("--max-concurrency", type=int, default=2)
-    p_proto_register.add_argument("--rate-per-minute", type=int, default=60)
-    p_proto_register.add_argument("--timeout", type=int, default=30)
     p_proto_call = proto_sub.add_parser("call", help="Invoke protocol")
     p_proto_call.add_argument("--name", required=True)
     p_proto_call.add_argument("--mode", choices=["sync", "async"], default="sync")
@@ -339,6 +324,15 @@ def main():
     p_detach_logs = detach_sub.add_parser("logs", help="Show detach job log tail")
     p_detach_logs.add_argument("job_id")
 
+    # janus context observability
+    p_ctx = subparsers.add_parser("context", help="Janus context observability")
+    ctx_sub = p_ctx.add_subparsers(dest="subcommand")
+    p_ctx_preview = ctx_sub.add_parser("preview", help="Show latest context preview for one agent")
+    p_ctx_preview.add_argument("agent")
+    p_ctx_reports = ctx_sub.add_parser("reports", help="List context build reports for one agent")
+    p_ctx_reports.add_argument("agent")
+    p_ctx_reports.add_argument("--limit", type=int, default=20)
+
     # pulse queue operations
     p_pulse = subparsers.add_parser("pulse", help="Pulse queue operations")
     pulse_sub = p_pulse.add_subparsers(dest="subcommand")
@@ -419,6 +413,9 @@ def main():
     if args.command == "detach" and not args.subcommand:
         p_detach.print_help()
         sys.exit(0)
+    if args.command == "context" and not args.subcommand:
+        p_ctx.print_help()
+        sys.exit(0)
     if args.command == "pulse" and not args.subcommand:
         p_pulse.print_help()
         sys.exit(0)
@@ -435,6 +432,7 @@ def main():
     elif args.command == "mnemosyne": cmd_mnemosyne(args)
     elif args.command == "runtime": cmd_runtime(args)
     elif args.command == "detach": cmd_detach(args)
+    elif args.command == "context": cmd_context(args)
     elif args.command == "pulse": cmd_pulse(args)
     elif args.command == "inbox": cmd_inbox(args)
     elif args.command == "agent": cmd_agent(args)

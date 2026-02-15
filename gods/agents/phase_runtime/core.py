@@ -18,6 +18,7 @@ from gods.agents.tool_policy import SOCIAL_TOOLS, get_disabled_tools
 from gods.agents.debug_trace import PulseTraceLogger
 from gods.agents.runtime_policy import resolve_phase_strategy
 from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
+from gods.janus import janus_service, ContextBuildRequest
 from gods.agents.phase_runtime.policy import (
     AgentPhase,
     PhaseToolPolicy,
@@ -115,15 +116,24 @@ class AgentPhaseRuntime:
         """
         # Keep one shared context model while swapping phase-specific prompt blocks.
         phase_block = self._phase_prompt(phase, phase_order)
-        context = self.agent.build_context(
+        if hasattr(self.agent, "_render_tools_desc"):
+            tools_desc = self.agent._render_tools_desc()
+        else:
+            tools_desc = "\n".join(
+                [f"- [[{t.name}({', '.join(getattr(t, 'args', []))})]]: {getattr(t, 'description', '')}" for t in self.agent.get_tools()]
+            )
+        req = ContextBuildRequest(
+            project_id=self.agent.project_id,
+            agent_id=self.agent.agent_id,
             state=state,
             directives=simulation_directives,
             local_memory=local_memory,
-            inbox_content=inbox_msgs,
+            inbox_hint=inbox_msgs,
             phase_block=phase_block,
             phase_name=phase.name,
+            tools_desc=tools_desc,
         )
-        llm_messages = [SystemMessage(content=context)] + state.get("messages", [])[-8:]
+        llm_messages, _ = janus_service.build_llm_messages(req)
         response: AIMessage = self.agent.brain.think_with_tools(
             llm_messages,
             self.agent.get_tools(),

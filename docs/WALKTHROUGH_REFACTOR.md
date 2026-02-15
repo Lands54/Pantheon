@@ -96,7 +96,7 @@ python platform/workflow.py
 
 ### 长期愿景
 7. **真正的代码维护**：让 Gods 能够自主修复 bug、添加功能
-8. **自我进化**：Gods 可以修改自己的 `agent.md` 和工具集
+8. **自我进化**：Gods 可以修改自己的 `mnemosyne/agent_profiles/{agent}.md` 和工具集
 9. **分布式**：多台机器上运行不同的 Gods
 
 ---
@@ -114,8 +114,8 @@ python platform/workflow.py
 # 修改 initial_state["context"] 的值
 
 # 4. 查看 Agent 配置
-cat agents/genesis/agent.md
-cat agents/coder/agent.md
+cat projects/default/mnemosyne/agent_profiles/genesis.md
+cat projects/default/mnemosyne/agent_profiles/coder.md
 ```
 
 ---

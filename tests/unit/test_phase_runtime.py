@@ -4,12 +4,12 @@ import shutil
 
 from langchain_core.messages import AIMessage
 
-from gods.agents.phase_runtime import AgentPhaseRuntime, PhaseToolPolicy, _base_phases
+from gods.agents.phase_runtime import AgentPhaseRuntime, PhaseToolPolicy, base_phases
 from gods.config import runtime_config, ProjectConfig, AgentModelConfig
 
 
 def test_base_phases_match_new_state_machine():
-    phases = _base_phases()
+    phases = base_phases()
     assert [p.name for p in phases] == ["reason", "act", "observe"]
     assert "finalize" not in phases[1].allowed_tools
     assert phases[2].allowed_tools == ("finalize",)

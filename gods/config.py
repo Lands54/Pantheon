@@ -19,6 +19,9 @@ class AgentModelConfig(BaseModel):
     # Optional agent-level phase runtime overrides (fallback to project defaults when None).
     phase_mode_enabled: Optional[bool] = None
     phase_strategy: Optional[str] = None
+    # Optional agent-level context strategy overrides (fallback to project defaults when None).
+    context_strategy: Optional[str] = None
+    context_token_budget_total: Optional[int] = None
 
 class ProjectConfig(BaseModel):
     """
@@ -30,8 +33,6 @@ class ProjectConfig(BaseModel):
         "genesis": AgentModelConfig()
     }
     simulation_enabled: bool = False
-    # Deprecated (no-op): kept for compatibility, scheduler uses autonomous_batch_size.
-    autonomous_parallel: bool = True
     # 并行模式下每批最多同时触发的 Agent 数量
     autonomous_batch_size: int = 4
     simulation_interval_min: int = 10
@@ -53,6 +54,17 @@ class ProjectConfig(BaseModel):
     # Memory compression controls (full-read mode)
     memory_compact_trigger_chars: int = 200000
     memory_compact_keep_chars: int = 50000
+    # Janus context strategy controls
+    context_strategy: str = "structured_v1"
+    context_token_budget_total: int = 32000
+    context_budget_task_state: int = 4000
+    context_budget_observations: int = 12000
+    context_budget_inbox: int = 4000
+    context_budget_recent_messages: int = 12000
+    context_recent_message_limit: int = 50
+    context_observation_window: int = 30
+    context_include_inbox_status_hints: bool = True
+    context_write_build_report: bool = True
     # Agent model<->tool loop cap per pulse
     tool_loop_max: int = 8
     # Phase-runtime controls
@@ -119,7 +131,6 @@ class SystemConfig(BaseModel):
     """
     openrouter_api_key: str = ""
     current_project: str = "default"
-    enable_legacy_social_api: bool = False
     # project_id -> project settings
     projects: Dict[str, ProjectConfig] = {
         "default": ProjectConfig(name="Default World")
@@ -166,7 +177,6 @@ class SystemConfig(BaseModel):
                 new_cfg = cls(
                     openrouter_api_key=data.get("openrouter_api_key", ""),
                     current_project="default",
-                    enable_legacy_social_api=data.get("enable_legacy_social_api", False),
                     projects={"default": default_proj}
                 )
                 new_cfg.save() # Save the migrated version
@@ -192,10 +202,6 @@ def get_available_agents(project_id: str = None) -> List[str]:
         
     agents_dir = Path("projects") / project_id / "agents"
     if not agents_dir.exists():
-        # Fallback for old structure if project is default
-        if project_id == "default":
-            old_dir = Path("agents")
-            if old_dir.exists(): return [d.name for d in old_dir.iterdir() if d.is_dir()]
         return []
     return [d.name for d in agents_dir.iterdir() if d.is_dir()]
 

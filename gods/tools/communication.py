@@ -1,4 +1,4 @@
-"""Backward-compatible communication tool exports."""
+"""Communication tool exports."""
 from __future__ import annotations
 
 from gods.tools.comm_inbox import check_inbox, reset_inbox_guard
@@ -10,7 +10,6 @@ from gods.tools.comm_human import (
     abstain_from_synod,
     list_agents,
 )
-from gods.tools.comm_protocol import record_protocol
 
 __all__ = [
     "check_inbox",
@@ -20,6 +19,5 @@ __all__ = [
     "finalize",
     "post_to_synod",
     "abstain_from_synod",
-    "record_protocol",
     "list_agents",
 ]

@@ -78,7 +78,16 @@ def cmd_project(args):
                 print(f"🟢 Project started: {data.get('project_id')}")
                 print(f"   Current Project: {data.get('current_project')}")
             else:
-                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
+                detail = res.json().get("detail", "Unknown error")
+                if res.status_code == 503 and "Docker unavailable" in str(detail):
+                    print(f"❌ Failed to start project '{args.id}': {detail}")
+                    print("   Project has been auto-stopped for safety.")
+                    print("   Suggested next steps:")
+                    print("   1) Start Docker Desktop / docker daemon")
+                    print(f"   2) Retry: ./temple.sh project start {args.id}")
+                    print(f"   3) Or switch backend: ./temple.sh -p {args.id} config set command_executor local")
+                else:
+                    print(f"❌ Failed: {detail}")
         except Exception:
             print("❌ Server error.")
 

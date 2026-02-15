@@ -91,12 +91,11 @@
 ```bash
 # 1. 创建新 agent
 ./temple.sh project switch my_world  # 切换到你的项目
-cd projects/my_world/agents
-mkdir my_agent
-cd my_agent
+mkdir -p projects/my_world/agents/my_agent
+mkdir -p projects/my_world/mnemosyne/agent_profiles
 
-# 2. 编写 agent.md
-cat > agent.md << 'EOF'
+# 2. 编写 Agent Profile
+cat > projects/my_world/mnemosyne/agent_profiles/my_agent.md << 'EOF'
 # My Custom Agent
 
 You are a helpful assistant specialized in data analysis.
@@ -129,9 +128,9 @@ A: 检查以下几点：
 3. 服务器是否运行：`./server.sh`
 
 ### Q: 如何查看 Agent 的历史对话？
-A: 查看 agent 的 memory.md 文件：
+A: 查看 Mnemosyne chronicle 文件：
 ```bash
-cat projects/test_cli/agents/genesis/memory.md
+cat projects/test_cli/mnemosyne/chronicles/genesis.md
 ```
 
 ### Q: 如何更改 Agent 使用的模型？

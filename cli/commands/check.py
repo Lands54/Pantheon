@@ -28,7 +28,7 @@ def cmd_check(args):
         return
     
     # Read agent's memory
-    memory_file = agent_dir / "memory.md"
+    memory_file = Path(f"projects/{pid}/mnemosyne/chronicles/{agent_id}.md")
     
     print(f"\n📬 Checking {agent_id}'s activity in {pid}...\n")
 
@@ -166,4 +166,4 @@ def cmd_check(args):
         pass
     
     print(f"\n💡 Tip: Use './temple.sh confess {agent_id} \"your message\"' to send a message")
-    print(f"💡 Tip: View full memory with 'cat projects/{pid}/agents/{agent_id}/memory.md'")
+    print(f"💡 Tip: View full memory with 'cat projects/{pid}/mnemosyne/chronicles/{agent_id}.md'")

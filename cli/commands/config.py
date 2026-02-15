@@ -26,7 +26,6 @@ def cmd_config(args):
             print(f"\n⚙️  CONFIGURATION - Project: {pid}")
             print(f"\n🔑 API Key: {'SET' if data.get('has_openrouter_api_key') else 'NOT SET'}")
             print(f"\n🌍 Current Project: {data['current_project']}")
-            print(f"\n🧱 Legacy Social API (deprecated): {data.get('enable_legacy_social_api', False)}")
             
             print(f"\n🤖 Simulation:")
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
@@ -43,6 +42,17 @@ def cmd_config(args):
             print(f"   Tool Loop Max: {proj.get('tool_loop_max', 8)} per pulse")
             print(f"   Memory Compact Trigger Chars: {proj.get('memory_compact_trigger_chars', 200000)}")
             print(f"   Memory Compact Keep Chars: {proj.get('memory_compact_keep_chars', 50000)}")
+            print(f"\n🪞 Janus Context:")
+            print(f"   Strategy: {proj.get('context_strategy', 'structured_v1')}")
+            print(f"   Token Budget Total: {proj.get('context_token_budget_total', 32000)}")
+            print(f"   Budget Task State: {proj.get('context_budget_task_state', 4000)}")
+            print(f"   Budget Observations: {proj.get('context_budget_observations', 12000)}")
+            print(f"   Budget Inbox: {proj.get('context_budget_inbox', 4000)}")
+            print(f"   Budget Recent Messages: {proj.get('context_budget_recent_messages', 12000)}")
+            print(f"   Recent Message Limit: {proj.get('context_recent_message_limit', 50)}")
+            print(f"   Observation Window: {proj.get('context_observation_window', 30)}")
+            print(f"   Include Inbox Status Hints: {proj.get('context_include_inbox_status_hints', True)}")
+            print(f"   Write Build Report: {proj.get('context_write_build_report', True)}")
             print(f"\n🧠 Phase Runtime:")
             print(f"   Enabled: {proj.get('phase_mode_enabled', True)}")
             print(f"   Strategy: {proj.get('phase_strategy', 'strict_triad')}")
@@ -96,6 +106,10 @@ def cmd_config(args):
                     print(f"      Phase Strategy Override: {settings.get('phase_strategy')}")
                 if settings.get("phase_mode_enabled") is not None:
                     print(f"      Phase Enabled Override: {settings.get('phase_mode_enabled')}")
+                if settings.get("context_strategy") is not None:
+                    print(f"      Context Strategy Override: {settings.get('context_strategy')}")
+                if settings.get("context_token_budget_total") is not None:
+                    print(f"      Context Token Budget Override: {settings.get('context_token_budget_total')}")
                 disabled = settings.get('disabled_tools', [])
                 if disabled:
                     print(f"      Disabled Tools: {', '.join(disabled)}")
@@ -165,6 +179,16 @@ def cmd_config(args):
                 "detach_ttl_sec",
                 "detach_stop_grace_sec",
                 "detach_log_tail_chars",
+                "context_strategy",
+                "context_token_budget_total",
+                "context_budget_task_state",
+                "context_budget_observations",
+                "context_budget_inbox",
+                "context_budget_recent_messages",
+                "context_recent_message_limit",
+                "context_observation_window",
+                "context_include_inbox_status_hints",
+                "context_write_build_report",
             }:
                 if direct_key in {"queue_idle_heartbeat_sec", "pulse_event_inject_budget"}:
                     data["projects"][pid][direct_key] = int(args.value)
@@ -177,6 +201,13 @@ def cmd_config(args):
                     "detach_ttl_sec",
                     "detach_stop_grace_sec",
                     "detach_log_tail_chars",
+                    "context_token_budget_total",
+                    "context_budget_task_state",
+                    "context_budget_observations",
+                    "context_budget_inbox",
+                    "context_budget_recent_messages",
+                    "context_recent_message_limit",
+                    "context_observation_window",
                 }:
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
@@ -189,8 +220,15 @@ def cmd_config(args):
                     "docker_auto_stop_on_project_stop",
                     "docker_readonly_rootfs",
                     "detach_enabled",
+                    "context_include_inbox_status_hints",
+                    "context_write_build_report",
                 }:
                     data["projects"][pid][direct_key] = args.value.lower() == "true"
+                elif direct_key == "context_strategy":
+                    if args.value not in {"structured_v1"}:
+                        print("❌ context_strategy must be: structured_v1")
+                        return
+                    data["projects"][pid][direct_key] = args.value
                 elif direct_key == "command_executor":
                     if args.value not in {"docker", "local"}:
                         print("❌ command_executor must be one of: docker, local")
@@ -232,8 +270,6 @@ def cmd_config(args):
                     data["projects"][pid]["simulation_interval_min"] = int(args.value)
                 elif parts[1] == "max":
                     data["projects"][pid]["simulation_interval_max"] = int(args.value)
-                elif parts[1] == "parallel":
-                    data["projects"][pid]["autonomous_parallel"] = args.value.lower() == "true"
                 elif parts[1] == "batch":
                     data["projects"][pid]["autonomous_batch_size"] = int(args.value)
                 else:
@@ -251,6 +287,37 @@ def cmd_config(args):
                     data["projects"][pid]["memory_compact_keep_chars"] = int(args.value)
                 else:
                     print(f"❌ Unknown memory key: {parts[1]}")
+                    return
+            elif parts[0] == "context" and len(parts) >= 2:
+                if parts[1] == "strategy":
+                    if args.value not in {"structured_v1"}:
+                        print("❌ context.strategy must be: structured_v1")
+                        return
+                    data["projects"][pid]["context_strategy"] = args.value
+                elif parts[1] == "token_budget_total":
+                    data["projects"][pid]["context_token_budget_total"] = int(args.value)
+                elif parts[1] == "recent_message_limit":
+                    data["projects"][pid]["context_recent_message_limit"] = int(args.value)
+                elif parts[1] == "observation_window":
+                    data["projects"][pid]["context_observation_window"] = int(args.value)
+                elif parts[1] == "include_inbox_status_hints":
+                    data["projects"][pid]["context_include_inbox_status_hints"] = args.value.lower() == "true"
+                elif parts[1] == "write_build_report":
+                    data["projects"][pid]["context_write_build_report"] = args.value.lower() == "true"
+                elif parts[1] == "budget" and len(parts) >= 3:
+                    if parts[2] == "task_state":
+                        data["projects"][pid]["context_budget_task_state"] = int(args.value)
+                    elif parts[2] == "observations":
+                        data["projects"][pid]["context_budget_observations"] = int(args.value)
+                    elif parts[2] == "inbox":
+                        data["projects"][pid]["context_budget_inbox"] = int(args.value)
+                    elif parts[2] == "recent_messages":
+                        data["projects"][pid]["context_budget_recent_messages"] = int(args.value)
+                    else:
+                        print(f"❌ Unknown context budget key: {parts[2]}")
+                        return
+                else:
+                    print(f"❌ Unknown context key: {parts[1]}")
                     return
 
             elif parts[0] == "tools" and len(parts) >= 2:
@@ -412,13 +479,6 @@ def cmd_config(args):
                     print(f"❌ Unknown executor key: {parts[1]}")
                     return
 
-            elif parts[0] == "legacy" and len(parts) >= 2:
-                if parts[1] == "social_api":
-                    data["enable_legacy_social_api"] = args.value.lower() == "true"
-                else:
-                    print(f"❌ Unknown legacy key: {parts[1]}")
-                    return
-            
             elif parts[0] == "agent" and len(parts) >= 3:
                 agent_id = parts[1]
                 setting = parts[2]
@@ -437,6 +497,13 @@ def cmd_config(args):
                     data["projects"][pid]["agent_settings"][agent_id]["phase_strategy"] = args.value
                 elif setting == "phase_enabled":
                     data["projects"][pid]["agent_settings"][agent_id]["phase_mode_enabled"] = args.value.lower() == "true"
+                elif setting == "context_strategy":
+                    if args.value not in ("structured_v1",):
+                        print("❌ agent.<id>.context_strategy must be: structured_v1")
+                        return
+                    data["projects"][pid]["agent_settings"][agent_id]["context_strategy"] = args.value
+                elif setting == "context_token_budget_total":
+                    data["projects"][pid]["agent_settings"][agent_id]["context_token_budget_total"] = int(args.value)
                 elif setting == "disabled_tools":
                     raw = str(args.value or "").strip()
                     if raw.lower() in {"", "none", "null", "[]"}:
@@ -502,7 +569,6 @@ def cmd_config(args):
                 print("  simulation.enabled (true/false)")
                 print("  simulation.min (seconds)")
                 print("  simulation.max (seconds)")
-                print("  simulation.parallel (true/false) [deprecated/no-op]")
                 print("  simulation.batch (number)")
                 print("  queue_idle_heartbeat_sec (seconds)")
                 print("  pulse_event_inject_budget (number)")
@@ -513,6 +579,16 @@ def cmd_config(args):
                 print("  memory.keep (message count)")
                 print("  memory.compact_trigger (chars)")
                 print("  memory.compact_keep (chars)")
+                print("  context.strategy (structured_v1)")
+                print("  context.token_budget_total (tokens)")
+                print("  context.budget.task_state (tokens)")
+                print("  context.budget.observations (tokens)")
+                print("  context.budget.inbox (tokens)")
+                print("  context.budget.recent_messages (tokens)")
+                print("  context.recent_message_limit (count)")
+                print("  context.observation_window (count)")
+                print("  context.include_inbox_status_hints (true/false)")
+                print("  context.write_build_report (true/false)")
                 print("  tools.loop_max (number)")
                 print("  pulse.idle_heartbeat (seconds)")
                 print("  pulse.inject_budget (number)")
@@ -556,6 +632,16 @@ def cmd_config(args):
                 print("  detach_ttl_sec (seconds)")
                 print("  detach_stop_grace_sec (seconds)")
                 print("  detach_log_tail_chars (int)")
+                print("  context_strategy (structured_v1)")
+                print("  context_token_budget_total (tokens)")
+                print("  context_budget_task_state (tokens)")
+                print("  context_budget_observations (tokens)")
+                print("  context_budget_inbox (tokens)")
+                print("  context_budget_recent_messages (tokens)")
+                print("  context_recent_message_limit (count)")
+                print("  context_observation_window (count)")
+                print("  context_include_inbox_status_hints (true/false)")
+                print("  context_write_build_report (true/false)")
                 print("  executor.command (docker|local)")
                 print("  docker.enabled (true/false)")
                 print("  docker.image (image tag)")
@@ -573,8 +659,9 @@ def cmd_config(args):
                 print("  detach.ttl (seconds)")
                 print("  detach.stop_grace (seconds)")
                 print("  detach.log_tail_chars (int)")
-                print("  legacy.social_api (true/false)")
                 print("  agent.<agent_id>.model (model name)")
+                print("  agent.<agent_id>.context_strategy (structured_v1)")
+                print("  agent.<agent_id>.context_token_budget_total (tokens)")
                 print("  agent.<agent_id>.phase_strategy (strict_triad|iterative_action|freeform)")
                 print("  agent.<agent_id>.phase_enabled (true/false)")
                 print("  agent.<agent_id>.disabled_tools (comma-separated, e.g. check_inbox,send_message)")

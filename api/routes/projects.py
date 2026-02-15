@@ -66,6 +66,22 @@ async def get_report(project_id: str):
     return project_service.get_report(project_id)
 
 
+@router.get("/{project_id}/context/preview")
+async def get_context_preview(project_id: str, agent_id: str):
+    """Get latest Janus context build preview for one agent."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_preview(project_id, str(agent_id).strip())
+
+
+@router.get("/{project_id}/context/reports")
+async def get_context_reports(project_id: str, agent_id: str, limit: int = 20):
+    """List Janus context build reports for one agent."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_reports(project_id, str(agent_id).strip(), limit=max(1, min(limit, 500)))
+
+
 @router.get("/{project_id}/pulse/queue")
 async def get_pulse_queue(project_id: str, agent_id: str = "", status: str = "queued", limit: int = 100):
     """Inspect project pulse queue events (debug)."""

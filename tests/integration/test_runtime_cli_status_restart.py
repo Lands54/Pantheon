@@ -2,7 +2,7 @@ from argparse import Namespace
 
 from fastapi.testclient import TestClient
 
-from api.server import app
+from api.app import app
 from cli.commands.runtime import cmd_runtime
 
 

@@ -14,7 +14,7 @@
 - `build_context()` 中硬编码结构块：
   - `# IDENTITY`
   - `# SACRED INBOX (Incoming Private Revelations)`
-  - `# YOUR CHRONICLES (memory.md)`
+  - `# YOUR CHRONICLES (Mnemosyne Chronicle)`
   - `# TERRITORY`
   - `# GLOBAL RECORD & SYNOD HISTORY`
   - `# TASK (Current Universal Intent)`
@@ -23,10 +23,7 @@
 
 ## 2) 摘要器提示词
 
-文件：`gods/workflow.py`
-
-- `summarize_conversation()` 中硬编码 prompt：
-  - `Summarize the following theological history for project ...`
+当前摘要逻辑由 Agent 运行时与 Mnemosyne 写档驱动，不再通过 `gods/workflow.py`。
 
 ## 3) 通信路由注入上下文
 
@@ -50,7 +47,7 @@
 文件：`scripts/run_animal_world_emergent.py`
 
 - `MISSION` 固定文本
-- `_agent_directive()` 中完整自治原则为硬编码（含边界、协商、record_protocol、收件箱规则、产出约束）
+- `_agent_directive()` 中完整自治原则为硬编码（含边界、协商、contract、收件箱规则、产出约束）
 - `run_emergent_rounds()` 中轮次上下文：
   - `SACRED DECREE ROUND {i}: ...`
   - `EXISTENCE_PULSE ROUND {i}: ...`

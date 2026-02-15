@@ -16,7 +16,6 @@ if str(ROOT) not in sys.path:
 
 from gods.config import runtime_config, ProjectConfig, AgentModelConfig
 from gods.protocols import build_knowledge_graph
-from gods.tools.communication import record_protocol
 from gods.tools.filesystem import write_file
 from gods.tools.execution import run_command
 
@@ -154,12 +153,14 @@ def ensure_project_and_agents():
     for agent in AGENTS:
         agent_dir = Path("projects") / PROJECT_ID / "agents" / agent
         agent_dir.mkdir(parents=True, exist_ok=True)
+        profile = Path("projects") / PROJECT_ID / "mnemosyne" / "agent_profiles" / f"{agent}.md"
+        profile.parent.mkdir(parents=True, exist_ok=True)
         directive = (
             f"# Agent: {agent}\n\n"
             f"## 总职责\n{GLOBAL_MISSION}\n\n"
             f"## 自身职责\n{AGENT_DIRECTIVES[agent]}\n"
         )
-        (agent_dir / "agent.md").write_text(directive, encoding="utf-8")
+        profile.write_text(directive, encoding="utf-8")
 
 
 def write_distributed_logic():
@@ -186,30 +187,6 @@ def write_distributed_logic():
     )
     if "inscribed" not in res:
         raise RuntimeError(f"写入模拟器失败: {res}")
-
-
-def record_protocols():
-    entries = [
-        ("sheep", "生态平衡协议", "consumes", "grass", "羊仅在草量充足时扩张，以避免草场崩溃", "grass"),
-        ("tiger", "生态平衡协议", "preys_on", "sheep", "虎捕食强度随羊群规模调整，避免过猎", "sheep"),
-        ("grass", "生态平衡协议", "depends_on", "soil", "草生长速率受土壤养分约束", "ground"),
-        ("ground", "生态平衡协议", "regulates", "ecosystem", "地面负责养分循环与全局稳定策略", "all"),
-    ]
-    for subject, topic, relation, obj, clause, counterparty in entries:
-        res = record_protocol.invoke(
-            {
-                "topic": topic,
-                "relation": relation,
-                "object": obj,
-                "clause": clause,
-                "counterparty": counterparty,
-                "status": "agreed",
-                "caller_id": subject,
-                "project_id": PROJECT_ID,
-            }
-        )
-        if ("Protocol recorded" not in res) and ("Protocol Deprecated" not in res):
-            raise RuntimeError(f"记录协议失败: {res}")
 
 
 def run_simulation():
@@ -249,7 +226,6 @@ def build_graph():
 def main():
     ensure_project_and_agents()
     write_distributed_logic()
-    record_protocols()
     sim_result = run_simulation()
     final_state, report_path = verify_outputs()
     graph, graph_path = build_graph()

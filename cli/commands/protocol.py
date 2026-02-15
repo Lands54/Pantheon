@@ -18,78 +18,8 @@ def _current_project(base_url: str, project_arg: str | None) -> str:
 def cmd_protocol(args):
     base_url = get_base_url()
     pid = _current_project(base_url, getattr(args, "project", None))
-    cfg = requests.get(f"{base_url}/config", timeout=5).json()
-    proj = (cfg.get("projects") or {}).get(pid, {})
 
-    if args.subcommand == "list":
-        res = requests.get(f"{base_url}/hermes/list", params={"project_id": pid}, timeout=10)
-        data = res.json()
-        rows = data.get("protocols", [])
-        print(f"📡 Hermes Protocols - Project: {pid}")
-        if not rows:
-            print("(none)")
-            return
-        for row in rows:
-            provider = row.get("provider", {})
-            print(f"- {row.get('name')} [{row.get('status')}]")
-            ptype = provider.get("type", "agent_tool")
-            if ptype == "http":
-                print(f"  provider=http:{provider.get('method', 'POST')} {provider.get('url')}")
-            else:
-                print(f"  provider=agent_tool:{provider.get('agent_id')}.{provider.get('tool_name')}")
-
-    elif args.subcommand == "register":
-        print("⚠️ DEPRECATED: protocol register is kept for compatibility.")
-        print("   Recommended flow: contract-register + executable clauses + contract-commit.")
-        req_schema = json.loads(args.request_schema) if args.request_schema else {"type": "object"}
-        resp_schema = json.loads(args.response_schema) if args.response_schema else {"type": "object", "required": ["result"], "properties": {"result": {"type": "string"}}}
-        provider_type = args.provider
-        if provider_type == "agent_tool":
-            if not proj.get("hermes_allow_agent_tool_provider", False):
-                print("❌ agent_tool provider is disabled by policy for this project. Use --provider http.")
-                return
-            if not args.agent or not args.tool:
-                print("❌ --agent and --tool are required for provider=agent_tool")
-                return
-            provider = {
-                "type": "agent_tool",
-                "project_id": pid,
-                "agent_id": args.agent,
-                "tool_name": args.tool,
-            }
-        else:
-            if not args.url:
-                print("❌ --url is required for provider=http")
-                return
-            provider = {
-                "type": "http",
-                "project_id": pid,
-                "url": args.url,
-                "method": (args.method or "POST").upper(),
-            }
-
-        spec = {
-            "name": args.name,
-            "description": args.description,
-            "mode": args.mode,
-            "owner_agent": args.owner_agent,
-            "provider": provider,
-            "request_schema": req_schema,
-            "response_schema": resp_schema,
-            "limits": {
-                "max_concurrency": args.max_concurrency,
-                "rate_per_minute": args.rate_per_minute,
-                "timeout_sec": args.timeout,
-            },
-            "status": "active",
-        }
-        res = requests.post(f"{base_url}/hermes/register", json={"project_id": pid, "spec": spec}, timeout=15)
-        if res.status_code != 200:
-            print(f"❌ Register failed: {res.text}")
-            return
-        print(f"✅ Protocol registered: {args.name} in {pid}")
-
-    elif args.subcommand == "clause-template":
+    if args.subcommand == "clause-template":
         req_schema = json.loads(args.request_schema) if args.request_schema else {"type": "object"}
         resp_schema = json.loads(args.response_schema) if args.response_schema else {"type": "object"}
         owner = (args.owner_agent or "").strip()

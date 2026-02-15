@@ -83,7 +83,7 @@ Pantheon uses a "Pulse" to wake up agents. A Pulse is a single execution cycle w
 Event behavior:
 - Inbox delivery is event-driven (`inbox_events.jsonl` + `pulse_events.jsonl`).
 - Empty queue gets a configurable idle heartbeat (`queue_idle_heartbeat_sec`, default `60`).
-- `check_inbox` is retained as debug/audit fallback and is disabled by default.
+- `check_inbox` is reserved for debug/audit and is disabled by default.
 
 ---
 
@@ -107,7 +107,7 @@ The `temple.sh` script is your divine scepter for controlling the simulation.
 
 You can configure how agents think during a Pulse:
 
-- **`strict_triad`**: The classic "Reason -> Act -> Stop" loop. Safe and predictable.
+- **`strict_triad`**: The standard "Reason -> Act -> Stop" loop. Safe and predictable.
 - **`iterative_action`**: Allows agents to chain multiple actions in one thought process.
 - **`freeform`** *(Experimental)*: Unconstrained loop until the agent decides to stop.
 
@@ -123,7 +123,7 @@ You can configure how agents think during a Pulse:
 
 ### Hermes Protocol Bus (v0.1)
 
-Pantheon now includes **Hermes**, a project-scoped protocol execution bus:
+Pantheon now includes **Hermes**, a project-scoped contract/protocol execution bus:
 
 - Protocol registry per project (`projects/{project_id}/protocols/registry.json`)
 - Sync/Async invocation
@@ -138,13 +138,6 @@ Security default:
 Example:
 
 ```bash
-# Register protocol
-./temple.sh -p demo_world protocol register \
-  --name grass.scan \
-  --provider agent_tool \
-  --agent grass \
-  --tool list_dir
-
 # Invoke sync
 ./temple.sh -p demo_world protocol call \
   --name grass.scan \
@@ -157,15 +150,6 @@ Example:
   --name grass.scan \
   --caller ground \
   --mode async
-
-# Register HTTP protocol (localhost only)
-./temple.sh -p demo_world protocol register \
-  --name bridge.echo \
-  --provider http \
-  --url http://127.0.0.1:9000/echo \
-  --method POST \
-  --request-schema '{"type":"object","required":["msg"],"properties":{"msg":{"type":"string"}}}' \
-  --response-schema '{"type":"object","required":["result","status_code"],"properties":{"status_code":{"type":"integer"},"result":{"type":"object"}}}'
 
 # Route by target agent + function id (Hermes(agent,function,payload))
 ./temple.sh -p demo_world protocol route \
@@ -233,7 +217,7 @@ docker build -t gods-agent-base:py311 docker/agent-base
 # Reconcile containers with active agents
 ./temple.sh -p demo_world runtime reconcile
 
-# Fallback to host execution backend
+# Switch to host execution backend
 ./temple.sh -p demo_world config set command_executor local
 ```
 
@@ -282,7 +266,6 @@ Pantheon/
 
 - **Sandboxing**: Agents are restricted to their project directories, but `run_command` is powerful. Review code before running purely autonomous loops.
 - **API Keys**: Stored in local `config.json` (git-ignored). `GET /config` returns redacted key only.
-- **Deprecated Compatibility**: `legacy social api` and `simulation.parallel` remain for compatibility and are disabled/no-op by default.
 - **Resource Limits**: The Pulse system prevents infinite loops by default, requiring explicit "wake up" signals or cron-like schedules.
 
 ---

@@ -10,7 +10,9 @@ def test_agent_memory_compaction_rolls_old_content():
     agent_id = "tester"
     agent_dir = Path("projects") / project_id / "agents" / agent_id
     agent_dir.mkdir(parents=True, exist_ok=True)
-    (agent_dir / "agent.md").write_text("# tester\ncompact test", encoding="utf-8")
+    profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text("# tester\ncompact test", encoding="utf-8")
 
     old_project = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
@@ -23,13 +25,13 @@ def test_agent_memory_compaction_rolls_old_content():
 
     try:
         agent = GodAgent(agent_id=agent_id, project_id=project_id)
-        initial_mem = (agent_dir / "memory.md").read_text(encoding="utf-8")
+        initial_mem = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
         assert initial_mem.startswith("### SYSTEM_SEED")
         for i in range(180):
             agent._append_to_memory(f"entry {i}: " + ("x" * 180))
 
-        mem_path = agent_dir / "memory.md"
-        archive_path = agent_dir / "memory_archive.md"
+        mem_path = Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md"
+        archive_path = Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}_archive.md"
         mem_text = mem_path.read_text(encoding="utf-8")
 
         assert "MEMORY_COMPACTED" in mem_text

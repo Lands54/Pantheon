@@ -5,7 +5,7 @@ Project: $project_id
 # SACRED INBOX (Incoming Private Revelations)
 $inbox_content
 
-# YOUR CHRONICLES (memory.md)
+# YOUR CHRONICLES (Mnemosyne Chronicle)
 $local_memory
 
 # TERRITORY

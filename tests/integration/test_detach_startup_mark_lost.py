@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from api.server import app
+from api.app import app
 from gods.runtime.detach.models import DetachStatus
 from gods.runtime.detach.service import startup_mark_lost
 from gods.runtime.detach.store import create_job, get_job, transition_job

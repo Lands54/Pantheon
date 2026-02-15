@@ -56,24 +56,6 @@ TOOLS = [
             "required": ["from_id", "to_id", "message"],
         },
     },
-    {
-        "name": "record_protocol",
-        "description": "Record a protocol clause for knowledge graph extraction.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "subject": {"type": "string"},
-                "topic": {"type": "string"},
-                "relation": {"type": "string"},
-                "object": {"type": "string"},
-                "clause": {"type": "string"},
-                "counterparty": {"type": "string"},
-                "status": {"type": "string"},
-                "project_id": {"type": "string"},
-            },
-            "required": ["subject", "topic", "relation", "object", "clause"],
-        },
-    },
 ]
 
 
@@ -126,8 +108,6 @@ def _call_gateway(base_url: str, name: str, args: dict[str, Any]) -> str:
         r = requests.post(f"{base_url}/tool-gateway/check_inbox", json=args, timeout=20)
     elif name == "send_message":
         r = requests.post(f"{base_url}/tool-gateway/send_message", json=args, timeout=20)
-    elif name == "record_protocol":
-        r = requests.post(f"{base_url}/tool-gateway/record_protocol", json=args, timeout=20)
     else:
         raise ValueError(f"Unknown tool: {name}")
     if r.status_code >= 400:

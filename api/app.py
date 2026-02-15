@@ -13,7 +13,6 @@ from fastapi.staticfiles import StaticFiles
 
 from api.routes import agents, communication, config, hermes, mnemosyne, projects, tool_gateway
 from api.services import simulation_service
-from gods.config import runtime_config
 from gods.runtime.detach import startup_mark_lost_all_projects
 
 logging.basicConfig(level=logging.INFO)
@@ -28,11 +27,6 @@ app.include_router(communication.router)
 app.include_router(tool_gateway.router)
 app.include_router(hermes.router)
 app.include_router(mnemosyne.router)
-if runtime_config.enable_legacy_social_api:
-    from api.routes import legacy_social
-
-    app.include_router(legacy_social.router)
-    logger.info("Legacy social API routes enabled (/broadcast, /prayers/check).")
 
 
 @app.on_event("startup")

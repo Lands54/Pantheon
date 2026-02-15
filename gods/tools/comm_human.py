@@ -36,7 +36,7 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
 
         weights = get_priority_weights(project_id)
         trigger = is_inbox_event_enabled(project_id)
-        enqueue_message(
+        queued = enqueue_message(
             project_id=project_id,
             agent_id=to_id,
             sender=caller_id,
@@ -45,7 +45,12 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
             trigger_pulse=trigger,
             pulse_priority=int(weights.get("inbox_event", 100)),
         )
-        return f"Revelation sent to {to_id}"
+        return (
+            f"Revelation sent to {to_id}. "
+            f"event_id={queued.get('inbox_event_id', '')}, "
+            f"pulse_triggered={str(bool(trigger)).lower()}, "
+            "initial_state=pending"
+        )
     except Exception as e:
         return format_comm_error(
             "Communication Error",
@@ -112,7 +117,7 @@ def abstain_from_synod(reason: str, caller_id: str = "default") -> str:
 
 @tool
 def list_agents(caller_id: str, project_id: str = "default") -> str:
-    """List all agents in current project with short role summary from agent.md."""
+    """List all agents in current project with short role summary from Mnemosyne profiles."""
     try:
         agents_root = Path("projects") / project_id / "agents"
         if not agents_root.exists():
@@ -121,7 +126,7 @@ def list_agents(caller_id: str, project_id: str = "default") -> str:
         results = []
         for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
             agent_id = agent_dir.name
-            md_path = agent_dir / "agent.md"
+            md_path = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
             role = "No role summary."
             if md_path.exists():
                 text = md_path.read_text(encoding="utf-8").strip()
@@ -149,7 +154,7 @@ def list_agents(caller_id: str, project_id: str = "default") -> str:
         return format_comm_error(
             "Communication Error",
             str(e),
-            "Verify project agents directory exists and agent.md files are readable.",
+            "Verify project agents directory exists and mnemosyne profiles are readable.",
             caller_id,
             project_id,
         )

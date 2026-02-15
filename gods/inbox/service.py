@@ -54,8 +54,27 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
         lines.append(
             f"- [{item.msg_type}] from={item.sender} at={item.created_at:.3f} id={item.event_id}: {item.content}"
         )
-    text = "[Event Inbox Delivery]\n" + "\n".join(lines)
-    return text, [item.event_id for item in events]
+    ids = [item.event_id for item in events]
+    text = (
+        "[Event Inbox Delivery]\n"
+        + "\n".join(lines)
+        + "\n\n[Inbox Status]\n"
+        + f"- Delivered this pulse: {', '.join(ids)}\n"
+        + "- These delivered messages will be marked handled automatically after this pulse.\n"
+        + "- Avoid repeated confirmation polling; proceed with execution."
+    )
+    try:
+        from gods.janus import record_inbox_digest
+
+        record_inbox_digest(
+            project_id=project_id,
+            agent_id=agent_id,
+            event_ids=ids,
+            summary=f"Delivered {len(ids)} inbox message(s) this pulse.",
+        )
+    except Exception:
+        pass
+    return text, ids
 
 
 def ack_handled(project_id: str, event_ids: list[str]):

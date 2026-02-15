@@ -1,9 +1,9 @@
 # Gods Platform 架构图谱（Mermaid 多颗粒度）
 
-> 兼容性结论：当前保持向后兼容。  
-> - Project 级 `phase_strategy/phase_mode_enabled` 仍可用。  
-> - Agent 级覆盖仅在显式设置 `agent.<id>.phase_strategy` 或 `agent.<id>.phase_enabled` 时生效。  
-> - `api/server.py` 保留兼容导出，推荐新入口 `server.py -> api.app:app`。
+> 当前结论：系统采用单轨实现。  
+> - Project 级 `phase_strategy/phase_mode_enabled` 生效。  
+> - Agent 级覆盖在显式设置 `agent.<id>.phase_strategy` 或 `agent.<id>.phase_enabled` 时生效。  
+> - 服务入口为 `server.py -> api.app:app`。
 
 ## 1. 系统全景（L0）
 ```mermaid
@@ -100,9 +100,9 @@ sequenceDiagram
 flowchart TD
     Start["GodAgent.process()"] --> Pol["RuntimePolicy resolver"]
     Pol --> Mode["phase_mode_enabled?"]
-    Mode -->|false| Legacy["Legacy loop (model<>tool)"]
+    Mode -->|false| Free["Freeform loop (model<>tool)"]
     Mode -->|true| Strat["phase_strategy"]
-    Strat -->|freeform| Legacy
+    Strat -->|freeform| Free
     Strat -->|strict_triad/iterative_action| PR["AgentPhaseRuntime.run()"]
 ```
 
@@ -222,19 +222,18 @@ flowchart TB
     Root --> Mnemo["mnemosyne/{agent|human|system}/"]
     Root --> SQL["memory.sqlite"]
 
-    Agents --> A1["agent.md"]
-    Agents --> A2["memory.md"]
-    Agents --> A3["memory_archive.md"]
+    Root --> Mn["mnemosyne/*"]
+    Mn --> A1["agent_profiles/{agent}.md"]
+    Mn --> A2["chronicles/{agent}.md"]
+    Mn --> A3["chronicles/{agent}_archive.md"]
     Agents --> A4["runtime_state.json"]
 ```
 
-## 15. 兼容层关系图
+## 15. 启动入口关系图
 ```mermaid
 flowchart LR
-    Old["legacy import: api.server"] --> Compat["api/server.py (compat wrapper)"]
-    Compat --> App["api.app:app"]
-    Compat --> Sim["simulation_service.pause_all_projects_on_startup"]
-    New["recommended launcher: server.py"] --> App
+    Root["server.py"] --> App["api.app:app"]
+    App --> Sim["simulation_service.pause_all_projects_on_startup"]
 ```
 
 ## 16. Agent 间交互方案（消息 + 协议双通道）
@@ -247,7 +246,7 @@ flowchart TD
     B --> Inbox["check_inbox tool"]
     Inbox --> Decision["Reason/Act/Observe decision"]
 
-    A --> Prot["register_protocol / contract-register"]
+    A --> Prot["contract-register / contract-commit"]
     Prot --> Hermes["Hermes registry/contracts"]
     B --> Call["HermesClient invoke/route"]
     Call --> Hermes
@@ -260,7 +259,7 @@ flowchart TD
 sequenceDiagram
     participant AG as "GodAgent"
     participant BR as "GodBrain"
-    participant RT as "PhaseRuntime / LegacyLoop"
+    participant RT as "PhaseRuntime / FreeformLoop"
     participant TL as "Tool Layer (gods.tools)"
     participant FS as "Project Filesystem"
 
@@ -295,8 +294,7 @@ stateDiagram-v2
     Draft --> Active: "register (status=active)"
     Active --> Active: "commit by agents"
     Active --> Active: "resolve obligations"
-    Active --> Deprecated: "register new version / deprecate old"
-    Deprecated --> Disabled: "manual disable (policy)"
+    Active --> Disabled: "manual disable (policy)"
     Disabled --> [*]
 ```
 
@@ -317,7 +315,7 @@ flowchart TD
 flowchart TD
     Resolve["resolve contract"] --> Plan["agent gets obligations list"]
     Plan --> Impl["agent implements function / endpoint"]
-    Impl --> Proto["register_protocol(name, provider)"]
+    Impl --> Proto["contract-register + contract-commit"]
     Proto --> Invoke["other agent invoke/route by protocol"]
     Invoke --> Audit["invocations.jsonl + job logs"]
     Audit --> Report["project report + mnemosyne archive"]
@@ -348,10 +346,6 @@ sequenceDiagram
     ground->>grass: "send_message: propose ecosystem protocol"
     ground->>sheep: "send_message: request sheep obligations"
     ground->>tiger: "send_message: request tiger obligations"
-
-    grass->>hermes: "register_protocol(grass.*)"
-    sheep->>hermes: "register_protocol(sheep.*)"
-    tiger->>hermes: "register_protocol(tiger.*)"
 
     ground->>hermes: "contract-register(eco.protocol)"
     grass->>hermes: "contract-commit"
@@ -393,7 +387,7 @@ flowchart LR
     end
 
     subgraph Proto["协议通道 (Hermes)"]
-      P1["register_protocol"] --> P2["invoke/route"]
+      P1["contract-register/commit"] --> P2["invoke/route"]
       P2 --> P3["result + invocations.jsonl + jobs"]
     end
 
@@ -404,7 +398,7 @@ flowchart LR
 ## 26. 动物世界专项：观测与复盘
 ```mermaid
 flowchart TD
-    Run["animal_world run"] --> Log1["agents/*/memory.md"]
+    Run["animal_world run"] --> Log1["mnemosyne/chronicles/*.md"]
     Run --> Log2["protocols/invocations.jsonl"]
     Run --> Log3["mnemosyne/human entries"]
 
