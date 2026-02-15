@@ -138,6 +138,7 @@ def _markdown_from_report(report: dict[str, Any]) -> str:
 
 
 def build_project_report(project_id: str, write_mirror: bool = True) -> dict[str, Any]:
+    # Report aggregates only project-local facts (protocol logs, contracts, runtime leases, archives).
     protocol_rows = hermes_store.load_registry(project_id).get("protocols", [])
     contract_rows = hermes_store.load_contracts(project_id).get("contracts", [])
     invocation_rows = _load_jsonl(hermes_store.invocations_path(project_id))
@@ -176,6 +177,7 @@ def build_project_report(project_id: str, write_mirror: bool = True) -> dict[str
         "md": str(md_path),
     }
     if write_mirror:
+        # Optional global mirror for quick human browsing across projects.
         mirror = Path("reports") / f"project_{project_id}_latest.md"
         mirror.parent.mkdir(parents=True, exist_ok=True)
         mirror.write_text(md_text, encoding="utf-8")

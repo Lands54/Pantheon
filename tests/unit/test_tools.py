@@ -3,9 +3,13 @@ Unit Tests for Gods Tools
 """
 import pytest
 from pathlib import Path
+import json
+import shutil
 from gods.tools.filesystem import validate_path
 from gods.tools.filesystem import list_dir
 from gods.tools.filesystem import read_file, write_file
+from gods.tools.hermes import register_contract, list_contracts
+from gods.config import runtime_config, ProjectConfig
 
 
 def test_validate_path_within_territory(tmp_path):
@@ -109,3 +113,55 @@ def test_read_file_missing_has_actionable_hint():
     assert "not found" in out
     assert "Suggested next step:" in out
     assert "try 'models.py'" in out or "found similarly named files" in out
+
+
+def test_list_contracts_shows_title_and_description():
+    project_id = "unit_contract_list"
+    caller_id = "tester"
+    runtime_config.projects[project_id] = ProjectConfig()
+    try:
+        contract = {
+            "title": "Library Contract",
+            "version": "1.0.0",
+            "description": "Manage catalog and circulation responsibilities.",
+            "submitter": caller_id,
+            "committers": [caller_id],
+            "default_obligations": [
+                {
+                    "id": "health_check",
+                    "summary": "health check endpoint",
+                    "provider": {
+                        "type": "http",
+                        "url": "http://127.0.0.1:1/health",
+                        "method": "GET",
+                    },
+                    "io": {
+                        "request_schema": {"type": "object"},
+                        "response_schema": {"type": "object"},
+                    },
+                    "runtime": {"mode": "sync", "timeout_sec": 3},
+                }
+            ],
+            "obligations": {},
+        }
+        reg = register_contract.invoke(
+            {
+                "contract_json": json.dumps(contract, ensure_ascii=False),
+                "caller_id": caller_id,
+                "project_id": project_id,
+            }
+        )
+        assert '"ok": true' in reg.lower()
+
+        listed = list_contracts.invoke({"caller_id": caller_id, "project_id": project_id})
+        data = json.loads(listed)
+        assert data["ok"] is True
+        assert data["contracts"]
+        row = data["contracts"][0]
+        assert row["title"] == "Library Contract"
+        assert "catalog and circulation" in row["description"]
+    finally:
+        runtime_config.projects.pop(project_id, None)
+        proj_dir = Path("projects") / project_id
+        if proj_dir.exists():
+            shutil.rmtree(proj_dir)

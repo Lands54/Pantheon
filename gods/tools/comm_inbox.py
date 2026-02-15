@@ -42,6 +42,7 @@ def reset_inbox_guard(caller_id: str, project_id: str):
 def check_inbox(caller_id: str, project_id: str = "default") -> str:
     """Check your own divine inbox for private revelations in the current project."""
     try:
+        # Guard prevents tight "empty inbox polling" loops from consuming pulses.
         guard = _load_inbox_guard(caller_id, project_id)
         if guard.get("blocked"):
             return (
@@ -83,6 +84,7 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
         with open(buffer_path, "r+", encoding="utf-8") as f:
             try:
                 fcntl.flock(f, fcntl.LOCK_EX)
+                # Drain inbox atomically and append read receipts for observability.
                 for line in f:
                     if line.strip():
                         msg = json.loads(line)

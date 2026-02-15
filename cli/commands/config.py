@@ -68,6 +68,10 @@ def cmd_config(args):
             for agent_id, settings in proj.get('agent_settings', {}).items():
                 print(f"   {agent_id}:")
                 print(f"      Model: {settings.get('model', 'default')}")
+                if settings.get("phase_strategy") is not None:
+                    print(f"      Phase Strategy Override: {settings.get('phase_strategy')}")
+                if settings.get("phase_mode_enabled") is not None:
+                    print(f"      Phase Enabled Override: {settings.get('phase_mode_enabled')}")
                 disabled = settings.get('disabled_tools', [])
                 if disabled:
                     print(f"      Disabled Tools: {', '.join(disabled)}")
@@ -236,6 +240,13 @@ def cmd_config(args):
                 
                 if setting == "model":
                     data["projects"][pid]["agent_settings"][agent_id]["model"] = args.value
+                elif setting == "phase_strategy":
+                    if args.value not in ("strict_triad", "iterative_action", "freeform"):
+                        print("❌ agent.<id>.phase_strategy must be one of: strict_triad, iterative_action, freeform")
+                        return
+                    data["projects"][pid]["agent_settings"][agent_id]["phase_strategy"] = args.value
+                elif setting == "phase_enabled":
+                    data["projects"][pid]["agent_settings"][agent_id]["phase_mode_enabled"] = args.value.lower() == "true"
                 else:
                     print(f"❌ Unknown agent setting: {setting}")
                     return
@@ -294,6 +305,8 @@ def cmd_config(args):
                 print("  hermes.allow_agent_tool (true/false)")
                 print("  legacy.social_api (true/false)")
                 print("  agent.<agent_id>.model (model name)")
+                print("  agent.<agent_id>.phase_strategy (strict_triad|iterative_action|freeform)")
+                print("  agent.<agent_id>.phase_enabled (true/false)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return
             

@@ -39,6 +39,8 @@ def cmd_protocol(args):
                 print(f"  provider=agent_tool:{provider.get('agent_id')}.{provider.get('tool_name')}")
 
     elif args.subcommand == "register":
+        print("⚠️ DEPRECATED: protocol register is kept for compatibility.")
+        print("   Recommended flow: contract-register + executable clauses + contract-commit.")
         req_schema = json.loads(args.request_schema) if args.request_schema else {"type": "object"}
         resp_schema = json.loads(args.response_schema) if args.response_schema else {"type": "object", "required": ["result"], "properties": {"result": {"type": "string"}}}
         provider_type = args.provider
@@ -88,6 +90,43 @@ def cmd_protocol(args):
             print(f"❌ Register failed: {res.text}")
             return
         print(f"✅ Protocol registered: {args.name}@{args.version} in {pid}")
+
+    elif args.subcommand == "clause-template":
+        req_schema = json.loads(args.request_schema) if args.request_schema else {"type": "object"}
+        resp_schema = json.loads(args.response_schema) if args.response_schema else {"type": "object"}
+        owner = (args.owner_agent or "").strip()
+        provider_type = args.provider
+        provider: dict
+        if provider_type == "http":
+            provider = {
+                "type": "http",
+                "url": (args.url or "http://127.0.0.1:18080/endpoint").strip(),
+                "method": (args.method or "POST").upper(),
+            }
+        else:
+            provider = {
+                "type": "agent_tool",
+                "agent_id": (args.agent or owner or "owner_agent").strip(),
+                "tool_name": (args.tool or "run_command").strip(),
+            }
+
+        clause = {
+            "id": args.id,
+            "owner_agent": owner,
+            "summary": args.summary or f"Executable clause for {args.id}",
+            "provider": provider,
+            "io": {
+                "request_schema": req_schema,
+                "response_schema": resp_schema,
+            },
+            "runtime": {
+                "mode": args.mode,
+                "timeout_sec": int(args.timeout),
+                "rate_per_minute": int(args.rate),
+                "max_concurrency": int(args.concurrency),
+            },
+        }
+        print(json.dumps(clause, ensure_ascii=False, indent=2))
 
     elif args.subcommand == "call":
         payload = json.loads(args.payload) if args.payload else {}
@@ -139,21 +178,39 @@ def cmd_protocol(args):
     elif args.subcommand == "contract-commit":
         res = requests.post(
             f"{base_url}/hermes/contracts/commit",
-            json={"project_id": pid, "name": args.name, "version": args.version, "agent_id": args.agent},
+            json={"project_id": pid, "title": args.title, "version": args.version, "agent_id": args.agent},
             timeout=20,
         )
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
     elif args.subcommand == "contract-resolve":
         res = requests.get(
-            f"{base_url}/hermes/contracts/{args.name}/{args.version}/resolved",
-            params={"project_id": pid},
+            f"{base_url}/hermes/contracts/resolved",
+            params={"project_id": pid, "title": args.title, "version": args.version},
             timeout=20,
         )
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
     elif args.subcommand == "contract-list":
-        res = requests.get(f"{base_url}/hermes/contracts/list", params={"project_id": pid}, timeout=20)
+        res = requests.get(
+            f"{base_url}/hermes/contracts/list",
+            params={"project_id": pid, "include_disabled": bool(getattr(args, "include_disabled", False))},
+            timeout=20,
+        )
+        print(json.dumps(res.json(), ensure_ascii=False, indent=2))
+
+    elif args.subcommand == "contract-disable":
+        res = requests.post(
+            f"{base_url}/hermes/contracts/disable",
+            json={
+                "project_id": pid,
+                "title": args.title,
+                "version": args.version,
+                "agent_id": args.agent,
+                "reason": args.reason,
+            },
+            timeout=20,
+        )
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
     elif args.subcommand == "port-reserve":

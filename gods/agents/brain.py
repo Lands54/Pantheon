@@ -16,10 +16,16 @@ class GodBrain:
     Model settings are fetched from runtime_config.
     """
     def __init__(self, agent_id: str = "default", project_id: str = None):
+        """
+        Initializes a new GodBrain instance for a specific agent and project.
+        """
         self.agent_id = agent_id
         self.project_id = project_id
     
     def _resolve_model(self) -> str:
+        """
+        Determines the appropriate LLM model for the agent based on project configuration.
+        """
         current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
         projects = getattr(runtime_config, 'projects', {})
         proj = projects.get(current_project)
@@ -28,11 +34,17 @@ class GodBrain:
         return "stepfun/step-3.5-flash:free"
 
     def _llm_trace_enabled(self) -> bool:
+        """
+        Checks if LLM tracing is enabled for the current project.
+        """
         current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
         proj = getattr(runtime_config, "projects", {}).get(current_project)
         return bool(getattr(proj, "debug_llm_trace_enabled", True) if proj else True)
 
     def _serialize_message(self, msg):
+        """
+        Serializes a message object into a JSON-compatible dictionary for tracing.
+        """
         payload = {
             "type": msg.__class__.__name__,
             "content": getattr(msg, "content", None),
@@ -63,6 +75,9 @@ class GodBrain:
         error: str | None = None,
         trace_meta: dict | None = None,
     ):
+        """
+        Writes a trace of the LLM interaction to a persistent log file.
+        """
         if not self._llm_trace_enabled():
             return
 
@@ -94,7 +109,9 @@ class GodBrain:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     def get_llm(self):
-        """Dynamically build the LLM based on current config"""
+        """
+        Dynamically initializes the LangChain ChatOpenAI instance based on configuration.
+        """
         # Delay import to avoid heavy optional deps at module import time.
         from langchain_openai import ChatOpenAI
         
@@ -116,7 +133,9 @@ class GodBrain:
         return llm, model
 
     def think(self, context: str, trace_meta: dict | None = None) -> str:
-        """Perform inference"""
+        """
+        Performs a plain text inference Request.
+        """
         if not runtime_config.openrouter_api_key:
             return "❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings."
 
@@ -158,7 +177,9 @@ class GodBrain:
             return f"Error in reasoning: {str(e)}"
 
     def think_with_tools(self, messages: list, tools: list, trace_meta: dict | None = None) -> AIMessage:
-        """Perform inference with official structured tool-calling."""
+        """
+        Performs inference with support for structured tool-calling.
+        """
         if not runtime_config.openrouter_api_key:
             return AIMessage(content="❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings.")
 
@@ -211,6 +232,9 @@ class GodBrain:
             return AIMessage(content=f"Error in reasoning: {str(e)}")
     
     def __repr__(self):
+        """
+        Returns a string representation of the GodBrain instance.
+        """
         current_project = self.project_id or runtime_config.current_project
         proj = runtime_config.projects.get(current_project)
         model = "default"

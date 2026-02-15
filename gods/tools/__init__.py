@@ -9,7 +9,7 @@ from .communication import (
     finalize,
     post_to_synod,
     abstain_from_synod,
-    record_protocol,
+    record_protocol,  # deprecated compatibility tool, not in default agent toolset
     list_agents,
 )
 from .filesystem import (
@@ -23,14 +23,16 @@ from .filesystem import (
 )
 from .execution import run_command
 from .hermes import (
-    register_protocol,
+    register_protocol,  # deprecated compatibility tool, not in default agent toolset
     call_protocol,  # exported for direct import, not in default agent toolset
     route_protocol,  # exported for direct import, not in default agent toolset
     check_protocol_job,  # exported for direct import, not in default agent toolset
-    list_protocols,
+    list_protocols,  # deprecated compatibility tool, not in default agent toolset
     register_contract,
     commit_contract,
     resolve_contract,
+    list_contracts,
+    disable_contract,
     reserve_port,
     release_port,
     list_port_leases,
@@ -54,15 +56,14 @@ GODS_TOOLS = [
     run_command,
     post_to_synod,
     abstain_from_synod,
-    record_protocol,
     list_agents,
     multi_replace,
     list_dir,
-    register_protocol,
-    list_protocols,
     register_contract,
     commit_contract,
     resolve_contract,
+    list_contracts,
+    disable_contract,
     reserve_port,
     release_port,
     list_port_leases,
@@ -97,6 +98,8 @@ __all__ = [
     'register_contract',
     'commit_contract',
     'resolve_contract',
+    'list_contracts',
+    'disable_contract',
     'reserve_port',
     'release_port',
     'list_port_leases',

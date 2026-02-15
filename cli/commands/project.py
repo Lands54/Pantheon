@@ -96,6 +96,7 @@ def cmd_project(args):
 
     elif args.subcommand == "report":
         try:
+            # Build report writes both project-local artifacts and Mnemosyne human archive entry.
             res = requests.post(f"{base_url}/projects/{args.id}/report/build")
             if res.status_code == 200:
                 data = res.json()

@@ -20,20 +20,20 @@
 
 ## 3. 常用工具（Agent 内，治理面）
 
-1. `register_protocol`
-- 作用：注册一个协议定义到 Hermes。
-
-2. `list_protocols`
-- 作用：列出当前项目所有协议。
-
-3. `register_contract`
+1. `register_contract`
 - 作用：提交结构化契约 JSON。
 
-4. `commit_contract`
+2. `commit_contract`
 - 作用：当前 Agent 承诺加入契约版本。
 
-5. `resolve_contract`
+3. `resolve_contract`
 - 作用：解析契约后每个承诺人应实现的职责。
+
+4. `list_contracts`
+- 作用：检索契约摘要（title/version/description/status），默认只显示 active。
+
+5. `disable_contract`
+- 作用：退出当前 Agent 对契约的承诺；当承诺人清空后契约自动 disabled。
 
 6. `reserve_port`
 - 作用：申请本机端口租约（Project 级）。
@@ -46,19 +46,20 @@
 
 说明：
 - 协议“执行调用”不再通过 Agent tool，统一由业务代码通过 `HermesClient` 完成。
+- `register_protocol/list_protocols/record_protocol` 为兼容层，默认不在 Agent 工具集中。
 
 ## 4. 标准工作流
 
 ### 4.1 发布协议
 
-1. 先设计好请求/响应 schema。
-2. 注册协议（推荐 `http` provider）。
-3. 如需路由调用，填写 `owner_agent` 与 `function_id`。
+1. 先设计契约与条款（每个条款包含可执行 provider/schema/runtime）。
+2. 使用 `register_contract` 提交契约。
+3. 相关承诺人执行 `commit_contract`，再 `resolve_contract` 获取职责分配。
 
 ### 4.2 调用协议
 
-1. 先 `list_protocols` 确认名称和版本。
-2. 在业务代码里使用 `HermesClient.invoke(mode="sync")` 获取直接结果。
+1. 先 `resolve_contract` 明确条款与 owner/function_id。
+2. 在业务代码里使用 `HermesClient.invoke(mode="sync")` 或 `route(...)` 获取结果。
 3. 长任务用 `mode="async"`，然后 `HermesClient.wait_job` 等待完成。
 
 ### 4.3 路由调用（神间语义）
@@ -76,8 +77,9 @@ Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
 
 ```json
 {
-  "name": "eco.protocol",
   "version": "1.0.0",
+  "title": "生态系统协作契约",
+  "description": "定义跨代理协作目标、边界、成功标准与可执行条款。",
   "submitter": "ground",
   "committers": ["grass"],
   "status": "active",
@@ -114,6 +116,12 @@ Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
 2. 没有专属定义时，自动继承 `default_obligations`。
 3. 新承诺人加入（`commit_contract`）且未专属定义，默认承担 `default_obligations`。
 
+### 状态规则（active / disabled）
+
+1. `commit_contract` 仅允许在 `active` 契约上执行。
+2. `disabled` 契约仍可 `resolve_contract`，但会返回 warning。
+3. `disable_contract` 的语义是“退出承诺”；当承诺人变为 0 时契约自动 disabled。
+
 ## 6. Provider 策略
 
 ### 6.1 推荐：`http`
@@ -140,7 +148,7 @@ Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
 
 1. `HERMES_PROTOCOL_NOT_FOUND`
 - 原因：协议名/版本错误或未注册。
-- 处理：`list_protocols` 确认后重试。
+- 处理：先 `resolve_contract` 或查 Hermes 协议清单后重试。
 
 2. `HERMES_SCHEMA_INVALID`
 - 原因：payload 或返回结果不符合 schema。

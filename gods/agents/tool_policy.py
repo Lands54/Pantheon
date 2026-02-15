@@ -12,12 +12,14 @@ SOCIAL_TOOLS = {
     "send_to_human",
     "post_to_synod",
     "abstain_from_synod",
-    "record_protocol",
     "list_agents",
 }
 
 
 def get_disabled_tools(project_id: str, agent_id: str) -> set[str]:
+    """
+    Retrieves the set of disabled tool names for a specific agent in a given project.
+    """
     proj = runtime_config.projects.get(project_id)
     if not proj:
         return set()
@@ -28,10 +30,15 @@ def get_disabled_tools(project_id: str, agent_id: str) -> set[str]:
 
 
 def is_tool_disabled(project_id: str, agent_id: str, tool_name: str) -> bool:
+    """
+    Checks if a specific tool is disabled for an agent in a given project.
+    """
     return tool_name in get_disabled_tools(project_id, agent_id)
 
 
 def is_social_disabled(project_id: str, agent_id: str) -> bool:
+    """
+    Checks if all social tools are disabled for an agent in a given project.
+    """
     disabled = get_disabled_tools(project_id, agent_id)
     return (SOCIAL_TOOLS & disabled) == SOCIAL_TOOLS
-

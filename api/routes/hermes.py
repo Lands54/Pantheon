@@ -30,9 +30,17 @@ class ContractRegisterRequest(BaseModel):
 
 class ContractCommitRequest(BaseModel):
     project_id: str | None = None
-    name: str
+    title: str
     version: str
     agent_id: str
+
+
+class ContractDisableRequest(BaseModel):
+    project_id: str | None = None
+    title: str
+    version: str
+    agent_id: str
+    reason: str = ""
 
 
 class PortReserveRequest(BaseModel):
@@ -179,7 +187,7 @@ async def register_contract(req: ContractRegisterRequest) -> dict:
 async def commit_contract(req: ContractCommitRequest) -> dict:
     pid = _pick_project(req.project_id)
     try:
-        payload = hermes_service.contracts.commit(pid, req.name, req.version, req.agent_id)
+        payload = hermes_service.contracts.commit(pid, req.title, req.version, req.agent_id)
         return {"status": "success", "project_id": pid, "contract": payload}
     except HermesError as e:
         raise HTTPException(status_code=400, detail=e.to_dict())
@@ -188,19 +196,31 @@ async def commit_contract(req: ContractCommitRequest) -> dict:
 
 
 @router.get("/contracts/list")
-async def list_contracts(project_id: str | None = None) -> dict:
+async def list_contracts(project_id: str | None = None, include_disabled: bool = False) -> dict:
     pid = _pick_project(project_id)
-    return {"project_id": pid, "contracts": hermes_service.contracts.list(pid)}
+    return {"project_id": pid, "contracts": hermes_service.contracts.list(pid, include_disabled=include_disabled)}
 
 
-@router.get("/contracts/{name}/{version}/resolved")
-async def resolve_contract(name: str, version: str, project_id: str | None = None) -> dict:
+@router.get("/contracts/resolved")
+async def resolve_contract(title: str, version: str, project_id: str | None = None) -> dict:
     pid = _pick_project(project_id)
     try:
-        data = hermes_service.contracts.resolve(pid, name, version)
+        data = hermes_service.contracts.resolve(pid, title, version)
         return {"project_id": pid, "resolved": data}
     except HermesError as e:
         raise HTTPException(status_code=400, detail=e.to_dict())
+
+
+@router.post("/contracts/disable")
+async def disable_contract(req: ContractDisableRequest) -> dict:
+    pid = _pick_project(req.project_id)
+    try:
+        payload = hermes_service.contracts.disable(pid, req.title, req.version, req.agent_id, reason=req.reason)
+        return {"status": "success", "project_id": pid, "contract": payload}
+    except HermesError as e:
+        raise HTTPException(status_code=400, detail=e.to_dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/ports/reserve")

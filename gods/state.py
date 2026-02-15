@@ -6,7 +6,9 @@ from langgraph.graph.message import add_messages
 
 
 class GodsState(TypedDict):
-    """众神系统的全局状态"""
+    """
+    Global state definition for the Gods platform, used in the LangGraph runtime.
+    """
     project_id: str  # 当前项目名称
     messages: Annotated[list, add_messages]  # 消息历史
     summary: str  # 历史记忆的压缩摘要 (长期记忆)

@@ -10,10 +10,19 @@ from pathlib import Path
 CONFIG_FILE = Path("config.json")
 
 class AgentModelConfig(BaseModel):
+    """
+    Configuration for an agent's model settings.
+    """
     model: str = "stepfun/step-3.5-flash:free"
     disabled_tools: List[str] = []
+    # Optional agent-level phase runtime overrides (fallback to project defaults when None).
+    phase_mode_enabled: Optional[bool] = None
+    phase_strategy: Optional[str] = None
 
 class ProjectConfig(BaseModel):
+    """
+    Configuration for a specific project, including agent settings and simulation controls.
+    """
     name: Optional[str] = None
     active_agents: List[str] = ["genesis"]
     agent_settings: Dict[str, AgentModelConfig] = {
@@ -70,6 +79,9 @@ class ProjectConfig(BaseModel):
     hermes_allow_agent_tool_provider: bool = False
 
 class SystemConfig(BaseModel):
+    """
+    Global system configuration, managing API keys and multiple projects.
+    """
     openrouter_api_key: str = ""
     current_project: str = "default"
     enable_legacy_social_api: bool = False
@@ -79,11 +91,18 @@ class SystemConfig(BaseModel):
     }
 
     def save(self):
+        """
+        Saves the current system configuration to the persistent config file.
+        """
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             f.write(self.model_dump_json(indent=4))
 
     @classmethod
     def load(cls):
+        """
+        Loads the system configuration from the persistent config file, 
+        performing migration from older formats if necessary.
+        """
         if not CONFIG_FILE.exists():
             return cls()
         
@@ -124,10 +143,15 @@ class SystemConfig(BaseModel):
             return cls()
 
 def get_current_project() -> ProjectConfig:
+    """
+    Retrieves the configuration for the currently active project.
+    """
     return runtime_config.projects.get(runtime_config.current_project, ProjectConfig(name="Safety", active_agents=[]))
 
 def get_available_agents(project_id: str = None) -> List[str]:
-    """Scan projects/{project_id}/agents/ directory for available agents"""
+    """
+    Scans the project directory for available agent definitions.
+    """
     if not project_id:
         project_id = runtime_config.current_project
         

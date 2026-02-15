@@ -15,4 +15,4 @@ echo "📖 API docs at: http://localhost:8000/docs"
 echo ""
 
 # Run the server
-python api/server.py
+python server.py

@@ -12,7 +12,7 @@ RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_
 
 def _is_reserved_path(path: Path, agent_territory: Path) -> bool:
     """
-    Disallow agent tools from directly accessing system-managed memory files.
+    Checks if a given path corresponds to a reserved system file.
     """
     try:
         rel = path.resolve().relative_to(agent_territory.resolve())
@@ -22,7 +22,9 @@ def _is_reserved_path(path: Path, agent_territory: Path) -> bool:
 
 
 def validate_path(caller_id: str, project_id: str, path: str) -> Path:
-    """Ensure the path is strictly within projects/{project_id}/agents/{caller_id}/"""
+    """
+    Validates that a requested path is within the agent's project territory.
+    """
     project_root = Path(__file__).parent.parent.parent.absolute()
     agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
     
@@ -38,10 +40,16 @@ def validate_path(caller_id: str, project_id: str, path: str) -> Path:
 
 
 def _cwd_prefix(agent_territory: Path, message: str) -> str:
+    """
+    Prefixes a message with the agent's current working directory context.
+    """
     return f"[Current CWD: {agent_territory}] Content: {message}"
 
 
 def _format_fs_error(agent_territory: Path, title: str, reason: str, suggestion: str) -> str:
+    """
+    Formats a filesystem error message with context and suggestions.
+    """
     return _cwd_prefix(
         agent_territory,
         f"{title}: {reason}\nSuggested next step: {suggestion}",
@@ -49,6 +57,9 @@ def _format_fs_error(agent_territory: Path, title: str, reason: str, suggestion:
 
 
 def _normalize_to_territory(path: str, caller_id: str) -> str:
+    """
+    Removes redundant path prefixes to normalize paths relative to the agent's territory.
+    """
     marker = f"/agents/{caller_id}/"
     p = path.replace("\\", "/")
     if marker in p:
@@ -57,6 +68,9 @@ def _normalize_to_territory(path: str, caller_id: str) -> str:
 
 
 def _find_name_suggestions(agent_territory: Path, path: str, limit: int = 3) -> list[str]:
+    """
+    Searches for files with similar names to provide suggestions for missing paths.
+    """
     basename = Path(path).name
     if not basename:
         return []
@@ -75,6 +89,9 @@ def _find_name_suggestions(agent_territory: Path, path: str, limit: int = 3) -> 
 
 
 def _missing_read_hint(path: str, caller_id: str, agent_territory: Path) -> str:
+    """
+    Generates hints for missing files during a read operation.
+    """
     hints = []
     normalized = _normalize_to_territory(path, caller_id)
     if normalized != path:
@@ -90,6 +107,9 @@ def _missing_read_hint(path: str, caller_id: str, agent_territory: Path) -> str:
 
 
 def _path_lookup_hint(path: str, caller_id: str, agent_territory: Path) -> str:
+    """
+    Provides suggestions for resolving path errors.
+    """
     normalized = _normalize_to_territory(path, caller_id)
     suggestions = _find_name_suggestions(agent_territory, normalized)
     if suggestions:

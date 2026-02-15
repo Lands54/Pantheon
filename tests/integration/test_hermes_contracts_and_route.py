@@ -22,8 +22,9 @@ def test_hermes_contract_resolve_and_route_http():
         _switch_project(project_id)
 
         contract = {
-            "name": "eco.protocol",
             "version": "1.0.0",
+            "title": "Ecosystem Contract",
+            "description": "Defines cross-agent ecosystem obligations and runtime clauses.",
             "submitter": "ground",
             "committers": ["grass"],
             "status": "active",
@@ -31,6 +32,11 @@ def test_hermes_contract_resolve_and_route_http():
                 {
                     "id": "sync_state",
                     "summary": "sync state",
+                    "provider": {
+                        "type": "http",
+                        "url": "http://127.0.0.1:1/sync_state",
+                        "method": "POST",
+                    },
                     "io": {
                         "request_schema": {"type": "object"},
                         "response_schema": {"type": "object"},
@@ -43,6 +49,11 @@ def test_hermes_contract_resolve_and_route_http():
                     {
                         "id": "check_fire_speed",
                         "summary": "check fire speed",
+                        "provider": {
+                            "type": "http",
+                            "url": "http://127.0.0.1:1/check_fire_speed",
+                            "method": "POST",
+                        },
                         "io": {
                             "request_schema": {"type": "object", "required": ["v"]},
                             "response_schema": {"type": "object"},
@@ -54,23 +65,76 @@ def test_hermes_contract_resolve_and_route_http():
         }
         reg = client.post("/hermes/contracts/register", json={"project_id": project_id, "contract": contract})
         assert reg.status_code == 200
+        assert reg.json()["contract"]["committers"] == ["grass", "ground"]
 
         commit = client.post(
             "/hermes/contracts/commit",
-            json={"project_id": project_id, "name": "eco.protocol", "version": "1.0.0", "agent_id": "tiger"},
+            json={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0", "agent_id": "tiger"},
         )
         assert commit.status_code == 200
 
         resolved = client.get(
-            "/hermes/contracts/eco.protocol/1.0.0/resolved",
-            params={"project_id": project_id},
+            "/hermes/contracts/resolved",
+            params={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0"},
         )
         assert resolved.status_code == 200
         data = resolved.json()["resolved"]
+        assert data["title"] == "Ecosystem Contract"
+        assert "cross-agent ecosystem obligations" in data["description"]
         assert "grass" in data["resolved_obligations"]
         assert "tiger" in data["resolved_obligations"]
         tiger_ids = [x.get("id") for x in data["resolved_obligations"]["tiger"]]
         assert "sync_state" in tiger_ids
+
+        disable_tiger = client.post(
+            "/hermes/contracts/disable",
+            json={
+                "project_id": project_id,
+                "title": "Ecosystem Contract",
+                "version": "1.0.0",
+                "agent_id": "tiger",
+                "reason": "handoff",
+            },
+        )
+        assert disable_tiger.status_code == 200
+
+        # Remove all committers; contract becomes disabled.
+        for agent in ("grass", "ground"):
+            r = client.post(
+                "/hermes/contracts/disable",
+                json={
+                    "project_id": project_id,
+                    "title": "Ecosystem Contract",
+                    "version": "1.0.0",
+                    "agent_id": agent,
+                    "reason": "close",
+                },
+            )
+            assert r.status_code == 200
+
+        commit_disabled = client.post(
+            "/hermes/contracts/commit",
+            json={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0", "agent_id": "wolf"},
+        )
+        assert commit_disabled.status_code == 400
+
+        resolved_disabled = client.get(
+            "/hermes/contracts/resolved",
+            params={"project_id": project_id, "title": "Ecosystem Contract", "version": "1.0.0"},
+        )
+        assert resolved_disabled.status_code == 200
+        assert resolved_disabled.json()["resolved"]["warning"] == "contract is disabled"
+
+        listed_default = client.get("/hermes/contracts/list", params={"project_id": project_id})
+        assert listed_default.status_code == 200
+        assert listed_default.json()["contracts"] == []
+
+        listed_all = client.get(
+            "/hermes/contracts/list",
+            params={"project_id": project_id, "include_disabled": True},
+        )
+        assert listed_all.status_code == 200
+        assert listed_all.json()["contracts"]
 
         # Register route-able HTTP protocol for fire god check
         spec = {

@@ -13,6 +13,7 @@ from gods.tools.communication import reset_inbox_guard
 from gods.config import runtime_config
 from gods.agents.phase_runtime import AgentPhaseRuntime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
+from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
 from pathlib import Path
 
 
@@ -22,6 +23,9 @@ class GodAgent:
     Source of truth: projects/{project_id}/agents/{agent_id}/agent.md
     """
     def __init__(self, agent_id: str, project_id: str = "default"):
+        """
+        Initializes a new GodAgent instance.
+        """
         self.agent_id = agent_id
         self.project_id = project_id
         self.agent_dir = Path(f"projects/{project_id}/agents/{agent_id}")
@@ -35,14 +39,16 @@ class GodAgent:
         self.brain = GodBrain(agent_id=agent_id, project_id=project_id)
 
     def _load_directives(self) -> str:
-        """Load the core mission/logic from agent.md"""
+        """
+        Loads the core mission and logic for the agent from its agent.md file.
+        """
         if self.agent_md.exists():
             return self.agent_md.read_text(encoding="utf-8")
         return f"Agent ID: {self.agent_id}\n(No agent.md found. Please create one in {self.agent_md})"
 
     def _ensure_memory_seeded(self):
         """
-        Seed memory.md with directives snapshot once, so agent doesn't need to read agent.md.
+        Seeds the agent's memory with a snapshot of its directives if it doesn't already exist.
         """
         mem_path = self.agent_dir / "memory.md"
         if mem_path.exists():
@@ -60,11 +66,17 @@ class GodAgent:
         mem_path.write_text(seed, encoding="utf-8")
     
     def _build_inbox_context_hint(self) -> str:
+        """
+        Constructs a hint for the agent about its inbox accessibility.
+        """
         if is_tool_disabled(self.project_id, self.agent_id, "check_inbox"):
             return "Inbox access is disabled by policy. Do NOT call check_inbox. Continue local work."
         return "Inbox is not pre-fetched. Use check_inbox tool when needed."
 
     def _build_behavior_directives(self) -> str:
+        """
+        Builds the behavioral directives for the agent, accounting for social tool restrictions.
+        """
         if is_social_disabled(self.project_id, self.agent_id):
             return (
                 f"{self.directives}\n\n"
@@ -81,10 +93,12 @@ class GodAgent:
         )
 
     def process(self, state: GodsState) -> GodsState:
-        """Autonomous Agent Pulse with phase runtime (fallback to legacy loop when disabled)."""
+        """
+        Main execution loop for the agent, handling either phase-based or legacy autonomous pulses.
+        """
         proj = runtime_config.projects.get(self.project_id)
-        phase_mode_enabled = bool(getattr(proj, "phase_mode_enabled", True) if proj else True)
-        phase_strategy = str(getattr(proj, "phase_strategy", "strict_triad") if proj else "strict_triad")
+        phase_mode_enabled = resolve_phase_mode_enabled(self.project_id, self.agent_id)
+        phase_strategy = resolve_phase_strategy(self.project_id, self.agent_id)
         # Freeform mode: bypass phase state-machine and use unconstrained agent<->tool loop.
         if phase_mode_enabled and phase_strategy != "freeform":
             inbox_msgs = self._build_inbox_context_hint()
@@ -157,7 +171,9 @@ class GodAgent:
         return state
 
     def _load_local_memory(self) -> str:
-        """Load full memory.md after automatic compaction."""
+        """
+        Loads the agent's local memory from memory.md, applying compaction if necessary.
+        """
         mem_path = self.agent_dir / "memory.md"
         self._maybe_compact_memory(mem_path)
         if mem_path.exists():
@@ -165,7 +181,9 @@ class GodAgent:
         return "No personal chronicles yet."
 
     def _append_to_memory(self, text: str):
-        """Append a thought or event to the human-readable memory.md"""
+        """
+        Appends a new entry to the agent's persistent memory file.
+        """
         from datetime import datetime
         mem_path = self.agent_dir / "memory.md"
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -176,8 +194,7 @@ class GodAgent:
 
     def _maybe_compact_memory(self, mem_path: Path):
         """
-        Keep memory bounded by rolling old content into a compact archive note.
-        This is deterministic and cheap (no extra model calls).
+        Checks if the memory file exceeds the trigger size and performs compaction if so.
         """
         if not mem_path.exists():
             return
@@ -225,8 +242,7 @@ class GodAgent:
 
     def _split_seed_block(self, content: str):
         """
-        Keep SYSTEM_SEED at the top across compaction.
-        Returns (seed_block, body_without_seed).
+        Splits the system seed block from the rest of the memory content.
         """
         marker = "### SYSTEM_SEED"
         if not content.startswith(marker):
@@ -238,7 +254,9 @@ class GodAgent:
         return content[:end], content[end:]
 
     def execute_tool(self, name: str, args: dict) -> str:
-        """Execute the tool function with identity and project injection"""
+        """
+        Executes a specific tool by name, handling project and agent identity context.
+        """
         path_aware_tools = {
             "read_file",
             "write_file",
@@ -289,6 +307,9 @@ class GodAgent:
         )
 
     def get_tools(self):
+        """
+        Returns the list of tools available to this agent.
+        """
         return GODS_TOOLS
 
     def build_context(
@@ -300,7 +321,9 @@ class GodAgent:
         phase_block: str = "",
         phase_name: str = "",
     ) -> str:
-        """Autonomous Context Architecture with Project Awareness"""
+        """
+        Constructs the full system prompt and context for the agent's current thought process.
+        """
         sacred_record = state.get("summary", "No ancient records.")
         recent_messages = state.get("messages", [])[-8:]
         history = "\n".join([
@@ -327,6 +350,9 @@ class GodAgent:
 
 # Factory function for LangGraph nodes
 def create_god_node(agent_id: str):
+    """
+    Creates a LangGraph node function for a specific agent.
+    """
     def node_func(state: GodsState) -> GodsState:
         project_id = state.get("project_id", runtime_config.current_project)
         
@@ -343,7 +369,13 @@ def create_god_node(agent_id: str):
 
 # Forward compatibility for existing hardcoded node names
 def genesis_node(state: GodsState) -> GodsState:
+    """
+    Node function specialized for the 'genesis' agent.
+    """
     return create_god_node("genesis")(state)
 
 def coder_node(state: GodsState) -> GodsState:
+    """
+    Node function specialized for the 'coder' agent.
+    """
     return create_god_node("coder")(state)

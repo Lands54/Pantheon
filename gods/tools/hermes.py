@@ -30,7 +30,7 @@ def register_protocol(
     provider_method: str = "POST",
     project_id: str = "default",
 ) -> str:
-    """Register executable protocol in Hermes bus. Schemas are JSON strings."""
+    """Deprecated compatibility path. Prefer contract-first registration flow."""
     try:
         from gods.hermes import hermes_service
         from gods.hermes.errors import HermesError
@@ -73,7 +73,11 @@ def register_protocol(
             response_schema=resp_schema,
         )
         hermes_service.register(pid, spec)
-        return f"Protocol registered: {name}@{spec.version}"
+        return (
+            f"Protocol registered: {name}@{spec.version}\n"
+            "[DEPRECATED] register_protocol is compatibility-only. "
+            "Prefer register_contract with executable clauses."
+        )
     except HermesError as e:
         return f"Protocol Error: {e.code} - {e.message}"
     except Exception as e:
@@ -173,13 +177,20 @@ def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str 
 
 @tool
 def list_protocols(caller_id: str = "default", project_id: str = "default") -> str:
-    """List registered Hermes protocols in current project."""
+    """Deprecated compatibility path. Prefer contract-list and contract-resolve."""
     try:
         from gods.hermes import hermes_service
 
         pid = _resolve_project(project_id)
         rows = [p.model_dump() for p in hermes_service.list(pid)]
-        return json.dumps(rows, ensure_ascii=False)
+        return json.dumps(
+            {
+                "deprecated": True,
+                "message": "Prefer contract-list / contract-resolve for external orchestration.",
+                "protocols": rows,
+            },
+            ensure_ascii=False,
+        )
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
@@ -204,14 +215,14 @@ def register_contract(contract_json: str, caller_id: str = "default", project_id
 
 
 @tool
-def commit_contract(name: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
+def commit_contract(title: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Commit current agent to a contract version."""
     try:
         from gods.hermes import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
-        out = hermes_service.contracts.commit(pid, name, version, caller_id)
+        out = hermes_service.contracts.commit(pid, title, version, caller_id)
         return json.dumps({"ok": True, "contract": out}, ensure_ascii=False)
     except HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
@@ -220,15 +231,76 @@ def commit_contract(name: str, version: str, caller_id: str = "default", project
 
 
 @tool
-def resolve_contract(name: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
+def resolve_contract(title: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Resolve per-committer obligations for a contract."""
     try:
         from gods.hermes import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
-        out = hermes_service.contracts.resolve(pid, name, version)
+        out = hermes_service.contracts.resolve(pid, title, version)
         return json.dumps({"ok": True, "resolved": out}, ensure_ascii=False)
+    except HermesError as e:
+        return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+
+@tool
+def list_contracts(
+    include_disabled: bool = False,
+    caller_id: str = "default",
+    project_id: str = "default",
+) -> str:
+    """List contracts with concise human-readable fields (title/description)."""
+    try:
+        from gods.hermes import hermes_service
+
+        pid = _resolve_project(project_id)
+        rows = hermes_service.contracts.list(pid, include_disabled=bool(include_disabled))
+        brief = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            brief.append(
+                {
+                    "version": row.get("version", ""),
+                    "title": row.get("title", ""),
+                    "description": row.get("description", ""),
+                    "status": row.get("status", ""),
+                }
+            )
+        return json.dumps({"ok": True, "contracts": brief}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+
+@tool
+def disable_contract(
+    title: str,
+    version: str,
+    reason: str = "",
+    caller_id: str = "default",
+    project_id: str = "default",
+) -> str:
+    """Exit current agent from contract committers; contract auto-disables when committers become empty."""
+    try:
+        from gods.hermes import hermes_service
+        from gods.hermes.errors import HermesError
+
+        pid = _resolve_project(project_id)
+        out = hermes_service.contracts.disable(
+            pid,
+            title=title,
+            version=version,
+            agent_id=caller_id,
+            reason=reason,
+        )
+        warning = (
+            "Warning: disable_contract exits your commitment immediately. "
+            "When no committers remain, this contract becomes disabled."
+        )
+        return json.dumps({"ok": True, "warning": warning, "contract": out}, ensure_ascii=False)
     except HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:

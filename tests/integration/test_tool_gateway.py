@@ -55,7 +55,7 @@ def test_tool_gateway_send_and_check_inbox_roundtrip():
         client.delete(f"/projects/{project_id}")
 
 
-def test_tool_gateway_list_agents_and_record_protocol():
+def test_tool_gateway_list_agents_and_record_protocol_deprecated():
     project_id = "test_tool_gateway_world_2"
     old_project = runtime_config.current_project
     try:
@@ -80,10 +80,11 @@ def test_tool_gateway_list_agents_and_record_protocol():
             },
         )
         assert proto_res.status_code == 200
-        assert "Protocol registered" in proto_res.json()["result"]
+        assert "DEPRECATED" in proto_res.json()["result"]
+        assert "/hermes/contracts/register" in proto_res.json()["result"]
 
         registry_file = Path("projects") / project_id / "protocols" / "registry.json"
-        assert registry_file.exists()
+        assert not registry_file.exists()
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

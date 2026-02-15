@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 import uuid
 from pathlib import Path
@@ -9,7 +8,7 @@ from gods.config import runtime_config, ProjectConfig
 from gods.tools.communication import record_protocol
 
 
-def test_record_protocol_registers_hermes_spec():
+def test_record_protocol_is_deprecated_and_no_longer_registers():
     project_id = f"rp_new_{uuid.uuid4().hex[:8]}"
     base = Path("projects") / project_id
     try:
@@ -30,15 +29,11 @@ def test_record_protocol_registers_hermes_spec():
                 "project_id": project_id,
             }
         )
-        assert "Protocol registered" in msg
+        assert "Protocol Deprecated" in msg
+        assert "register_contract" in msg
 
         registry = base / "protocols" / "registry.json"
-        assert registry.exists()
-        data = json.loads(registry.read_text(encoding="utf-8"))
-        assert data.get("protocols")
-        spec = data["protocols"][0]
-        assert spec["provider"]["agent_id"] == "alpha"
-        assert spec["provider"]["tool_name"] == "run_command"
+        assert not registry.exists()
 
         old_events = base / "protocols" / "events.jsonl"
         assert not old_events.exists()

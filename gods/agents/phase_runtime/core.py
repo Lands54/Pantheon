@@ -16,6 +16,7 @@ from gods.config import runtime_config
 from gods.prompts import prompt_registry
 from gods.agents.tool_policy import SOCIAL_TOOLS, get_disabled_tools
 from gods.agents.debug_trace import PulseTraceLogger
+from gods.agents.runtime_policy import resolve_phase_strategy
 from gods.agents.phase_runtime.policy import (
     AgentPhase,
     PhaseToolPolicy,
@@ -32,23 +33,32 @@ from gods.agents.phase_runtime.strategies import (
 
 class AgentPhaseRuntime:
     """
-    Deterministic 3-stage runtime:
-    1) reason: produce plan text
-    2) act: produce batch tool calls; system executes all allowed calls
-    3) observe: summarize and optionally call finalize
+    Deterministic 3-stage runtime for executing agent pulses in a structured manner.
+    The cycle typically consists of Reason, Act, and Observe phases.
     """
-
     def __init__(self, agent):
+        """
+        Initializes the phase runtime for a specific agent.
+        """
         self.agent = agent
         self._state_path = self.agent.agent_dir / "runtime_state.json"
 
     def _project_cfg(self):
+        """
+        Retrieves the project configuration for the agent's current project.
+        """
         return runtime_config.projects.get(self.agent.project_id)
 
     def _disabled_tools(self) -> set:
+        """
+        Returns the set of tools disabled for the agent.
+        """
         return get_disabled_tools(self.agent.project_id, self.agent.agent_id)
 
     def _build_phase_allow_map(self, phases: List[AgentPhase]) -> Dict[str, set]:
+        """
+        Constructs a mapping of phase names to their corresponding allowed tool sets.
+        """
         disabled = self._disabled_tools()
         allow_map: Dict[str, set] = {}
         for phase in phases:
@@ -59,6 +69,10 @@ class AgentPhaseRuntime:
         return allow_map
 
     def _save_runtime_state(self, phase_idx: int, no_progress_rounds: int):
+        """
+        Persists the current runtime state index to allow for deterministic resumption.
+        """
+        # Persist runtime cursor between pulses so scheduler wakeups can resume deterministically.
         payload = {
             "phase_idx": int(max(0, phase_idx)),
             "no_progress_rounds": int(max(0, no_progress_rounds)),
@@ -67,6 +81,9 @@ class AgentPhaseRuntime:
         self._state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _phase_prompt(self, phase: AgentPhase, phase_order: List[str]) -> str:
+        """
+        Renders the specific prompt block for a given agent phase.
+        """
         return prompt_registry.render(
             phase.prompt_template,
             project_id=self.agent.project_id,
@@ -76,16 +93,26 @@ class AgentPhaseRuntime:
         )
 
     def _finish(self, state):
+        """
+        Sets the state to finish and resets the runtime persistence.
+        """
         state["next_step"] = "finish"
         self._save_runtime_state(0, 0)
         return state
 
     def _continue(self, state):
+        """
+        Sets the state to continue and resets the runtime persistence.
+        """
         state["next_step"] = "continue"
         self._save_runtime_state(0, 0)
         return state
 
     def _think(self, state, phase, phase_order, simulation_directives, local_memory, inbox_msgs, pulse_meta):
+        """
+        Executes a single inference step within a specific phase.
+        """
+        # Keep one shared context model while swapping phase-specific prompt blocks.
         phase_block = self._phase_prompt(phase, phase_order)
         context = self.agent.build_context(
             state=state,
@@ -106,6 +133,9 @@ class AgentPhaseRuntime:
         return response
 
     def _violation_feedback(self, phase_name: str) -> str:
+        """
+        Provides feedback messages when an agent violates phase-specific tool constraints.
+        """
         if phase_name == "reason":
             return (
                 "RULE VIOLATION: Reason phase is planning-only. "
@@ -119,36 +149,56 @@ class AgentPhaseRuntime:
         return "RULE VIOLATION: Retry with valid output for current phase."
 
     def _strategy_name(self) -> str:
-        proj = self._project_cfg()
-        name = str(getattr(proj, "phase_strategy", PHASE_STRATEGY_STRICT_TRIAD) if proj else PHASE_STRATEGY_STRICT_TRIAD)
+        """
+        Resolves the configured phase strategy name for the current project.
+        """
+        name = resolve_phase_strategy(self.agent.project_id, self.agent.agent_id)
         if name not in PHASE_STRATEGIES:
             return PHASE_STRATEGY_STRICT_TRIAD
         return name
 
     def _interaction_max(self) -> int:
+        """
+        Retrieves the maximum number of Action-Observe interactions allowed in Iterative mode.
+        """
         proj = self._project_cfg()
         value = int(getattr(proj, "phase_interaction_max", 3) if proj else 3)
         return max(1, min(value, 16))
 
     def _act_require_tool_call(self) -> bool:
+        """
+        Checks if the Act phase is required to emit at least one tool call.
+        """
         proj = self._project_cfg()
         return bool(getattr(proj, "phase_act_require_tool_call", True) if proj else True)
 
     def _act_require_productive_tool(self) -> bool:
+        """
+        Checks if the Act phase requires at least one productive tool call.
+        """
         proj = self._project_cfg()
         return bool(getattr(proj, "phase_act_require_productive_tool", True) if proj else True)
 
     def _act_productive_from_interaction(self) -> int:
+        """
+        Retrieves the interaction index from which a productive tool call becomes mandatory.
+        """
         proj = self._project_cfg()
         value = int(getattr(proj, "phase_act_productive_from_interaction", 2) if proj else 2)
         return max(1, min(value, 16))
 
     def _should_require_productive_for_interaction(self, interaction_idx: int) -> bool:
+        """
+        Determines if a productive tool is required for the given interaction index.
+        """
         if not self._act_require_productive_tool():
             return False
         return int(interaction_idx) >= self._act_productive_from_interaction()
 
     def _act_violation_feedback(self, reason: str) -> str:
+        """
+        Provides feedback for violations specifically occurring during the Act phase.
+        """
         if reason == "no_tool":
             return (
                 "RULE VIOLATION: Act phase must emit at least one tool call. "
@@ -164,8 +214,7 @@ class AgentPhaseRuntime:
 
     def _run_iterative(self, state, simulation_directives: str, local_memory: str, inbox_msgs: str):
         """
-        Strategy: one Reason, then multiple Action<->Observe interactions in a single pulse.
-        Observe can finalize; otherwise continue to next Action until interaction cap.
+        Executes the Iterative Action-Observe strategy.
         """
         proj = self._project_cfg()
         max_repeat = int(getattr(proj, "phase_repeat_limit", 2) if proj else 2)
@@ -191,6 +240,7 @@ class AgentPhaseRuntime:
             tracer.event("pulse_start", phase_name="reason", strategy=PHASE_STRATEGY_ITERATIVE_ACTION)
 
             # Stage 1: REASON
+            # Rule: reason phase is text-only; any tool call is blocked and retried with feedback.
             reason_phase = phases[0]
             for reason_try in range(1, phase_retry_limit + 1):
                 tracer.event("round_start", phase_name="reason", attempt=reason_try)
@@ -234,6 +284,7 @@ class AgentPhaseRuntime:
                 tracer.event("interaction_start", interaction=interaction_idx)
 
                 # ACTION
+                # Rule: action phase may emit multiple tool calls; tools are executed as a batch.
                 tracer.event("round_start", phase_name="act", interaction=interaction_idx)
                 act_resp = self._think(
                     state, act_phase, phase_order, simulation_directives, local_memory, inbox_msgs, pulse_meta
@@ -320,6 +371,7 @@ class AgentPhaseRuntime:
                     )
 
                 # OBSERVE
+                # Rule: observe phase can only finalize; all other tools are blocked.
                 observed_finalize = False
                 for observe_try in range(1, phase_retry_limit + 1):
                     tracer.event("round_start", phase_name="observe", interaction=interaction_idx, attempt=observe_try)
@@ -416,6 +468,9 @@ class AgentPhaseRuntime:
             tracer.flush()
 
     def run(self, state, simulation_directives: str, local_memory: str, inbox_msgs: str):
+        """
+        Dispatches the agent pulse execution to the configured strategy.
+        """
         strategy = self._strategy_name()
         if strategy == PHASE_STRATEGY_ITERATIVE_ACTION:
             return self._run_iterative(state, simulation_directives, local_memory, inbox_msgs)
@@ -482,6 +537,7 @@ class AgentPhaseRuntime:
                     tracer.event("phase_retry", phase_name="reason", attempt=reason_try, reason="tool_call_not_allowed")
 
             # Stage 2: ACTION (batch tools)
+            # Rule: strict triad runs exactly one action batch in this pulse.
             act_phase = phases[1]
             tracer.event("round_start", phase_name="act")
             act_resp = self._think(

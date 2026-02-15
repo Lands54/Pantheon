@@ -2,12 +2,8 @@
 API Routes - Project Management
 Handles /projects endpoints for multi-project operations.
 """
-import shutil
-from pathlib import Path
-from fastapi import APIRouter, Request, HTTPException
-from gods.config import runtime_config, ProjectConfig
-from gods.protocols import build_knowledge_graph
-from gods.project.reporting import build_project_report, load_project_report
+from fastapi import APIRouter, Request
+from api.services import project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -15,7 +11,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.get("")
 async def list_projects():
     """List all projects."""
-    return {"projects": runtime_config.projects, "current": runtime_config.current_project}
+    return project_service.list_projects()
 
 
 @router.post("/create")
@@ -23,60 +19,19 @@ async def create_project(req: Request):
     """Create a new project."""
     data = await req.json()
     pid = data.get("id")
-    if pid in runtime_config.projects:
-        return {"error": "Project exists"}
-    
-    runtime_config.projects[pid] = ProjectConfig()
-    runtime_config.save()
-    
-    # Initialize basic structure
-    agent_dir = Path("projects") / pid / "agents" / "genesis"
-    agent_dir.mkdir(parents=True, exist_ok=True)
-    agent_md = agent_dir / "agent.md"
-    if not agent_md.exists():
-        agent_md.write_text(
-            "# GENESIS\nYou are the first Being of this new world. Observe, evolve, and manifest.",
-            encoding="utf-8"
-        )
-        
-    return {"status": "success"}
+    return project_service.create_project(pid)
 
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: str):
     """Delete a project."""
-    if project_id == "default":
-        raise HTTPException(status_code=400, detail="Cannot delete default world")
-    if project_id not in runtime_config.projects:
-        raise HTTPException(status_code=404)
-    
-    # Remove from config
-    del runtime_config.projects[project_id]
-    if runtime_config.current_project == project_id:
-        runtime_config.current_project = "default"
-    runtime_config.save()
-    
-    # Remove from disk
-    proj_dir = Path("projects") / project_id
-    if proj_dir.exists():
-        shutil.rmtree(proj_dir)
-        
-    return {"status": "success"}
+    return project_service.delete_project(project_id)
 
 
 @router.post("/{project_id}/knowledge/rebuild")
 async def rebuild_knowledge_graph(project_id: str):
     """Rebuild project knowledge graph from protocol events."""
-    if project_id not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    graph = build_knowledge_graph(project_id)
-    return {
-        "status": "success",
-        "project_id": project_id,
-        "nodes": len(graph.get("nodes", [])),
-        "edges": len(graph.get("edges", [])),
-        "output": f"projects/{project_id}/knowledge/knowledge_graph.json",
-    }
+    return project_service.rebuild_knowledge(project_id)
 
 
 @router.post("/{project_id}/start")
@@ -85,21 +40,7 @@ async def start_project(project_id: str):
     Start a project's autonomous simulation.
     New active-project paradigm: only one project can run at a time.
     """
-    if project_id not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Pause all projects first to enforce single active project runtime.
-    for pid, proj in runtime_config.projects.items():
-        proj.simulation_enabled = (pid == project_id)
-
-    runtime_config.current_project = project_id
-    runtime_config.save()
-    return {
-        "status": "success",
-        "project_id": project_id,
-        "simulation_enabled": True,
-        "current_project": runtime_config.current_project,
-    }
+    return project_service.start_project(project_id)
 
 
 @router.post("/{project_id}/stop")
@@ -107,42 +48,16 @@ async def stop_project(project_id: str):
     """
     Stop a project's autonomous simulation.
     """
-    if project_id not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    runtime_config.projects[project_id].simulation_enabled = False
-    runtime_config.save()
-    return {
-        "status": "success",
-        "project_id": project_id,
-        "simulation_enabled": False,
-        "current_project": runtime_config.current_project,
-    }
+    return project_service.stop_project(project_id)
 
 
 @router.post("/{project_id}/report/build")
 async def build_report(project_id: str):
     """Build project report JSON + Markdown and archive into Mnemosyne human vault."""
-    if project_id not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    report = build_project_report(project_id)
-    return {
-        "status": "success",
-        "project_id": project_id,
-        "protocol_count": report.get("protocol_count", 0),
-        "invocation_count": report.get("invocation_count", 0),
-        "top_protocols": report.get("top_protocols", []),
-        "output": report.get("output", {}),
-        "mnemosyne_entry_id": report.get("mnemosyne_entry_id", ""),
-    }
+    return project_service.build_report(project_id)
 
 
 @router.get("/{project_id}/report")
 async def get_report(project_id: str):
     """Get latest built project report JSON."""
-    if project_id not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    report = load_project_report(project_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="Project report not found")
-    return report
+    return project_service.get_report(project_id)

@@ -5,6 +5,7 @@
 Gods Platform 采用三层结构：
 
 - 核心引擎：`gods/`
+- 用例服务层：`api/services/`
 - API 服务：`api/`
 - 命令行：`cli/`
 
@@ -53,7 +54,8 @@ Gods Platform 采用三层结构：
 
 ## 3. API 层（`api/`）
 
-- `api/server.py`：FastAPI 入口、路由注册、后台 simulation loop。
+- `api/app.py`：FastAPI 应用装配入口（路由注册、生命周期挂载）。
+- `api/server.py`：兼容包装层（保留旧导入，不承载业务）。
 - `api/routes/config.py`：配置读取/保存（密钥脱敏输出）。
 - `api/routes/projects.py`：项目增删。
 - `api/routes/projects.py`：项目增删 + 项目报告生成/查询（`/projects/{project_id}/report/*`）。
@@ -67,6 +69,14 @@ Gods Platform 采用三层结构：
   - `/broadcast`：SSE 输出多 Agent 讨论流。
   - `/confess`：向指定 Agent 私聊并可触发即时 pulse（`silent=false`）。
   - `/prayers/check`：读取 Agent 发给人类的消息。
+
+## 3.5 服务层（`api/services/`）
+
+- `api/services/config_service.py`：配置脱敏读取、配置保存编排。
+- `api/services/project_service.py`：项目生命周期、知识图谱重建、Project 报告编排。
+- `api/services/simulation_service.py`：调度循环与 startup 安全暂停策略。
+
+说明：`api/routes/*` 只做协议适配，业务逻辑下沉到 service，避免 API 膨胀。
 
 ## 4. CLI 层（`cli/`）
 

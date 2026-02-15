@@ -15,7 +15,6 @@ from gods.tools.communication import (
     check_inbox,
     send_message,
     list_agents,
-    record_protocol,
 )
 
 
@@ -103,16 +102,12 @@ async def gw_record_protocol(req: RecordProtocolRequest) -> dict:
     subject_dir = Path("projects") / pid / "agents" / req.subject
     if not subject_dir.exists():
         raise HTTPException(status_code=404, detail=f"Subject agent '{req.subject}' not found in '{pid}'")
-    text = record_protocol.invoke(
-        {
-            "topic": req.topic,
-            "relation": req.relation,
-            "object": req.object,
-            "clause": req.clause,
-            "counterparty": req.counterparty,
-            "status": req.status,
-            "caller_id": req.subject,
-            "project_id": pid,
-        }
-    )
-    return {"project_id": pid, "subject": req.subject, "result": text}
+    _ = req  # keep endpoint payload compatibility, behavior is now contract-first guidance
+    return {
+        "project_id": pid,
+        "subject": req.subject,
+        "result": (
+            "DEPRECATED: /tool-gateway/record_protocol is disabled. "
+            "Use Hermes contract endpoints: /hermes/contracts/register, /commit, /resolved."
+        ),
+    }

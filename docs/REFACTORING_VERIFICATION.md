@@ -32,7 +32,7 @@
   - `api/routes/agents.py`: 100%
 
 ### ✅ 功能验证
-1. **新服务器启动**: ✅ `python api/server.py` 成功运行
+1. **新服务器启动**: ✅ `python server.py` 成功运行
 2. **健康检查**: ✅ `/health` 返回 `{"status": "operational"}`
 3. **CLI 功能**: ✅ `python cli/main.py list` 正常工作
 4. **项目管理**: ✅ `python cli/main.py project list` 正常工作
@@ -60,7 +60,7 @@ Gods/
 ```
 
 ### 启动命令
-- **服务器**: `python api/server.py`
+- **服务器**: `python server.py`
 - **CLI**: `python cli/main.py <command>`
 - **测试**: `python -m pytest tests/`
 

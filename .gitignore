@@ -12,6 +12,9 @@ reports/
 experiments/
 projects/test_*/
 projects/unit_*/
+projects/animal_world_hermes/
+projects/animal_world_hermes_test/
+projects/prompt_override_test/
 projects/**/debug/
 projects/**/buffers/*.jsonl
 projects/**/buffers/*_inbox_guard.json

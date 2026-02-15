@@ -53,7 +53,7 @@ Most agent frameworks focus on transient, conversational tasks. Pantheon is buil
 4. **Launch the Server**
    Start the intention rendering engine (The Pulse):
    ```bash
-   python -m api.server
+   python server.py
    ```
 
 ---

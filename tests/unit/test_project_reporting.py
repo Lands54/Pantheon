@@ -42,7 +42,7 @@ def test_build_project_report_with_data():
             encoding="utf-8",
         )
         (protocols_dir / "contracts.json").write_text(
-            json.dumps({"contracts": [{"name": "eco.protocol", "version": "1.0.0"}]}, ensure_ascii=False),
+            json.dumps({"contracts": [{"title": "Eco Contract", "version": "1.0.0"}]}, ensure_ascii=False),
             encoding="utf-8",
         )
         (protocols_dir / "invocations.jsonl").write_text(

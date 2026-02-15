@@ -19,7 +19,13 @@ from gods.hermes.policy import allow_agent_tool_provider
 
 
 class HermesExecutor:
+    """
+    Executor component responsible for both synchronous and asynchronous protocol invocations.
+    """
     def __init__(self):
+        """
+        Initializes the executor with registry, limiter, and thread pool.
+        """
         self.registry = HermesRegistry()
         self.limiter = HermesLimiter()
         self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="hermes")
@@ -35,6 +41,9 @@ class HermesExecutor:
         error: dict | None = None,
         job_id: str = "",
     ):
+        """
+        Records an invocation result in the persistent store and publishes an event.
+        """
         store.append_invocation(
             req.project_id,
             {
@@ -67,6 +76,9 @@ class HermesExecutor:
         )
 
     def invoke_sync(self, req: InvokeRequest) -> InvokeResult:
+        """
+        Performs a synchronous protocol invocation, including validation and rate limiting.
+        """
         start = time.time()
         spec = self.registry.get(req.project_id, req.name, req.version)
         if spec.status != "active":
@@ -125,9 +137,15 @@ class HermesExecutor:
             self.limiter.release(req.project_id, req.name, req.version)
 
     def _save_job(self, job: JobRecord):
+        """
+        Saves a job record to the persistent store.
+        """
         store.save_job(job.project_id, job.job_id, job.model_dump())
 
     def _run_job(self, project_id: str, job_id: str):
+        """
+        Internal worker function that executes an asynchronous job.
+        """
         raw = store.load_job(project_id, job_id)
         if not raw:
             return
@@ -185,6 +203,9 @@ class HermesExecutor:
         )
 
     def invoke_async(self, req: InvokeRequest) -> InvokeResult:
+        """
+        Performs an asynchronous protocol invocation by creating a background job.
+        """
         spec = self.registry.get(req.project_id, req.name, req.version)
         if spec.mode == "sync":
             raise HermesError("HERMES_MODE_MISMATCH", "Protocol only supports sync mode")
@@ -215,10 +236,16 @@ class HermesExecutor:
         )
 
     def get_job(self, project_id: str, job_id: str) -> JobRecord | None:
+        """
+        Retrieves a job record by its ID.
+        """
         raw = store.load_job(project_id, job_id)
         if not raw:
             return None
         return JobRecord(**raw)
 
     def list_invocations(self, project_id: str, name: str = "", limit: int = 100) -> list[dict]:
+        """
+        Lists invocation records with optional filtering and limit.
+        """
         return store.list_invocations(project_id, name=name, limit=limit)

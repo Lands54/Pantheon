@@ -12,6 +12,9 @@ from gods.config import runtime_config
 
 
 def _clip(value: Any, max_chars: int = 240) -> str:
+    """
+    Truncates a string value to a maximum length, appending a suffix if clipped.
+    """
     text = str(value if value is not None else "")
     if len(text) <= max_chars:
         return text
@@ -19,7 +22,13 @@ def _clip(value: Any, max_chars: int = 240) -> str:
 
 
 class PulseTraceLogger:
+    """
+    Logger for tracking detailed events during an agent's pulse execution.
+    """
     def __init__(self, project_id: str, agent_id: str, pulse_id: str, reason: str):
+        """
+        Initializes the logger with project, agent, and pulse context.
+        """
         self.project_id = project_id
         self.agent_id = agent_id
         self.pulse_id = pulse_id
@@ -29,14 +38,23 @@ class PulseTraceLogger:
         self._seq = 0
 
     def _enabled(self) -> bool:
+        """
+        Checks if pulse tracing is enabled for the current project.
+        """
         proj = runtime_config.projects.get(self.project_id)
         return bool(getattr(proj, "debug_trace_enabled", True) if proj else True)
 
     def _full_content(self) -> bool:
+        """
+        Checks if full content tracing is enabled (without truncation).
+        """
         proj = runtime_config.projects.get(self.project_id)
         return bool(getattr(proj, "debug_trace_full_content", True) if proj else True)
 
     def event(self, kind: str, **fields):
+        """
+        Records a specific event kind with associated metadata fields.
+        """
         if not self._enabled():
             return
         if not self._full_content():
@@ -54,6 +72,9 @@ class PulseTraceLogger:
         self.events.append(payload)
 
     def flush(self):
+        """
+        Persists the recorded events to the pulse_trace.jsonl file.
+        """
         if not self._enabled():
             return
         proj = runtime_config.projects.get(self.project_id)
@@ -78,4 +99,7 @@ class PulseTraceLogger:
 
     @staticmethod
     def clip(value: Any, max_chars: int = 240) -> str:
+        """
+        Static access to the internal _clip utility.
+        """
         return _clip(value, max_chars=max_chars)

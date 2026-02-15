@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+from langchain_core.messages import AIMessage, HumanMessage
+
+from gods.agents.base import GodAgent
+from gods.config import AgentModelConfig, ProjectConfig, runtime_config
+
+
+class _FakeBrain:
+    def __init__(self):
+        self.calls = 0
+
+    def think_with_tools(self, messages, tools, trace_meta=None):
+        if self.calls == 0:
+            self.calls += 1
+            return AIMessage(
+                content="freeform action",
+                tool_calls=[
+                    {"id": "ff1", "name": "list_dir", "args": {"path": "."}},
+                ],
+            )
+        self.calls += 1
+        return AIMessage(content="freeform done", tool_calls=[])
+
+
+def test_agent_level_phase_strategy_override_to_freeform():
+    project_id = "it_agent_strategy_override"
+    agent_id = "solo"
+    agent_dir = Path("projects") / project_id / "agents" / agent_id
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / "agent.md").write_text("# solo\noverride test", encoding="utf-8")
+    (agent_dir / "memory.md").write_text("", encoding="utf-8")
+
+    old_project = runtime_config.projects.get(project_id)
+    runtime_config.projects[project_id] = ProjectConfig(
+        name="it agent override",
+        active_agents=[agent_id],
+        agent_settings={
+            agent_id: AgentModelConfig(
+                model="stepfun/step-3.5-flash:free",
+                disabled_tools=[],
+                phase_strategy="freeform",
+            )
+        },
+        simulation_enabled=False,
+        phase_mode_enabled=True,
+        phase_strategy="strict_triad",
+        tool_loop_max=3,
+    )
+
+    try:
+        agent = GodAgent(agent_id=agent_id, project_id=project_id)
+        agent.brain = _FakeBrain()
+
+        state = {
+            "project_id": project_id,
+            "messages": [HumanMessage(content="start", name="tester")],
+            "context": "agent override experiment",
+            "next_step": "",
+        }
+        out = agent.process(state)
+        assert out["next_step"] == "finish"
+
+        mem_text = (agent_dir / "memory.md").read_text(encoding="utf-8")
+        assert "[MODE] freeform" in mem_text
+        assert "[[ACTION]] list_dir" in mem_text
+    finally:
+        if old_project is None:
+            runtime_config.projects.pop(project_id, None)
+        else:
+            runtime_config.projects[project_id] = old_project
+        shutil.rmtree(Path("projects") / project_id, ignore_errors=True)

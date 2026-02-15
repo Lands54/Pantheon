@@ -31,7 +31,7 @@ def test_project_report_build_and_show_api():
             encoding="utf-8",
         )
         (protocol_dir / "contracts.json").write_text(
-            json.dumps({"contracts": [{"name": "ecosystem.v1", "version": "1.0.0"}]}, ensure_ascii=False),
+            json.dumps({"contracts": [{"title": "Ecosystem Contract", "version": "1.0.0"}]}, ensure_ascii=False),
             encoding="utf-8",
         )
         with (protocol_dir / "invocations.jsonl").open("w", encoding="utf-8") as f:

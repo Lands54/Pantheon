@@ -3,8 +3,33 @@ from __future__ import annotations
 
 import json
 import time
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+
+_PROJECT_LOCKS: dict[str, threading.RLock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _project_lock(project_id: str) -> threading.RLock:
+    with _LOCKS_GUARD:
+        lock = _PROJECT_LOCKS.get(project_id)
+        if lock is None:
+            lock = threading.RLock()
+            _PROJECT_LOCKS[project_id] = lock
+        return lock
+
+
+@contextmanager
+def contract_lock(project_id: str):
+    lock = _project_lock(project_id)
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def _project_protocol_dir(project_id: str) -> Path:
