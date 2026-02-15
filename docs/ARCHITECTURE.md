@@ -24,12 +24,28 @@ Gods Platform 采用三层结构：
 - `gods/tools/communication.py`：私聊投递、收件箱读取、上行给人类、Synod 升级。
 - `gods/tools/filesystem.py`：Agent 领地内文件读写与精确替换。
 - `gods/tools/execution.py`：受限命令执行（黑名单+禁止复杂 shell 符号）。
+- `gods/tools/hermes.py`：协议注册、协议调用、异步任务查询、协议列表。
 
-### 2.3 配置与持久化
+### 2.3 Hermes 协议总线（`gods/hermes/`）
+
+- `models.py`：协议/调用/任务模型定义。
+- `registry.py`：项目级协议注册与检索（精确 `name + version`）。
+- `schema.py`：请求/响应 schema 校验。
+- `router.py`：provider 路由（支持 `agent_tool` 与 `http`，HTTP 目前限制为 localhost/127.0.0.1）。
+- 安全默认：`agent_tool` provider 在项目级默认禁用，需显式开启 `hermes_allow_agent_tool_provider=true`。
+- `executor.py`：sync/async 执行与审计落盘。
+- `store.py`：项目级持久化（registry/invocations/jobs）。
+- `limits.py`：协议级并发与速率限制。
+- `contracts.py`：结构化契约注册、承诺、职责解析（default + agent-specific）。
+
+### 2.4 配置与持久化
 
 - `gods/config.py`：`config.json` 的加载、迁移、保存。
 - `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
 - `projects/{project_id}/agents/{agent_id}/memory.md`：可读记忆日志。
+- `projects/{project_id}/protocols/registry.json`：Hermes 协议注册表。
+- `projects/{project_id}/protocols/invocations.jsonl`：Hermes 调用审计日志。
+- `projects/{project_id}/protocols/jobs/*.json`：Hermes 异步任务状态。
 
 ## 3. API 层（`api/`）
 
@@ -37,6 +53,10 @@ Gods Platform 采用三层结构：
 - `api/routes/config.py`：配置读取/保存。
 - `api/routes/projects.py`：项目增删。
 - `api/routes/agents.py`：Agent 增删。
+- `api/routes/hermes.py`：协议注册、调用、任务查询、审计查询。
+  - 额外支持：`/hermes/route`（按 `target_agent + function_id` 路由调用）
+  - 额外支持：`/hermes/contracts/*`（契约注册/承诺/解析）
+  - 额外支持：`/hermes/ports/*`（项目级端口租约 reserve/release/list）
 - `api/routes/communication.py`：
   - `/broadcast`：SSE 输出多 Agent 讨论流。
   - `/confess`：向指定 Agent 私聊并可触发即时 pulse（`silent=false`）。
@@ -65,6 +85,10 @@ projects/{project_id}/
 │   ├── {agent_id}.jsonl
 │   ├── {agent_id}_read.jsonl
 │   └── human.jsonl
+├── protocols/
+│   ├── registry.json
+│   ├── invocations.jsonl
+│   └── jobs/{job_id}.json
 └── memory.sqlite
 ```
 

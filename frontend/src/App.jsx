@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Users, UserPlus, Trash2, Settings, MessageSquare,
-  Send, Brain, Terminal, X, ChevronRight, Activity, Zap, Save, RefreshCw, Plus
+  Send, Brain, Terminal, X, ChevronRight, Activity, Zap, Save, RefreshCw, Plus, GitBranch
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -26,12 +26,127 @@ const App = () => {
 
   const [prayers, setPrayers] = useState([]);
   const [isSimulationRunning, setIsSimulationRunning] = useState(false);
+  const [topology, setTopology] = useState({ nodes: {}, edges: {}, recent: [] });
+  const hermesEventRef = useRef(null);
+
+  const applyHermesEvent = (ev) => {
+    const payload = ev?.payload || {};
+    setTopology(prev => {
+      const nodes = { ...prev.nodes };
+      const edges = { ...prev.edges };
+
+      const ensureNode = (id, label, kind) => {
+        if (!nodes[id]) nodes[id] = { id, label, kind };
+      };
+      const bumpEdge = (source, target, kind) => {
+        const key = `${source}->${target}:${kind}`;
+        const cur = edges[key] || { key, source, target, kind, count: 0 };
+        edges[key] = { ...cur, count: cur.count + 1 };
+      };
+
+      if (ev?.type === 'protocol_registered') {
+        const protocolId = `protocol:${payload.name}@${payload.version || '1.0.0'}`;
+        const provider = payload.provider || {};
+        const agentId = `agent:${provider.agent_id || 'unknown'}`;
+        ensureNode(protocolId, payload.name || 'unknown.protocol', 'protocol');
+        ensureNode(agentId, provider.agent_id || 'unknown', 'agent');
+        bumpEdge(agentId, protocolId, 'provides');
+      }
+
+      if (ev?.type === 'protocol_invoked') {
+        const protocolId = `protocol:${payload.name}@${payload.version || '1.0.0'}`;
+        const caller = `agent:${payload.caller_id || 'unknown'}`;
+        ensureNode(protocolId, payload.name || 'unknown.protocol', 'protocol');
+        ensureNode(caller, payload.caller_id || 'unknown', 'agent');
+        bumpEdge(caller, protocolId, 'invokes');
+      }
+
+      if (ev?.type === 'job_updated') {
+        const protocolId = `protocol:${payload.name}@${payload.version || '1.0.0'}`;
+        ensureNode(protocolId, payload.name || 'unknown.protocol', 'protocol');
+      }
+
+      const recent = [ev, ...(prev.recent || [])].slice(0, 12);
+      return { nodes, edges, recent };
+    });
+  };
+
+  const fetchHermesSnapshot = async (pid) => {
+    try {
+      const [pRes, iRes] = await Promise.all([
+        fetch(`/hermes/list?project_id=${encodeURIComponent(pid)}`),
+        fetch(`/hermes/invocations?project_id=${encodeURIComponent(pid)}&limit=200`)
+      ]);
+      const pData = await pRes.json();
+      const iData = await iRes.json();
+
+      const nodes = {};
+      const edges = {};
+      const ensureNode = (id, label, kind) => {
+        if (!nodes[id]) nodes[id] = { id, label, kind };
+      };
+      const bumpEdge = (source, target, kind) => {
+        const key = `${source}->${target}:${kind}`;
+        const cur = edges[key] || { key, source, target, kind, count: 0 };
+        edges[key] = { ...cur, count: cur.count + 1 };
+      };
+
+      (pData.protocols || []).forEach(spec => {
+        const protocolId = `protocol:${spec.name}@${spec.version || '1.0.0'}`;
+        const provider = spec.provider || {};
+        const agentId = `agent:${provider.agent_id || 'unknown'}`;
+        ensureNode(protocolId, spec.name || 'unknown.protocol', 'protocol');
+        ensureNode(agentId, provider.agent_id || 'unknown', 'agent');
+        bumpEdge(agentId, protocolId, 'provides');
+      });
+
+      (iData.invocations || []).forEach(inv => {
+        const protocolId = `protocol:${inv.name}@${inv.version || '1.0.0'}`;
+        const caller = `agent:${inv.caller_id || 'unknown'}`;
+        ensureNode(protocolId, inv.name || 'unknown.protocol', 'protocol');
+        ensureNode(caller, inv.caller_id || 'unknown', 'agent');
+        bumpEdge(caller, protocolId, 'invokes');
+      });
+
+      setTopology(prev => ({ nodes, edges, recent: prev.recent || [] }));
+    } catch (e) {
+      console.warn('Hermes snapshot failed', e);
+    }
+  };
 
   useEffect(() => {
     refreshData();
     const interval = setInterval(fetchPrayers, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!config.current_project) return;
+    fetchHermesSnapshot(config.current_project);
+
+    if (hermesEventRef.current) {
+      hermesEventRef.current.close();
+      hermesEventRef.current = null;
+    }
+    const url = `/hermes/events?project_id=${encodeURIComponent(config.current_project)}`;
+    const es = new EventSource(url);
+    hermesEventRef.current = es;
+    es.onmessage = (msg) => {
+      try {
+        const ev = JSON.parse(msg.data);
+        applyHermesEvent(ev);
+      } catch (e) { }
+    };
+    es.onerror = () => {
+      // browser auto-reconnects for EventSource
+    };
+    return () => {
+      if (hermesEventRef.current) {
+        hermesEventRef.current.close();
+        hermesEventRef.current = null;
+      }
+    };
+  }, [config.current_project]);
 
   const fetchPrayers = async () => {
     try {
@@ -209,6 +324,11 @@ const App = () => {
             <span>Sacred Prayers {prayers.length > 0 && <span className="badge">{prayers.length}</span>}</span>
           </div>
 
+          <div className={`nav-item ${activeTab === 'topology' ? 'active' : ''}`} onClick={() => setActiveTab('topology')}>
+            <GitBranch size={18} />
+            <span>Hermes Topology</span>
+          </div>
+
           <div className="nav-group-label">CURRENT WORLD</div>
           <div className="project-switcher glass-light">
             <select value={config.current_project} onChange={(e) => switchProject(e.target.value)}>
@@ -318,9 +438,87 @@ const App = () => {
               </div>
             </div>
           )}
+
+          {activeTab === 'topology' && (
+            <div className="topology-view glass">
+              {(() => {
+                const list = Object.values(topology.nodes || {});
+                const map = {};
+                const cx = 560;
+                const cy = 320;
+                const radius = 240;
+                list.forEach((n, idx) => {
+                  const angle = (Math.PI * 2 * idx) / Math.max(1, list.length);
+                  map[n.id] = {
+                    x: cx + Math.cos(angle) * radius,
+                    y: cy + Math.sin(angle) * radius,
+                    ...n
+                  };
+                });
+                const edgeList = Object.values(topology.edges || {});
+                return (
+                  <>
+                    <div className="topology-header-row">
+                      <span>Nodes: {list.length}</span>
+                      <span>Edges: {edgeList.length}</span>
+                      <span>Recent Events: {(topology.recent || []).length}</span>
+                    </div>
+                    <svg viewBox="0 0 1120 640" className="topology-canvas">
+                      {edgeList.map(e => {
+                        const s = map[e.source];
+                        const t = map[e.target];
+                        if (!s || !t) return null;
+                        const width = Math.min(8, 1 + Math.log2((e.count || 1) + 1));
+                        return (
+                          <g key={e.key}>
+                            <line
+                              x1={s.x}
+                              y1={s.y}
+                              x2={t.x}
+                              y2={t.y}
+                              stroke={e.kind === 'provides' ? '#8a9cae' : '#d4af37'}
+                              strokeWidth={width}
+                              strokeOpacity="0.75"
+                            />
+                          </g>
+                        );
+                      })}
+                      {Object.values(map).map(n => (
+                        <g key={n.id}>
+                          <circle
+                            cx={n.x}
+                            cy={n.y}
+                            r={n.kind === 'agent' ? 20 : 16}
+                            fill={n.kind === 'agent' ? '#27384c' : '#4a3d15'}
+                            stroke={n.kind === 'agent' ? '#8fb3d9' : '#d4af37'}
+                            strokeWidth="2"
+                          />
+                          <text x={n.x} y={n.y + 36} textAnchor="middle" className="topology-label">
+                            {n.label}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                    <div className="topology-events">
+                      {(topology.recent || []).slice(0, 3).map((ev, idx) => (
+                        <motion.div
+                          key={`${ev.seq}-${idx}`}
+                          className="mail-float"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                        >
+                          ✉ {ev.type}
+                        </motion.div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
-        {activeTab !== 'prayers' && (
+        {(activeTab === 'debate' || activeTab === 'private') && (
           <footer className="input-section glass">
             <div className="input-wrapper">
               <input

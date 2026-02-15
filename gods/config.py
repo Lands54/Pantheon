@@ -61,6 +61,13 @@ class ProjectConfig(BaseModel):
     command_max_memory_mb: int = 512
     command_max_cpu_sec: int = 15
     command_max_output_chars: int = 4000
+    # Hermes protocol bus controls
+    hermes_enabled: bool = True
+    hermes_default_timeout_sec: int = 30
+    hermes_default_rate_per_minute: int = 60
+    hermes_default_max_concurrency: int = 2
+    # Security default: forbid direct agent_tool provider registration/invocation.
+    hermes_allow_agent_tool_provider: bool = False
 
 class SystemConfig(BaseModel):
     openrouter_api_key: str = ""

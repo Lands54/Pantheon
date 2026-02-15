@@ -744,3 +744,44 @@ input:checked+.slider:before {
 .add-proj-btn:hover {
   opacity: 1;
 }
+
+/* Hermes Topology */
+.topology-view {
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.topology-header-row {
+  display: flex;
+  gap: 24px;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-bottom: 12px;
+}
+
+.topology-canvas {
+  width: 100%;
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  background: radial-gradient(circle at 40% 30%, rgba(212, 175, 55, 0.12), rgba(255, 255, 255, 0.02));
+}
+
+.topology-label {
+  fill: #d7dce2;
+  font-size: 12px;
+}
+
+.topology-events {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mail-float {
+  font-size: 0.82rem;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.1);
+  color: #f1df9b;
+  padding: 6px 10px;
+  border-radius: 999px;
+}

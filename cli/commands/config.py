@@ -54,6 +54,12 @@ def cmd_config(args):
             print(f"   Max Events Per Pulse: {proj.get('debug_trace_max_events', 200)}")
             print(f"   Full Content: {proj.get('debug_trace_full_content', True)}")
             print(f"   LLM IO Trace Enabled: {proj.get('debug_llm_trace_enabled', True)}")
+            print(f"\n📡 Hermes Bus:")
+            print(f"   Enabled: {proj.get('hermes_enabled', True)}")
+            print(f"   Default Timeout: {proj.get('hermes_default_timeout_sec', 30)}s")
+            print(f"   Default Rate Limit: {proj.get('hermes_default_rate_per_minute', 60)} /min")
+            print(f"   Default Max Concurrency: {proj.get('hermes_default_max_concurrency', 2)}")
+            print(f"   Allow agent_tool Provider: {proj.get('hermes_allow_agent_tool_provider', False)}")
             
             print(f"\n👥 Active Agents: {', '.join(proj.get('active_agents', []))}")
             
@@ -196,6 +202,20 @@ def cmd_config(args):
                 else:
                     print(f"❌ Unknown debug key: {parts[1]}")
                     return
+            elif parts[0] == "hermes" and len(parts) >= 2:
+                if parts[1] == "enabled":
+                    data["projects"][pid]["hermes_enabled"] = args.value.lower() == "true"
+                elif parts[1] == "timeout":
+                    data["projects"][pid]["hermes_default_timeout_sec"] = int(args.value)
+                elif parts[1] == "rate":
+                    data["projects"][pid]["hermes_default_rate_per_minute"] = int(args.value)
+                elif parts[1] == "concurrency":
+                    data["projects"][pid]["hermes_default_max_concurrency"] = int(args.value)
+                elif parts[1] == "allow_agent_tool":
+                    data["projects"][pid]["hermes_allow_agent_tool_provider"] = args.value.lower() == "true"
+                else:
+                    print(f"❌ Unknown hermes key: {parts[1]}")
+                    return
 
             elif parts[0] == "legacy" and len(parts) >= 2:
                 if parts[1] == "social_api":
@@ -266,6 +286,11 @@ def cmd_config(args):
                 print("  debug.max_events (number)")
                 print("  debug.full (true/false)")
                 print("  debug.llm_trace (true/false)")
+                print("  hermes.enabled (true/false)")
+                print("  hermes.timeout (seconds)")
+                print("  hermes.rate (calls/min)")
+                print("  hermes.concurrency (number)")
+                print("  hermes.allow_agent_tool (true/false)")
                 print("  legacy.social_api (true/false)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")

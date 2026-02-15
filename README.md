@@ -109,6 +109,92 @@ You can configure how agents think during a Pulse:
 ./temple.sh --project demo_world config set phase.strategy iterative_action
 ```
 
+### Hermes Protocol Bus (v0.1)
+
+Pantheon now includes **Hermes**, a project-scoped protocol execution bus:
+
+- Protocol registry per project (`projects/{project_id}/protocols/registry.json`)
+- Sync/Async invocation
+- Invocation audit log (`invocations.jsonl`)
+- Async job status (`projects/{project_id}/protocols/jobs/*.json`)
+
+Security default:
+- `agent_tool` provider is **disabled by default**.
+- Enable only when needed:
+  `./temple.sh -p demo_world config set hermes.allow_agent_tool true`
+
+Example:
+
+```bash
+# Register protocol
+./temple.sh -p demo_world protocol register \
+  --name grass.scan \
+  --provider agent_tool \
+  --agent grass \
+  --tool list_dir
+
+# Invoke sync
+./temple.sh -p demo_world protocol call \
+  --name grass.scan \
+  --caller ground \
+  --mode sync \
+  --payload '{"path":"."}'
+
+# Invoke async
+./temple.sh -p demo_world protocol call \
+  --name grass.scan \
+  --caller ground \
+  --mode async
+
+# Register HTTP protocol (localhost only)
+./temple.sh -p demo_world protocol register \
+  --name bridge.echo \
+  --provider http \
+  --url http://127.0.0.1:9000/echo \
+  --method POST \
+  --request-schema '{"type":"object","required":["msg"],"properties":{"msg":{"type":"string"}}}' \
+  --response-schema '{"type":"object","required":["result","status_code"],"properties":{"status_code":{"type":"integer"},"result":{"type":"object"}}}'
+
+# Route by target agent + function id (Hermes(agent,function,payload))
+./temple.sh -p demo_world protocol route \
+  --target fire_god \
+  --function check_fire_speed \
+  --caller ground \
+  --payload '{"wind":3.2}'
+
+# Contract lifecycle
+./temple.sh -p demo_world protocol contract-register --file contract.json
+./temple.sh -p demo_world protocol contract-commit --name eco.protocol --version 1.0.0 --agent tiger
+./temple.sh -p demo_world protocol contract-resolve --name eco.protocol --version 1.0.0
+
+# Port lease management (avoid localhost port collisions)
+./temple.sh -p demo_world protocol port-reserve --owner grass_api
+./temple.sh -p demo_world protocol port-list
+./temple.sh -p demo_world protocol port-release --owner grass_api
+```
+
+Python SDK:
+
+```python
+from gods.hermes.client import HermesClient
+
+cli = HermesClient(base_url="http://localhost:8000")
+ret = cli.route(
+    project_id="demo_world",
+    caller_id="ground_service",
+    target_agent="fire_god",
+    function_id="check_fire_speed",
+    payload={"wind": 3.2},
+)
+print(ret)
+```
+
+Hermes-dominated Animal World demo:
+
+```bash
+python scripts/run_animal_world_hermes.py
+```
+
 ---
 
 ## 📂 Project Structure

@@ -6,6 +6,7 @@ from pathlib import Path
 import json
 import fcntl
 import time
+import re
 from langchain.tools import tool
 
 
@@ -270,7 +271,7 @@ def record_protocol(
     project_id: str = "default",
 ) -> str:
     """
-    Record a negotiated protocol clause in structured form for knowledge graph extraction.
+    Register executable protocol clause in Hermes bus.
     """
     try:
         if not topic.strip() or not relation.strip() or not object.strip() or not clause.strip():
@@ -282,34 +283,108 @@ def record_protocol(
                 project_id,
             )
 
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        proto_dir = project_root / "projects" / project_id / "protocols"
-        proto_dir.mkdir(parents=True, exist_ok=True)
-        event_file = proto_dir / "events.jsonl"
+        from gods.hermes import hermes_service
+        from gods.hermes.errors import HermesError
+        from gods.hermes.models import ProtocolSpec
+        from gods.hermes.policy import allow_agent_tool_provider
 
-        now = time.time()
-        protocol_id = f"p_{int(now * 1000)}_{caller_id}"
-        entry = {
-            "timestamp": now,
-            "protocol_id": protocol_id,
-            "project_id": project_id,
-            "subject": caller_id,
-            "counterparty": counterparty,
-            "topic": topic,
-            "relation": relation,
-            "object": object,
-            "clause": clause,
-            "status": status,
+        relation_tool_map = {
+            "read": "read_file",
+            "read_file": "read_file",
+            "write": "write_file",
+            "write_file": "write_file",
+            "replace_content": "replace_content",
+            "insert_content": "insert_content",
+            "multi_replace": "multi_replace",
+            "list": "list_dir",
+            "list_dir": "list_dir",
+            "run": "run_command",
+            "run_command": "run_command",
+            "send": "send_message",
+            "send_message": "send_message",
+            "check_inbox": "check_inbox",
+            "call_protocol": "call_protocol",
         }
+        tool_name = relation_tool_map.get(relation.strip().lower(), relation.strip())
 
-        with open(event_file, "a", encoding="utf-8") as f:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        allowed_tools = {
+            "read_file",
+            "write_file",
+            "replace_content",
+            "insert_content",
+            "multi_replace",
+            "list_dir",
+            "run_command",
+            "send_message",
+            "check_inbox",
+            "call_protocol",
+            "register_protocol",
+            "check_protocol_job",
+            "list_protocols",
+        }
+        if tool_name not in allowed_tools:
+            return _format_comm_error(
+                "Protocol Error",
+                f"Cannot map relation '{relation}' to an executable tool.",
+                "Use relation as a concrete tool name, e.g. run_command / write_file / call_protocol.",
+                caller_id,
+                project_id,
+            )
 
-        return f"Protocol recorded: {protocol_id} ({caller_id} -[{relation}]-> {object})"
+        def _slug(v: str) -> str:
+            text = (v or "").strip().lower()
+            text = re.sub(r"[^a-z0-9_]+", "_", text)
+            text = re.sub(r"_+", "_", text).strip("_")
+            return text
+
+        topic_slug = _slug(topic)
+        object_slug = _slug(object)
+        if not topic_slug or not object_slug:
+            return _format_comm_error(
+                "Protocol Error",
+                "topic/object cannot be normalized into valid protocol name segments.",
+                "Use alphanumeric topic/object, e.g. ecosystem and simulator.",
+                caller_id,
+                project_id,
+            )
+
+        protocol_name = f"{topic_slug}.{object_slug}"
+        spec = ProtocolSpec(
+            name=protocol_name,
+            version="1.0.0",
+            description=f"{clause.strip()} (counterparty={counterparty.strip()}, status={status.strip()})",
+            mode="both",
+            provider={
+                "type": "agent_tool",
+                "project_id": project_id,
+                "agent_id": caller_id,
+                "tool_name": tool_name,
+            },
+            request_schema={"type": "object"},
+            response_schema={
+                "type": "object",
+                "required": ["result"],
+                "properties": {"result": {"type": "string"}},
+            },
+        )
+        if not allow_agent_tool_provider(project_id):
+            return _format_comm_error(
+                "Protocol Error",
+                "agent_tool provider is disabled by policy for this project.",
+                "Use register_protocol with provider_type=http, or enable hermes_allow_agent_tool_provider.",
+                caller_id,
+                project_id,
+            )
+        hermes_service.register(project_id, spec)
+        return f"Protocol registered: {protocol_name}@1.0.0"
+    except HermesError as e:
+        return _format_comm_error(
+            "Protocol Error",
+            f"{e.code}: {e.message}",
+            "Adjust relation/tool mapping and retry record_protocol.",
+            caller_id,
+            project_id,
+        )
     except Exception as e:
         return _format_comm_error(
             "Protocol Error",

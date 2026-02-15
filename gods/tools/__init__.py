@@ -22,6 +22,19 @@ from .filesystem import (
     validate_path
 )
 from .execution import run_command
+from .hermes import (
+    register_protocol,
+    call_protocol,
+    route_protocol,
+    check_protocol_job,
+    list_protocols,
+    register_contract,
+    commit_contract,
+    resolve_contract,
+    reserve_port,
+    release_port,
+    list_port_leases,
+)
 
 # Divine Toolset - Complete list for agent registration
 GODS_TOOLS = [
@@ -39,7 +52,18 @@ GODS_TOOLS = [
     record_protocol,
     list_agents,
     multi_replace,
-    list_dir
+    list_dir,
+    register_protocol,
+    call_protocol,
+    route_protocol,
+    check_protocol_job,
+    list_protocols,
+    register_contract,
+    commit_contract,
+    resolve_contract,
+    reserve_port,
+    release_port,
+    list_port_leases,
 ]
 
 __all__ = [
@@ -59,5 +83,16 @@ __all__ = [
     'multi_replace',
     'list_dir',
     'run_command',
-    'validate_path'
+    'validate_path',
+    'register_protocol',
+    'call_protocol',
+    'route_protocol',
+    'check_protocol_job',
+    'list_protocols',
+    'register_contract',
+    'commit_contract',
+    'resolve_contract',
+    'reserve_port',
+    'release_port',
+    'list_port_leases',
 ]

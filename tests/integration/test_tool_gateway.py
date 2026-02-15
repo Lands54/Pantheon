@@ -15,6 +15,12 @@ def _switch_project(project_id: str):
     client.post("/config/save", json=cfg)
 
 
+def _set_agent_tool_provider(project_id: str, enabled: bool):
+    cfg = client.get("/config").json()
+    cfg["projects"][project_id]["hermes_allow_agent_tool_provider"] = bool(enabled)
+    client.post("/config/save", json=cfg)
+
+
 def test_tool_gateway_send_and_check_inbox_roundtrip():
     project_id = "test_tool_gateway_world"
     old_project = runtime_config.current_project
@@ -55,6 +61,7 @@ def test_tool_gateway_list_agents_and_record_protocol():
     try:
         client.post("/projects/create", json={"id": project_id})
         _switch_project(project_id)
+        _set_agent_tool_provider(project_id, True)
         client.post("/agents/create", json={"agent_id": "alpha", "directives": "# alpha"})
 
         list_res = client.get("/tool-gateway/list_agents", params={"project_id": project_id})
@@ -66,17 +73,17 @@ def test_tool_gateway_list_agents_and_record_protocol():
             json={
                 "subject": "alpha",
                 "topic": "io",
-                "relation": "depends_on",
+                "relation": "list_dir",
                 "object": "storage",
                 "clause": "use jsonl",
                 "project_id": project_id,
             },
         )
         assert proto_res.status_code == 200
-        assert "Protocol recorded" in proto_res.json()["result"]
+        assert "Protocol registered" in proto_res.json()["result"]
 
-        event_file = Path("projects") / project_id / "protocols" / "events.jsonl"
-        assert event_file.exists()
+        registry_file = Path("projects") / project_id / "protocols" / "registry.json"
+        assert registry_file.exists()
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")
