@@ -2,6 +2,8 @@
 CLI Config Command - Configuration Management
 """
 import requests
+import json
+from pathlib import Path
 from cli.utils import get_base_url, handle_response
 
 
@@ -22,14 +24,13 @@ def cmd_config(args):
                 return
             
             print(f"\n⚙️  CONFIGURATION - Project: {pid}")
-            print(f"\n🔑 API Key: {'SET' if data['openrouter_api_key'] else 'NOT SET'}")
+            print(f"\n🔑 API Key: {'SET' if data.get('has_openrouter_api_key') else 'NOT SET'}")
             print(f"\n🌍 Current Project: {data['current_project']}")
-            print(f"\n🧱 Legacy Social API: {data.get('enable_legacy_social_api', False)}")
+            print(f"\n🧱 Legacy Social API (deprecated): {data.get('enable_legacy_social_api', False)}")
             
             print(f"\n🤖 Simulation:")
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
             print(f"   Interval: {proj.get('simulation_interval_min', 10)}-{proj.get('simulation_interval_max', 40)}s")
-            print(f"   Autonomous Parallel: {proj.get('autonomous_parallel', True)}")
             print(f"   Autonomous Batch Size: {proj.get('autonomous_batch_size', 4)}")
             
             print(f"\n📊 Memory:")
@@ -265,7 +266,7 @@ def cmd_config(args):
                 print("  simulation.enabled (true/false)")
                 print("  simulation.min (seconds)")
                 print("  simulation.max (seconds)")
-                print("  simulation.parallel (true/false)")
+                print("  simulation.parallel (true/false) [deprecated/no-op]")
                 print("  simulation.batch (number)")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
@@ -310,9 +311,15 @@ def cmd_config(args):
         # Fetch available models from OpenRouter API
         print("\n🤖 Fetching Available Models from OpenRouter...")
         try:
-            # Get API key if available
-            res = requests.get(f"{base_url}/config")
-            api_key = res.json().get("openrouter_api_key", "")
+            # Read local config.json for API key because server endpoint is redacted.
+            api_key = ""
+            cfg_path = Path("config.json")
+            if cfg_path.exists():
+                try:
+                    payload = json.loads(cfg_path.read_text(encoding="utf-8"))
+                    api_key = str(payload.get("openrouter_api_key", "") or "")
+                except Exception:
+                    api_key = ""
             
             # Fetch models from OpenRouter
             headers = {}

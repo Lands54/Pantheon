@@ -16,15 +16,17 @@ Gods Platform 采用三层结构：
 
 - `gods/agents/base.py`：`GodAgent`，每个 Agent 的主脉冲循环。
 - `gods/agents/brain.py`：`GodBrain`，按项目+Agent 动态解析模型并调用 OpenRouter。
+- `gods/agents/phase_runtime/`：阶段运行时包（`core/policy/strategies`）。
 - `gods/workflow.py`：LangGraph 编排（公共讨论与私聊流程）+ SQLite checkpoint。
 - `gods/state.py`：统一状态定义（`GodsState`）。
 
 ### 2.2 工具系统
 
-- `gods/tools/communication.py`：私聊投递、收件箱读取、上行给人类、Synod 升级。
+- `gods/tools/communication.py`：通信工具兼容导出（实现拆分到 `comm_inbox/comm_human/comm_protocol`）。
 - `gods/tools/filesystem.py`：Agent 领地内文件读写与精确替换。
 - `gods/tools/execution.py`：受限命令执行（黑名单+禁止复杂 shell 符号）。
 - `gods/tools/hermes.py`：协议注册、协议调用、异步任务查询、协议列表。
+- `gods/tools/mnemosyne.py`：Agent 档案持久化读写（agent vault）。
 
 ### 2.3 Hermes 协议总线（`gods/hermes/`）
 
@@ -46,17 +48,21 @@ Gods Platform 采用三层结构：
 - `projects/{project_id}/protocols/registry.json`：Hermes 协议注册表。
 - `projects/{project_id}/protocols/invocations.jsonl`：Hermes 调用审计日志。
 - `projects/{project_id}/protocols/jobs/*.json`：Hermes 异步任务状态。
+- `projects/{project_id}/mnemosyne/*`：Mnemosyne 档案层（agent/human/system vault）。
+- `projects/{project_id}/runtime/ports.json`：Hermes 端口租约。
 
 ## 3. API 层（`api/`）
 
 - `api/server.py`：FastAPI 入口、路由注册、后台 simulation loop。
-- `api/routes/config.py`：配置读取/保存。
+- `api/routes/config.py`：配置读取/保存（密钥脱敏输出）。
 - `api/routes/projects.py`：项目增删。
+- `api/routes/projects.py`：项目增删 + 项目报告生成/查询（`/projects/{project_id}/report/*`）。
 - `api/routes/agents.py`：Agent 增删。
 - `api/routes/hermes.py`：协议注册、调用、任务查询、审计查询。
   - 额外支持：`/hermes/route`（按 `target_agent + function_id` 路由调用）
   - 额外支持：`/hermes/contracts/*`（契约注册/承诺/解析）
   - 额外支持：`/hermes/ports/*`（项目级端口租约 reserve/release/list）
+- `api/routes/mnemosyne.py`：Mnemosyne 档案写入/查询/读取。
 - `api/routes/communication.py`：
   - `/broadcast`：SSE 输出多 Agent 讨论流。
   - `/confess`：向指定 Agent 私聊并可触发即时 pulse（`silent=false`）。

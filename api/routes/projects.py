@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException
 from gods.config import runtime_config, ProjectConfig
 from gods.protocols import build_knowledge_graph
+from gods.project.reporting import build_project_report, load_project_report
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -117,3 +118,31 @@ async def stop_project(project_id: str):
         "simulation_enabled": False,
         "current_project": runtime_config.current_project,
     }
+
+
+@router.post("/{project_id}/report/build")
+async def build_report(project_id: str):
+    """Build project report JSON + Markdown and archive into Mnemosyne human vault."""
+    if project_id not in runtime_config.projects:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = build_project_report(project_id)
+    return {
+        "status": "success",
+        "project_id": project_id,
+        "protocol_count": report.get("protocol_count", 0),
+        "invocation_count": report.get("invocation_count", 0),
+        "top_protocols": report.get("top_protocols", []),
+        "output": report.get("output", {}),
+        "mnemosyne_entry_id": report.get("mnemosyne_entry_id", ""),
+    }
+
+
+@router.get("/{project_id}/report")
+async def get_report(project_id: str):
+    """Get latest built project report JSON."""
+    if project_id not in runtime_config.projects:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = load_project_report(project_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Project report not found")
+    return report

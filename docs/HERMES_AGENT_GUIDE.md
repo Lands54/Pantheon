@@ -162,6 +162,28 @@ Hermes 会自动匹配该神的该函数的最高可用版本协议并执行。
 4. 可观测优先：关键调用统一走 Hermes，便于追踪。
 5. 版本演进：新能力用新版本，不直接破坏旧版本。
 
+## 8.5 Project 报告（复盘入口）
+
+实验复盘能力已收敛到 Project 层，不再使用独立 experiment 子系统。
+
+1. 生成报告：
+- `./temple.sh project report <project_id>`
+
+2. 查看报告 JSON：
+- `./temple.sh project report-show <project_id>`
+
+3. 输出位置：
+- `projects/{project_id}/reports/project_report.json`
+- `projects/{project_id}/reports/project_report.md`
+- `reports/project_{project_id}_latest.md`（镜像）
+
+4. 报告会自动落档到 Mnemosyne human vault，便于人类审阅与追踪。
+
+## 8.6 兼容层说明
+
+1. `legacy social api` 处于 deprecated 兼容层，默认关闭。
+2. `simulation.parallel` 保留为兼容字段，当前实现中视为 no-op。
+
 ## 9. 一句话模板（给 Agent）
 
 > 跨代理协作时，先查协议，再按 schema 调用 Hermes；需要按神和函数调用时使用 route；职责分配先提交 contract，再 commit，再 resolve 后执行。

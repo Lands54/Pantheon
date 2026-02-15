@@ -3,9 +3,15 @@ dist/
 __pycache__/
 *.pyc
 config.json
+config.local.json
+config.*.local.json
 .DS_Store
 .env
 archives/
+reports/
+experiments/
+projects/test_*/
+projects/unit_*/
 projects/**/debug/
 projects/**/buffers/*.jsonl
 projects/**/buffers/*_inbox_guard.json

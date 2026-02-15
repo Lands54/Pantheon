@@ -18,6 +18,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cli.commands.config import cmd_config
 from cli.commands.check import cmd_check
 from cli.commands.protocol import cmd_protocol
+from cli.commands.mnemosyne import cmd_mnemosyne
+from cli.commands.project import cmd_project as cmd_project_v2
+from cli.commands.agent import cmd_agent as cmd_agent_v2
+from cli.commands.communication import (
+    cmd_broadcast as cmd_broadcast_v2,
+    cmd_confess as cmd_confess_v2,
+    cmd_prayers as cmd_prayers_v2,
+)
+from cli.utils import get_base_url
 
 CONFIG_PATH = Path("config.json")
 
@@ -30,9 +39,6 @@ def load_config():
 def save_config(data):
     with open(CONFIG_PATH, "w") as f:
         json.dump(data, f, indent=4)
-
-def get_base_url():
-    return "http://localhost:8000"
 
 def get_current_project(config):
     return config.get("current_project", "default")
@@ -91,147 +97,13 @@ def cmd_list(args):
         print(f"❌ Server error: {e}")
 
 def cmd_project(args):
-    """Manage Projects"""
-    if args.subcommand == "list":
-        try:
-            res = requests.get(f"{get_base_url()}/config")
-            data = res.json()
-            print("\n🌍 SACRED WORLDS")
-            current = data.get("current_project")
-            for pid, proj in data["projects"].items():
-                marker = "⭐" if pid == current else "  "
-                print(f"{marker} {pid}")
-        except:
-            print("❌ Server error.")
-    
-    elif args.subcommand == "create":
-        try:
-            payload = {"id": args.id}
-            res = requests.post(f"{get_base_url()}/projects/create", json=payload)
-            if res.status_code == 200:
-                print(f"✨ World '{args.id}' manifested.")
-            else:
-                print(f"❌ Failed: {res.json().get('error', 'Unknown error')}")
-        except:
-            print("❌ Server error.")
-    
-    elif args.subcommand == "delete":
-        try:
-            res = requests.delete(f"{get_base_url()}/projects/{args.id}")
-            if res.status_code == 200:
-                print(f"🗑️  World '{args.id}' collapsed and removed from existence.")
-            else:
-                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
-        except:
-            print("❌ Server error.")
-    
-    elif args.subcommand == "switch":
-        try:
-            res = requests.get(f"{get_base_url()}/config")
-            data = res.json()
-            if args.id not in data["projects"]:
-                print(f"❌ World '{args.id}' does not exist.")
-                return
-            data["current_project"] = args.id
-            requests.post(f"{get_base_url()}/config/save", json=data)
-            print(f"🌌 Shifted consciousness to world: {args.id}")
-        except:
-            print("❌ Server error.")
-    
-    elif args.subcommand == "graph":
-        try:
-            res = requests.post(f"{get_base_url()}/projects/{args.id}/knowledge/rebuild")
-            if res.status_code == 200:
-                data = res.json()
-                print(f"🧠 Knowledge graph rebuilt for '{args.id}'")
-                print(f"   Nodes: {data.get('nodes', 0)}")
-                print(f"   Edges: {data.get('edges', 0)}")
-                print(f"   Output: {data.get('output')}")
-            else:
-                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
-        except:
-            print("❌ Server error.")
-    
-    elif args.subcommand == "start":
-        try:
-            res = requests.post(f"{get_base_url()}/projects/{args.id}/start")
-            if res.status_code == 200:
-                data = res.json()
-                print(f"🟢 Project started: {data.get('project_id')}")
-                print(f"   Current Project: {data.get('current_project')}")
-            else:
-                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
-        except:
-            print("❌ Server error.")
-
-    elif args.subcommand == "stop":
-        try:
-            res = requests.post(f"{get_base_url()}/projects/{args.id}/stop")
-            if res.status_code == 200:
-                data = res.json()
-                print(f"🔴 Project stopped: {data.get('project_id')}")
-                print(f"   Current Project: {data.get('current_project')}")
-            else:
-                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
-        except:
-            print("❌ Server error.")
+    cmd_project_v2(args)
 
 def cmd_agent(args):
-    """View or Edit Agent Directives"""
-    # Note: This tool currently reads from disk, but with projects it should read from projects/{project_id}/agents/...
-    config = load_config()
-    pid = args.project or config.get("current_project", "default")
-    agent_file = Path(f"projects/{pid}/agents/{args.id}/agent.md")
-    
-    if not agent_file.exists():
-        print(f"❌ Being '{args.id}' not found in world '{pid}'.")
-        return
-
-    if args.subcommand == "view":
-        print(f"--- DIRECTIVES FOR {args.id} IN {pid} ---")
-        print(agent_file.read_text(encoding="utf-8"))
-    elif args.subcommand == "edit":
-        print(f"📝 Enter new directives for {args.id} (End with Ctrl-D/Ctrl-Z):")
-        new_directives = sys.stdin.read()
-        if new_directives.strip():
-            agent_file.write_text(new_directives, encoding="utf-8")
-            print(f"✅ Directives for {args.id} updated.")
-        else:
-            print("🚫 Canceled.")
+    cmd_agent_v2(args)
 
 def cmd_broadcast(args):
-    """Deliver a Sacred Decree"""
-    pid = args.project or requests.get(f"{get_base_url()}/config").json().get("current_project")
-    print(f"📢 BROADCASTING in {pid}: {args.message}")
-    try:
-        payload = {"message": args.message}
-        # The /broadcast endpoint uses current_project. 
-        # If we want to broadcast to a specific project, we should switch first or the endpoint should accept project_id.
-        # Our server endpoint currently doesn't take project_id in the body, it uses runtime_config.current_project.
-        
-        # Switch if necessary
-        old_res = requests.get(f"{get_base_url()}/config").json()
-        old_pid = old_res.get("current_project")
-        if pid != old_pid:
-            old_res["current_project"] = pid
-            requests.post(f"{get_base_url()}/config/save", json=old_res)
-
-        with requests.post(f"{get_base_url()}/broadcast", json=payload, stream=True) as r:
-            for line in r.iter_lines():
-                if line:
-                    line_str = line.decode('utf-8')
-                    if line_str.startswith('data: '):
-                        data = json.loads(line_str[6:])
-                        if "content" in data:
-                            speaker = (data.get('speaker') or 'system').upper()
-                            print(f"[{speaker}]: {data['content']}")
-        
-        # Switch back
-        if pid != old_pid:
-            old_res["current_project"] = old_pid
-            requests.post(f"{get_base_url()}/config/save", json=old_res)
-    except Exception as e:
-        print(f"❌ Broadcast failed: {e}")
+    cmd_broadcast_v2(args)
 
 def cmd_test(args):
     """Run Automated Integration Tests"""
@@ -339,6 +211,10 @@ def main():
     p_proj_start.add_argument("id")
     p_proj_stop = proj_sub.add_parser("stop", help="Stop project simulation")
     p_proj_stop.add_argument("id")
+    p_proj_report = proj_sub.add_parser("report", help="Build project report and archive to Mnemosyne human vault")
+    p_proj_report.add_argument("id")
+    p_proj_report_show = proj_sub.add_parser("report-show", help="Show latest built project report JSON")
+    p_proj_report_show.add_argument("id")
 
     # protocol (Hermes bus)
     p_protocol = subparsers.add_parser("protocol", help="Hermes protocol bus operations")
@@ -399,6 +275,22 @@ def main():
     p_port_release.add_argument("--port", type=int, default=0)
     proto_sub.add_parser("port-list", help="List leased ports")
 
+    # mnemosyne archives
+    p_mn = subparsers.add_parser("mnemosyne", help="Mnemosyne archive operations")
+    mn_sub = p_mn.add_subparsers(dest="subcommand")
+    p_mn_write = mn_sub.add_parser("write", help="Write archive entry")
+    p_mn_write.add_argument("--vault", choices=["agent", "human", "system"], default="human")
+    p_mn_write.add_argument("--author", default="human")
+    p_mn_write.add_argument("--title", required=True)
+    p_mn_write.add_argument("--content", required=True)
+    p_mn_write.add_argument("--tags", default="")
+    p_mn_list = mn_sub.add_parser("list", help="List archive entries")
+    p_mn_list.add_argument("--vault", choices=["agent", "human", "system"], default="human")
+    p_mn_list.add_argument("--limit", type=int, default=20)
+    p_mn_read = mn_sub.add_parser("read", help="Read one archive entry")
+    p_mn_read.add_argument("entry_id")
+    p_mn_read.add_argument("--vault", choices=["agent", "human", "system"], default="human")
+
     # activate / deactivate
     subparsers.add_parser("activate").add_argument("id")
     subparsers.add_parser("deactivate").add_argument("id")
@@ -451,6 +343,9 @@ def main():
     if args.command == "protocol" and not args.subcommand:
         p_protocol.print_help()
         sys.exit(0)
+    if args.command == "mnemosyne" and not args.subcommand:
+        p_mn.print_help()
+        sys.exit(0)
     
     if args.command == "init": cmd_init(args)
     elif args.command == "list": cmd_list(args)
@@ -458,6 +353,7 @@ def main():
     elif args.command == "config": cmd_config(args)
     elif args.command == "project": cmd_project(args)
     elif args.command == "protocol": cmd_protocol(args)
+    elif args.command == "mnemosyne": cmd_mnemosyne(args)
     elif args.command == "agent": cmd_agent(args)
     elif args.command == "broadcast": cmd_broadcast(args)
     elif args.command == "test": cmd_test(args)
@@ -482,18 +378,9 @@ def main():
                 print(f"🌘 {args.id} deactivated in {pid}.")
         except: print("❌ Server error.")
     elif args.command == "confess":
-        try:
-            payload = {"agent_id": args.id, "message": args.message, "silent": args.silent}
-            res = requests.post(f"{get_base_url()}/confess", json=payload)
-            print(f"🤫 {res.json().get('status', 'Confession delivered.')}")
-        except: print("❌ Server error.")
+        cmd_confess_v2(args)
     elif args.command == "prayers":
-        try:
-            res = requests.get(f"{get_base_url()}/prayers/check")
-            prayers = res.json().get("prayers", [])
-            for p in prayers:
-                print(f"[{p.get('from')}]: {p.get('content')}")
-        except: print("❌ Server error.")
+        cmd_prayers_v2(args)
     else:
         parser.print_help()
 

@@ -195,6 +195,20 @@ Hermes-dominated Animal World demo:
 python scripts/run_animal_world_hermes.py
 ```
 
+Mnemosyne durable archives:
+
+```bash
+./temple.sh mnemosyne write --vault human --author overseer --title "exp-note" --content "step-1 completed" --tags "exp,run1"
+./temple.sh mnemosyne list --vault human --limit 20
+```
+
+Project report helpers:
+
+```bash
+./temple.sh project report demo_world
+./temple.sh project report-show demo_world
+```
+
 ---
 
 ## 📂 Project Structure
@@ -218,7 +232,8 @@ Pantheon/
 ## 🛡️ Safety & Security
 
 - **Sandboxing**: Agents are restricted to their project directories, but `run_command` is powerful. Review code before running purely autonomous loops.
-- **API Keys**: Stored in `config.json` (git-ignored). Never commit your keys.
+- **API Keys**: Stored in local `config.json` (git-ignored). `GET /config` returns redacted key only.
+- **Deprecated Compatibility**: `legacy social api` and `simulation.parallel` remain for compatibility and are disabled/no-op by default.
 - **Resource Limits**: The Pulse system prevents infinite loops by default, requiring explicit "wake up" signals or cron-like schedules.
 
 ---

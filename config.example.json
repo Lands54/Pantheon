@@ -1,0 +1,20 @@
+{
+    "openrouter_api_key": "",
+    "current_project": "default",
+    "enable_legacy_social_api": false,
+    "projects": {
+        "default": {
+            "name": "Default World",
+            "active_agents": [
+                "genesis"
+            ],
+            "agent_settings": {
+                "genesis": {
+                    "model": "stepfun/step-3.5-flash:free",
+                    "disabled_tools": []
+                }
+            },
+            "simulation_enabled": false
+        }
+    }
+}

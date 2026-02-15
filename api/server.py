@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from gods.config import runtime_config
-from api.routes import config, projects, agents, communication, tool_gateway, hermes
+from api.routes import config, projects, agents, communication, tool_gateway, hermes, mnemosyne
 from api.scheduler import pick_pulse_batch, pulse_agent_sync
 
 # Logging
@@ -25,6 +25,7 @@ app.include_router(agents.router)
 app.include_router(communication.router)
 app.include_router(tool_gateway.router)
 app.include_router(hermes.router)
+app.include_router(mnemosyne.router)
 if runtime_config.enable_legacy_social_api:
     from api.routes import legacy_social
     app.include_router(legacy_social.router)

@@ -35,6 +35,11 @@ from .hermes import (
     release_port,
     list_port_leases,
 )
+from .mnemosyne import (
+    mnemo_write_agent,
+    mnemo_list_agent,
+    mnemo_read_agent,
+)
 
 # Divine Toolset - Complete list for agent registration
 GODS_TOOLS = [
@@ -61,6 +66,9 @@ GODS_TOOLS = [
     reserve_port,
     release_port,
     list_port_leases,
+    mnemo_write_agent,
+    mnemo_list_agent,
+    mnemo_read_agent,
 ]
 
 __all__ = [
@@ -92,4 +100,7 @@ __all__ = [
     'reserve_port',
     'release_port',
     'list_port_leases',
+    'mnemo_write_agent',
+    'mnemo_list_agent',
+    'mnemo_read_agent',
 ]
