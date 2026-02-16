@@ -49,6 +49,15 @@ class ProjectConfig(BaseModel):
     )
     # Master switch for event-driven inbox delivery.
     inbox_event_enabled: bool = True
+    # Angelia event loop controls
+    angelia_enabled: bool = True
+    angelia_worker_per_agent: int = 1
+    angelia_event_max_attempts: int = 3
+    angelia_processing_timeout_sec: int = 60
+    angelia_cooldown_preempt_types: List[str] = Field(default_factory=lambda: ["inbox_event", "manual"])
+    angelia_timer_enabled: bool = True
+    angelia_timer_idle_sec: int = 60
+    angelia_dedupe_window_sec: int = 5
     summarize_threshold: int = 12
     summarize_keep_count: int = 5
     # Memory compression controls (full-read mode)
@@ -60,6 +69,9 @@ class ProjectConfig(BaseModel):
     context_budget_task_state: int = 4000
     context_budget_observations: int = 12000
     context_budget_inbox: int = 4000
+    context_budget_inbox_unread: int = 2000
+    context_budget_inbox_read_recent: int = 1000
+    context_budget_inbox_receipts: int = 1000
     context_budget_recent_messages: int = 12000
     context_recent_message_limit: int = 50
     context_observation_window: int = 30

@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from gods.config import runtime_config
-from gods.hermes import hermes_service
+from gods.hermes.service import hermes_service
 from gods.hermes.errors import HermesError
 from gods.hermes.events import hermes_events
 from gods.hermes.models import InvokeRequest, ProtocolSpec

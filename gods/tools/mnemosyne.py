@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from gods.mnemosyne import write_entry, list_entries, read_entry
 

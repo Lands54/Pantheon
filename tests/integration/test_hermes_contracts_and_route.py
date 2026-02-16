@@ -74,6 +74,17 @@ def test_hermes_contract_commit_snapshot_and_route_http():
         )
         assert commit_grass.status_code == 200
         assert commit_grass.json()["contract"]["missing_committers"] == ["tiger"]
+        assert commit_grass.json()["contract"]["notified_agents"] == ["ground"]
+
+        inbox_ground = client.get(
+            f"/projects/{project_id}/inbox/events",
+            params={"agent_id": "ground", "limit": 50},
+        )
+        assert inbox_ground.status_code == 200
+        ground_rows = inbox_ground.json().get("items", [])
+        notices = [x for x in ground_rows if x.get("msg_type") == "contract_notice"]
+        assert notices, "ground should receive contract_notice after grass commit"
+        assert "grass" in str(notices[-1].get("content", ""))
 
         commit = client.post(
             "/hermes/contracts/commit",
@@ -82,6 +93,17 @@ def test_hermes_contract_commit_snapshot_and_route_http():
         assert commit.status_code == 200
         assert commit.json()["contract"]["is_fully_committed"] is True
         assert commit.json()["contract"]["missing_committers"] == []
+        assert set(commit.json()["contract"]["notified_fully_agents"]) == {"ground", "grass", "tiger"}
+
+        inbox_grass = client.get(
+            f"/projects/{project_id}/inbox/events",
+            params={"agent_id": "grass", "limit": 100},
+        )
+        assert inbox_grass.status_code == 200
+        grass_rows = inbox_grass.json().get("items", [])
+        fully_rows = [x for x in grass_rows if x.get("msg_type") == "contract_fully_committed"]
+        assert fully_rows, "grass should receive contract_fully_committed notice"
+        assert "fully committed" in str(fully_rows[-1].get("content", "")).lower()
 
         listed_after_commit = client.get(
             "/hermes/contracts/list",

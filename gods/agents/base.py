@@ -11,6 +11,12 @@ from gods.prompts import prompt_registry
 from gods.tools import GODS_TOOLS
 from gods.tools.communication import reset_inbox_guard
 from gods.config import runtime_config
+from gods.mnemosyne import MemoryIntent, record_intent
+from gods.mnemosyne.intent_builders import (
+    intent_from_agent_marker,
+    intent_from_llm_response,
+    intent_from_tool_result,
+)
 from gods.agents.phase_runtime import AgentPhaseRuntime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
@@ -139,7 +145,14 @@ class GodAgent:
         simulation_directives = self._build_behavior_directives()
 
         if phase_mode_enabled and phase_strategy == "freeform":
-            self._append_to_memory("[MODE] freeform - phase state-machine bypassed.")
+            self._record_intent(
+                intent_from_agent_marker(
+                    project_id=self.project_id,
+                    agent_id=self.agent_id,
+                    marker="freeform_mode",
+                    payload={"project_id": self.project_id, "agent_id": self.agent_id},
+                )
+            )
         print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
 
         for _ in range(max_tool_rounds):
@@ -162,7 +175,14 @@ class GodAgent:
             )
 
             state["messages"].append(response)
-            self._append_to_memory(response.content or "[No textual response]")
+            self._record_intent(
+                intent_from_llm_response(
+                    project_id=self.project_id,
+                    agent_id=self.agent_id,
+                    phase="freeform",
+                    content=response.content or "[No textual response]",
+                )
+            )
 
             tool_calls = getattr(response, "tool_calls", []) or []
             if not tool_calls:
@@ -178,8 +198,6 @@ class GodAgent:
                 state["messages"].append(
                     ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name)
                 )
-                self._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
-
                 if tool_name == "post_to_synod":
                     state["next_step"] = "escalated"
                     return state
@@ -192,13 +210,27 @@ class GodAgent:
                     return state
                 injected = inject_inbox_after_action_if_any(state, self.project_id, self.agent_id)
                 if injected > 0:
-                    self._append_to_memory(f"[EVENT_INJECTED] {injected} inbox event(s) appended after action.")
+                    self._record_intent(
+                        intent_from_agent_marker(
+                            project_id=self.project_id,
+                            agent_id=self.agent_id,
+                            marker="event_injected",
+                            payload={"count": int(injected)},
+                        )
+                    )
 
             # refresh local memory snapshot for next loop iteration
             local_memory = self._load_local_memory()
 
         # Safety guard: if model keeps issuing tools forever, yield and let scheduler pulse later.
-        self._append_to_memory("Reached tool loop safety cap in this pulse. Will continue next pulse.")
+        self._record_intent(
+            intent_from_agent_marker(
+                project_id=self.project_id,
+                agent_id=self.agent_id,
+                marker="tool_loop_cap",
+                payload={"project_id": self.project_id, "agent_id": self.agent_id, "max_rounds": max_tool_rounds},
+            )
+        )
         state["next_step"] = "continue"
         return state
 
@@ -212,18 +244,79 @@ class GodAgent:
             return mem_path.read_text(encoding="utf-8")
         return "No personal chronicles yet."
 
-    def _append_to_memory(self, text: str):
+    def _record_intent(self, intent: MemoryIntent):
+        result = record_intent(intent)
+        # Keep existing compaction semantics for chronicle when policy writes are enabled.
+        if bool(result.get("chronicle_written")):
+            self._maybe_compact_memory(self._chronicle_path())
+        return result
+
+    def _append_to_memory(self, text: str, record_type: str = "default", payload: dict | None = None):
         """
-        Appends a new entry to the agent's Mnemosyne chronicle file.
+        Legacy adapter. Prefer explicit intent builders and _record_intent().
         """
-        from datetime import datetime
-        mem_path = self._chronicle_path()
-        mem_path.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        entry = f"\n### 📖 Entry [{timestamp}]\n{text or ''}\n\n---\n"
-        with open(mem_path, "a", encoding="utf-8") as f:
-            f.write(entry)
-        self._maybe_compact_memory(mem_path)
+        raw = str(text or "")
+        key = str(record_type or "").strip()
+        source_kind = "agent"
+        meta = dict(payload or {})
+
+        if key in {"freeform_mode_marker", "agent.mode.freeform"}:
+            key = "agent.mode.freeform"
+        elif key in {"tool_loop_safety_cap", "agent.safety.tool_loop_cap"}:
+            key = "agent.safety.tool_loop_cap"
+        elif key in {"default", "", "llm.response"}:
+            # Infer typed key from legacy markers.
+            m_action = re.match(r"^\[\[ACTION\]\]\s+([a-zA-Z0-9_]+)\s+->\s*(.*)$", raw, flags=re.S)
+            m_retry = re.match(r"^\[PHASE_RETRY\]\s+([a-zA-Z0-9_]+)\s+->\s*(.*)$", raw, flags=re.S)
+            m_injected = re.match(r"^\[EVENT_INJECTED\]\s+(\d+)", raw)
+            if m_action:
+                tool_name = str(m_action.group(1))
+                result_text = str(m_action.group(2) or "")
+                status = "ok"
+                low = result_text.lower()
+                if "divine restriction" in low or "policy block" in low:
+                    status = "blocked"
+                elif "tool execution error" in low or "error" in low:
+                    status = "error"
+                key = f"tool.{tool_name}.{status}"
+                source_kind = "tool"
+                meta.update({"tool_name": tool_name, "status": status, "result": result_text})
+            elif m_retry:
+                phase = str(m_retry.group(1) or "").strip().lower()
+                if phase not in {"reason", "act", "observe"}:
+                    phase = "act"
+                key = f"phase.retry.{phase}"
+                source_kind = "phase"
+                meta.update({"phase": phase, "message": str(m_retry.group(2) or "")})
+            elif m_injected:
+                key = "agent.event.injected"
+                source_kind = "agent"
+                meta.update({"count": int(m_injected.group(1))})
+            else:
+                key = "llm.response"
+                source_kind = "llm"
+                meta.update({"phase": str(meta.get("phase", "")), "content": raw})
+        elif key.startswith("phase.retry."):
+            source_kind = "phase"
+        elif key.startswith("tool."):
+            source_kind = "tool"
+        elif key.startswith("event."):
+            source_kind = "event"
+        elif key.startswith("inbox."):
+            source_kind = "inbox"
+        elif key.startswith("llm."):
+            source_kind = "llm"
+
+        intent = MemoryIntent(
+            intent_key=key,
+            project_id=self.project_id,
+            agent_id=self.agent_id,
+            source_kind=source_kind,  # type: ignore[arg-type]
+            payload=meta,
+            fallback_text=raw,
+            timestamp=time.time(),
+        )
+        return self._record_intent(intent)
 
     def _maybe_compact_memory(self, mem_path: Path):
         """
@@ -317,6 +410,7 @@ class GodAgent:
                     "Suggested next step: choose another available tool aligned with your current phase."
                 )
                 self._record_observation(name, args, blocked, status="blocked")
+                self._record_intent(intent_from_tool_result(self.project_id, self.agent_id, name, "blocked", args, blocked))
                 return blocked
 
         args['caller_id'] = self.agent_id
@@ -336,6 +430,7 @@ class GodAgent:
                     if "divine restriction" in low or "policy block" in low:
                         status = "blocked"
                     self._record_observation(name, args, result, status=status)
+                    self._record_intent(intent_from_tool_result(self.project_id, self.agent_id, name, status, args, str(result)))
                     return result
                 except Exception as e:
                     err = (
@@ -343,6 +438,7 @@ class GodAgent:
                         "Suggested next step: verify required arguments and retry once."
                     )
                     self._record_observation(name, args, err, status="error")
+                    self._record_intent(intent_from_tool_result(self.project_id, self.agent_id, name, "error", args, err))
                     return err
         available = ", ".join([t.name for t in self.get_tools()])
         unknown = (
@@ -350,6 +446,7 @@ class GodAgent:
             f"Suggested next step: choose one from [{available}]."
         )
         self._record_observation(name, args, unknown, status="error")
+        self._record_intent(intent_from_tool_result(self.project_id, self.agent_id, name, "error", args, unknown))
         return unknown
 
     def _record_observation(self, name: str, args: dict, result: str, status: str):

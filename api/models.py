@@ -33,5 +33,6 @@ class BroadcastRequest(BaseModel):
 class HumanMessageRequest(BaseModel):
     """Request model for sending a private message to an agent (confession)."""
     agent_id: str
+    title: str = ""
     message: str
     silent: bool = False

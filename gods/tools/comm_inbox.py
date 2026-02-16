@@ -4,9 +4,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
-from gods.inbox import ack_handled
+from gods.inbox import ack_handled, list_outbox_receipts
 from gods.inbox.store import take_deliverable_inbox_events
 from gods.tools.comm_common import format_comm_error
 
@@ -74,15 +74,67 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
             )
 
         event_ids = [item.event_id for item in events]
-        ack_handled(project_id, event_ids)
+        ack_handled(project_id, event_ids, caller_id)
         reset_inbox_guard(caller_id, project_id)
-        payload = [item.to_dict() for item in events]
+        payload = [
+            {
+                "id": item.event_id,
+                "title": item.title,
+                "from": item.sender,
+                "to": item.agent_id,
+                "status": item.state.value,
+                "type": item.msg_type,
+                "content": item.content,
+                "created_at": item.created_at,
+            }
+            for item in events
+        ]
         return json.dumps(payload, ensure_ascii=False)
     except Exception as e:
         return format_comm_error(
             "Communication Error",
             str(e),
             "Retry inbox check; if it persists, verify runtime event file permissions.",
+            caller_id,
+            project_id,
+        )
+
+
+@tool
+def check_outbox(
+    caller_id: str,
+    project_id: str = "default",
+    to_id: str = "",
+    status: str = "",
+    limit: int = 50,
+) -> str:
+    """Check my sent-message receipts with [title][to][status] facts."""
+    try:
+        rows = list_outbox_receipts(
+            project_id=project_id,
+            from_agent_id=caller_id,
+            to_agent_id=str(to_id or "").strip(),
+            status=str(status or "").strip(),
+            limit=max(1, min(int(limit), 200)),
+        )
+        payload = [
+            {
+                "id": r.receipt_id,
+                "title": r.title,
+                "to": r.to_agent_id,
+                "status": r.status.value,
+                "message_id": r.message_id,
+                "updated_at": r.updated_at,
+                "error": r.error_message,
+            }
+            for r in rows
+        ]
+        return json.dumps(payload, ensure_ascii=False)
+    except Exception as e:
+        return format_comm_error(
+            "Communication Error",
+            str(e),
+            "Retry check_outbox; if it persists, verify runtime receipt files.",
             caller_id,
             project_id,
         )

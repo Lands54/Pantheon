@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from gods.inbox.service import build_inbox_overview
 from gods.janus.journal import list_observations, read_profile, read_task_state
 from gods.janus.models import ContextBuildRequest, ContextBuildResult
 from gods.janus.strategy_base import ContextStrategy
@@ -78,6 +79,9 @@ class StructuredV1ContextStrategy(ContextStrategy):
         b_task = int(cfg.get("budget_task_state", 4000))
         b_obs = int(cfg.get("budget_observations", 12000))
         b_inbox = int(cfg.get("budget_inbox", 4000))
+        b_inbox_unread = int(cfg.get("budget_inbox_unread", 2000))
+        b_inbox_read_recent = int(cfg.get("budget_inbox_read_recent", 1000))
+        b_inbox_receipts = int(cfg.get("budget_inbox_receipts", 1000))
         b_recent = int(cfg.get("budget_recent_messages", 12000))
         recent_limit = int(cfg.get("recent_message_limit", 50))
         obs_window = int(cfg.get("observation_window", 30))
@@ -89,7 +93,12 @@ class StructuredV1ContextStrategy(ContextStrategy):
         obs_rows = list_observations(req.project_id, req.agent_id, limit=max(obs_window * 3, 30))
         selected = _pick_observations(obs_rows, obs_window)
 
-        inbox_text = req.inbox_hint or ""
+        overview = build_inbox_overview(req.project_id, req.agent_id, budget=max(5, obs_window))
+        inbox_text = (
+            f"{overview}\n\n"
+            "[INBOX ACCESS HINT]\n"
+            + (req.inbox_hint or "")
+        )
         if include_inbox_hints:
             inbox_text = (
                 f"{inbox_text}\n"
@@ -101,7 +110,24 @@ class StructuredV1ContextStrategy(ContextStrategy):
 
         task_block = _clip_by_tokens(_render_task_state(task_state), b_task)
         obs_block = _clip_by_tokens(_render_observations(selected), b_obs)
-        inbox_block = _clip_by_tokens(inbox_text, b_inbox)
+        # Keep four logical sections under separate soft budgets before final clip.
+        parts = inbox_text.split("\n\n")
+        summary_part = parts[0] if len(parts) > 0 else ""
+        unread_part = parts[1] if len(parts) > 1 else ""
+        read_part = parts[2] if len(parts) > 2 else ""
+        receipts_part = parts[3] if len(parts) > 3 else ""
+        tail_parts = "\n\n".join(parts[4:]) if len(parts) > 4 else ""
+        inbox_block = (
+            _clip_by_tokens(summary_part, max(200, b_inbox_unread // 2))
+            + "\n\n"
+            + _clip_by_tokens(unread_part, b_inbox_unread)
+            + "\n\n"
+            + _clip_by_tokens(read_part, b_inbox_read_recent)
+            + "\n\n"
+            + _clip_by_tokens(receipts_part, b_inbox_receipts)
+            + ("\n\n" + _clip_by_tokens(tail_parts, max(200, b_inbox // 4)) if tail_parts else "")
+        )
+        inbox_block = _clip_by_tokens(inbox_block, b_inbox)
 
         # Keep recent messages by dynamic token budget instead of fixed [-8].
         src_recent = (req.state.get("messages", []) or [])[-max(1, recent_limit) :]

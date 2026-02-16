@@ -1,0 +1,1 @@
+[SAFETY] tool loop cap reached for agent=$agent_id in project=$project_id. max_rounds=$max_rounds.

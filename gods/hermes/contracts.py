@@ -6,7 +6,7 @@ import re
 import time
 from typing import Any
 
-from gods.hermes import store
+from . import store
 from gods.hermes.errors import HermesError, HERMES_BAD_REQUEST
 from gods.hermes.events import hermes_events
 from gods.hermes.models import ProtocolSpec
@@ -306,6 +306,86 @@ class HermesContracts:
             return rows
         return [r for r in rows if str(r.get("status", "active")) == "active"]
 
+    def _notify_committers(self, project_id: str, title: str, version: str, committer: str, targets: list[str]) -> list[str]:
+        """
+        Notify existing committers that a new agent has committed.
+        Best-effort: notification failures should not break commit path.
+        """
+        sent: list[str] = []
+        targets = [str(x).strip() for x in (targets or []) if str(x).strip() and str(x).strip() != committer]
+        if not targets:
+            return sent
+
+        try:
+            from gods.inbox import enqueue_message
+            from gods.pulse import get_priority_weights, is_inbox_event_enabled
+        except Exception:
+            return sent
+
+        trigger = bool(is_inbox_event_enabled(project_id))
+        weights = get_priority_weights(project_id)
+        priority = int(weights.get("inbox_event", 100))
+        msg = (
+            f"Hermes Notice: agent '{committer}' committed contract "
+            f"'{title}@{version}'."
+        )
+        for aid in targets:
+            try:
+                enqueue_message(
+                    project_id=project_id,
+                    agent_id=aid,
+                    sender="Hermes",
+                    title="Contract Commit Notice",
+                    content=msg,
+                    msg_type="contract_notice",
+                    trigger_pulse=trigger,
+                    pulse_priority=priority,
+                )
+                sent.append(aid)
+            except Exception:
+                continue
+        return sent
+
+    def _notify_fully_committed(self, project_id: str, title: str, version: str, targets: list[str]) -> list[str]:
+        """
+        Notify all committers when a contract becomes fully committed.
+        Best-effort: notification failures should not break commit path.
+        """
+        sent: list[str] = []
+        targets = [str(x).strip() for x in (targets or []) if str(x).strip()]
+        if not targets:
+            return sent
+
+        try:
+            from gods.inbox import enqueue_message
+            from gods.pulse import get_priority_weights, is_inbox_event_enabled
+        except Exception:
+            return sent
+
+        trigger = bool(is_inbox_event_enabled(project_id))
+        weights = get_priority_weights(project_id)
+        priority = int(weights.get("inbox_event", 100))
+        msg = (
+            f"Hermes Notice: contract '{title}@{version}' is now fully committed "
+            f"by all required committers."
+        )
+        for aid in targets:
+            try:
+                enqueue_message(
+                    project_id=project_id,
+                    agent_id=aid,
+                    sender="Hermes",
+                    title="Contract Fully Committed",
+                    content=msg,
+                    msg_type="contract_fully_committed",
+                    trigger_pulse=trigger,
+                    pulse_priority=priority,
+                )
+                sent.append(aid)
+            except Exception:
+                continue
+        return sent
+
     def commit(self, project_id: str, title: str, version: str, agent_id: str) -> dict[str, Any]:
         """
         Allows an agent to commit to a specific contract.
@@ -345,6 +425,22 @@ class HermesContracts:
             store.save_contracts(project_id, data)
 
         registered_protocols: list[dict[str, Any]] = []
+        notified_agents: list[str] = self._notify_committers(
+            project_id=project_id,
+            title=title,
+            version=version,
+            committer=agent_id,
+            targets=list(before.get("committed_committers", []) or []),
+        )
+        notified_fully_agents: list[str] = []
+        after_snapshot = self._commit_snapshot(row)
+        if bool(after_snapshot.get("is_fully_committed")) and (not bool(before.get("is_fully_committed"))):
+            notified_fully_agents = self._notify_fully_committed(
+                project_id=project_id,
+                title=title,
+                version=version,
+                targets=list(after_snapshot.get("committed_committers", []) or []),
+            )
         default_ob = row.get("default_obligations", [])
         if isinstance(default_ob, list) and default_ob:
             registered_protocols = self._register_clauses(
@@ -363,10 +459,14 @@ class HermesContracts:
                 "version": version,
                 "agent_id": agent_id,
                 "registered_protocols": registered_protocols,
-                "commit_snapshot": self._commit_snapshot(row),
+                "notified_agents": notified_agents,
+                "notified_fully_agents": notified_fully_agents,
+                "commit_snapshot": after_snapshot,
             },
         )
         row["registered_protocols"] = registered_protocols
+        row["notified_agents"] = notified_agents
+        row["notified_fully_agents"] = notified_fully_agents
         return self._attach_commit_snapshot(row)
 
     def disable(self, project_id: str, title: str, version: str, agent_id: str, reason: str = "") -> dict[str, Any]:

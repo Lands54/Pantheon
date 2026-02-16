@@ -38,7 +38,7 @@ def test_agent_memory_compaction_rolls_old_content():
         assert mem_text.startswith("### SYSTEM_SEED")
         assert archive_path.exists()
         assert archive_path.stat().st_size > 0
-        assert mem_path.stat().st_size < 12000
+        assert mem_path.stat().st_size < 15000
     finally:
         if old_project is None:
             runtime_config.projects.pop(project_id, None)

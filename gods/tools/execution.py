@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from gods.config import runtime_config
 from gods.runtime.execution_backend import ExecutionLimits, resolve_execution_backend

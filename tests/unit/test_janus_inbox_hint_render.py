@@ -15,6 +15,7 @@ def test_inbox_context_contains_handled_hint_and_writes_digest():
             project_id=pid,
             agent_id=aid,
             sender="sender",
+            title="hello-title",
             content="hello",
             msg_type="private",
             trigger_pulse=False,

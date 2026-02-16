@@ -1,0 +1,1 @@
+[OUTBOX] [title=$title][to=$to_agent_id][status=pending] mid=$message_id

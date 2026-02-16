@@ -1,107 +1,153 @@
-"""
-Gods Tools Module
-Unified export of all agent tools.
-"""
-from .communication import (
-    check_inbox,
-    send_message,
-    send_to_human,
-    finalize,
-    post_to_synod,
-    abstain_from_synod,
-    list_agents,
-)
-from .filesystem import (
-    read_file,
-    write_file,
-    replace_content,
-    insert_content,
-    multi_replace,
-    list_dir,
-    validate_path
-)
-from .execution import run_command
-from .detach import run_command_detach, detach_list, detach_stop
-from .hermes import (
-    call_protocol,  # exported for direct import, not in default agent toolset
-    route_protocol,  # exported for direct import, not in default agent toolset
-    check_protocol_job,  # exported for direct import, not in default agent toolset
-    register_contract,
-    commit_contract,
-    list_contracts,
-    disable_contract,
-    reserve_port,
-    release_port,
-    list_port_leases,
-)
-from .mnemosyne import (
-    mnemo_write_agent,
-    mnemo_list_agent,
-    mnemo_read_agent,
-)
+"""Unified tool exports with lazy loading to avoid heavy import side effects."""
+from __future__ import annotations
 
-# Divine Toolset - Complete list for agent registration
-GODS_TOOLS = [
-    check_inbox,
-    send_message,
-    send_to_human,
-    finalize,
-    read_file,
-    write_file,
-    replace_content,
-    insert_content,
-    run_command,
-    run_command_detach,
-    detach_list,
-    detach_stop,
-    post_to_synod,
-    abstain_from_synod,
-    list_agents,
-    multi_replace,
-    list_dir,
-    register_contract,
-    commit_contract,
-    list_contracts,
-    disable_contract,
-    reserve_port,
-    release_port,
-    list_port_leases,
-    mnemo_write_agent,
-    mnemo_list_agent,
-    mnemo_read_agent,
+from typing import Iterator
+import importlib
+
+# name -> (module_path, attr_name)
+_TOOL_EXPORTS: dict[str, tuple[str, str]] = {
+    "check_inbox": ("gods.tools.comm_inbox", "check_inbox"),
+    "check_outbox": ("gods.tools.comm_inbox", "check_outbox"),
+    "send_message": ("gods.tools.comm_human", "send_message"),
+    "send_to_human": ("gods.tools.comm_human", "send_to_human"),
+    "finalize": ("gods.tools.comm_human", "finalize"),
+    "post_to_synod": ("gods.tools.comm_human", "post_to_synod"),
+    "abstain_from_synod": ("gods.tools.comm_human", "abstain_from_synod"),
+    "list_agents": ("gods.tools.comm_human", "list_agents"),
+    "read_file": ("gods.tools.filesystem", "read_file"),
+    "write_file": ("gods.tools.filesystem", "write_file"),
+    "replace_content": ("gods.tools.filesystem", "replace_content"),
+    "insert_content": ("gods.tools.filesystem", "insert_content"),
+    "multi_replace": ("gods.tools.filesystem", "multi_replace"),
+    "list_dir": ("gods.tools.filesystem", "list_dir"),
+    "validate_path": ("gods.tools.filesystem", "validate_path"),
+    "run_command": ("gods.tools.execution", "run_command"),
+    "run_command_detach": ("gods.tools.detach", "run_command_detach"),
+    "detach_list": ("gods.tools.detach", "detach_list"),
+    "detach_stop": ("gods.tools.detach", "detach_stop"),
+    "call_protocol": ("gods.tools.hermes", "call_protocol"),
+    "route_protocol": ("gods.tools.hermes", "route_protocol"),
+    "check_protocol_job": ("gods.tools.hermes", "check_protocol_job"),
+    "register_contract": ("gods.tools.hermes", "register_contract"),
+    "commit_contract": ("gods.tools.hermes", "commit_contract"),
+    "list_contracts": ("gods.tools.hermes", "list_contracts"),
+    "disable_contract": ("gods.tools.hermes", "disable_contract"),
+    "reserve_port": ("gods.tools.hermes", "reserve_port"),
+    "release_port": ("gods.tools.hermes", "release_port"),
+    "list_port_leases": ("gods.tools.hermes", "list_port_leases"),
+    "mnemo_write_agent": ("gods.tools.mnemosyne", "mnemo_write_agent"),
+    "mnemo_list_agent": ("gods.tools.mnemosyne", "mnemo_list_agent"),
+    "mnemo_read_agent": ("gods.tools.mnemosyne", "mnemo_read_agent"),
+}
+
+# Default agent toolset order.
+_DEFAULT_TOOL_ORDER: list[str] = [
+    "check_inbox",
+    "check_outbox",
+    "send_message",
+    "send_to_human",
+    "finalize",
+    "read_file",
+    "write_file",
+    "replace_content",
+    "insert_content",
+    "run_command",
+    "run_command_detach",
+    "detach_list",
+    "detach_stop",
+    "post_to_synod",
+    "abstain_from_synod",
+    "list_agents",
+    "multi_replace",
+    "list_dir",
+    "register_contract",
+    "commit_contract",
+    "list_contracts",
+    "disable_contract",
+    "reserve_port",
+    "release_port",
+    "list_port_leases",
+    "mnemo_write_agent",
+    "mnemo_list_agent",
+    "mnemo_read_agent",
 ]
 
+_CACHE: dict[str, object] = {}
+
+
+def _load_tool(name: str):
+    key = str(name)
+    if key in _CACHE:
+        return _CACHE[key]
+    if key not in _TOOL_EXPORTS:
+        raise AttributeError(f"module 'gods.tools' has no attribute '{key}'")
+    module_name, attr_name = _TOOL_EXPORTS[key]
+    mod = importlib.import_module(module_name)
+    value = getattr(mod, attr_name)
+    _CACHE[key] = value
+    return value
+
+
+class _LazyToolList:
+    def _resolve(self) -> list:
+        return [_load_tool(name) for name in _DEFAULT_TOOL_ORDER]
+
+    def __iter__(self) -> Iterator:
+        return iter(self._resolve())
+
+    def __len__(self) -> int:
+        return len(_DEFAULT_TOOL_ORDER)
+
+    def __getitem__(self, idx):
+        return self._resolve()[idx]
+
+    def __repr__(self) -> str:
+        return f"_LazyToolList(len={len(self)})"
+
+
+GODS_TOOLS = _LazyToolList()
+
+
+def __getattr__(name: str):
+    if name == "GODS_TOOLS":
+        return GODS_TOOLS
+    if name in _TOOL_EXPORTS:
+        return _load_tool(name)
+    raise AttributeError(f"module 'gods.tools' has no attribute '{name}'")
+
+
 __all__ = [
-    'GODS_TOOLS',
-    'check_inbox',
-    'send_message',
-    'send_to_human',
-    'finalize',
-    'post_to_synod',
-    'abstain_from_synod',
-    'list_agents',
-    'read_file',
-    'write_file',
-    'replace_content',
-    'insert_content',
-    'multi_replace',
-    'list_dir',
-    'run_command',
-    'run_command_detach',
-    'detach_list',
-    'detach_stop',
-    'validate_path',
-    'call_protocol',
-    'route_protocol',
-    'check_protocol_job',
-    'register_contract',
-    'commit_contract',
-    'list_contracts',
-    'disable_contract',
-    'reserve_port',
-    'release_port',
-    'list_port_leases',
-    'mnemo_write_agent',
-    'mnemo_list_agent',
-    'mnemo_read_agent',
+    "GODS_TOOLS",
+    "check_inbox",
+    "check_outbox",
+    "send_message",
+    "send_to_human",
+    "finalize",
+    "post_to_synod",
+    "abstain_from_synod",
+    "list_agents",
+    "read_file",
+    "write_file",
+    "replace_content",
+    "insert_content",
+    "multi_replace",
+    "list_dir",
+    "run_command",
+    "run_command_detach",
+    "detach_list",
+    "detach_stop",
+    "validate_path",
+    "call_protocol",
+    "route_protocol",
+    "check_protocol_job",
+    "register_contract",
+    "commit_contract",
+    "list_contracts",
+    "disable_contract",
+    "reserve_port",
+    "release_port",
+    "list_port_leases",
+    "mnemo_write_agent",
+    "mnemo_list_agent",
+    "mnemo_read_agent",
 ]

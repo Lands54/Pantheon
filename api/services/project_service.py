@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from gods.config import ProjectConfig, runtime_config
 from gods.project.reporting import build_project_report, load_project_report
 from gods.protocols import build_knowledge_graph
+from gods.angelia.scheduler import angelia_supervisor
 from gods.runtime.detach import DetachError, get_logs as detach_get_logs, list_for_api as detach_list_for_api
 from gods.runtime.detach import reconcile as detach_reconcile
 from gods.runtime.detach import stop as detach_stop
@@ -119,6 +120,11 @@ class ProjectService:
                         except Exception as e:
                             runtime_info["ensured"].append({"agent_id": aid, "error": str(e)})
         runtime_config.save()
+        try:
+            for aid in proj.active_agents:
+                angelia_supervisor.wake_agent(project_id, aid)
+        except Exception:
+            pass
         return {
             "status": "success",
             "project_id": project_id,

@@ -1,7 +1,7 @@
 """Communication tool exports."""
 from __future__ import annotations
 
-from gods.tools.comm_inbox import check_inbox, reset_inbox_guard
+from gods.tools.comm_inbox import check_inbox, check_outbox, reset_inbox_guard
 from gods.tools.comm_human import (
     send_message,
     send_to_human,
@@ -13,6 +13,7 @@ from gods.tools.comm_human import (
 
 __all__ = [
     "check_inbox",
+    "check_outbox",
     "reset_inbox_guard",
     "send_message",
     "send_to_human",

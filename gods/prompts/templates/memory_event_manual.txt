@@ -1,0 +1,1 @@
+[EVENT] manual stage=$stage reason=$event_type

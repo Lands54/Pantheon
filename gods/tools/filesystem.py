@@ -5,7 +5,7 @@ File reading, writing, and manipulation tools with territory isolation.
 from pathlib import Path
 import json
 import os
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_state.json"}
 HIDDEN_DIR_NAMES = {"debug"}

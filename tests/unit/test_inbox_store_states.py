@@ -16,6 +16,7 @@ def test_inbox_state_transitions_and_invalid_transition_rejected():
             project_id=project_id,
             agent_id="a",
             sender="s",
+            title="hello",
             content="hello",
             msg_type="private",
         )

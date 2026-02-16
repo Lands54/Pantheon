@@ -42,6 +42,7 @@ def test_inbox_context_contains_handled_semantics_for_agent_confidence():
             project_id=project_id,
             agent_id=agent_id,
             sender="ground",
+            title="continue-task",
             content="please continue",
             msg_type="private",
             trigger_pulse=False,

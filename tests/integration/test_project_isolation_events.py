@@ -23,7 +23,7 @@ def test_project_event_isolation():
 
         _switch_project(p1)
         client.post("/agents/create", json={"agent_id": "x", "directives": "# x"})
-        client.post("/confess", json={"agent_id": "x", "message": "m1", "silent": True})
+        client.post("/confess", json={"agent_id": "x", "title": "m1-title", "message": "m1", "silent": True})
 
         p1_rows = client.get(
             f"/projects/{p1}/inbox/events",

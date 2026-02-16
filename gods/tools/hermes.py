@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from gods.config import runtime_config
 from gods.hermes.policy import allow_agent_tool_provider
@@ -26,7 +26,7 @@ def call_protocol(
 ) -> str:
     """Call protocol via Hermes bus. Payload is JSON string."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
         from gods.hermes.models import InvokeRequest
 
@@ -70,7 +70,7 @@ def route_protocol(
 ) -> str:
     """Route invoke by target agent + function id (Hermes(agent,function,payload))."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
@@ -94,7 +94,7 @@ def route_protocol(
 def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Check async protocol job status by job id."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
 
         pid = _resolve_project(project_id)
         job = hermes_service.get_job(pid, job_id)
@@ -109,7 +109,7 @@ def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str 
 def register_contract(contract_json: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Register structured contract JSON for obligations and committer resolution."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
@@ -128,7 +128,7 @@ def register_contract(contract_json: str, caller_id: str = "default", project_id
 def commit_contract(title: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Commit current agent to a contract version."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
@@ -148,7 +148,7 @@ def list_contracts(
 ) -> str:
     """List contracts with concise human-readable fields (title/description)."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
 
         pid = _resolve_project(project_id)
         rows = hermes_service.contracts.list(pid, include_disabled=bool(include_disabled))
@@ -183,7 +183,7 @@ def disable_contract(
 ) -> str:
     """Exit current agent from contract committers; contract auto-disables when committers become empty."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
@@ -217,7 +217,7 @@ def reserve_port(
 ) -> str:
     """Reserve a local port lease in Hermes for service startup."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
@@ -246,7 +246,7 @@ def release_port(
 ) -> str:
     """Release one or all leases for an owner in current project."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
         from gods.hermes.errors import HermesError
 
         pid = _resolve_project(project_id)
@@ -267,7 +267,7 @@ def release_port(
 def list_port_leases(caller_id: str = "default", project_id: str = "default") -> str:
     """List current project port leases."""
     try:
-        from gods.hermes import hermes_service
+        from gods.hermes.service import hermes_service
 
         pid = _resolve_project(project_id)
         rows = hermes_service.ports.list(pid)

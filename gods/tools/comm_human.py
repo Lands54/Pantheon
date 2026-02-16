@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 
 from gods.inbox import enqueue_message
 from gods.pulse import get_priority_weights, is_inbox_event_enabled
@@ -14,7 +14,7 @@ from gods.tools.comm_common import format_comm_error
 
 
 @tool
-def send_message(to_id: str, message: str, caller_id: str, project_id: str = "default") -> str:
+def send_message(to_id: str, title: str, message: str, caller_id: str, project_id: str = "default") -> str:
     """Send a private revelation to another Being within the same project."""
     try:
         if not to_id.strip():
@@ -22,6 +22,14 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
                 "Message Error",
                 "Target agent id is empty.",
                 "Set to_id to a valid agent id, e.g. 'sheep' or 'ground'.",
+                caller_id,
+                project_id,
+            )
+        if not title.strip():
+            return format_comm_error(
+                "Message Error",
+                "Message title is empty.",
+                "Provide a concise title before sending, e.g. 'Commit Done'.",
                 caller_id,
                 project_id,
             )
@@ -40,6 +48,7 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
             project_id=project_id,
             agent_id=to_id,
             sender=caller_id,
+            title=title,
             content=message,
             msg_type="private",
             trigger_pulse=trigger,
@@ -47,7 +56,10 @@ def send_message(to_id: str, message: str, caller_id: str, project_id: str = "de
         )
         return (
             f"Revelation sent to {to_id}. "
+            f"title={title}, "
             f"event_id={queued.get('inbox_event_id', '')}, "
+            f"outbox_receipt_id={queued.get('outbox_receipt_id', '')}, "
+            f"outbox_status={queued.get('outbox_status', 'pending')}, "
             f"pulse_triggered={str(bool(trigger)).lower()}, "
             "initial_state=pending"
         )

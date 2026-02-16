@@ -37,7 +37,7 @@ def cmd_broadcast(args):
 
 def cmd_confess(args):
     try:
-        payload = {"agent_id": args.id, "message": args.message, "silent": args.silent}
+        payload = {"agent_id": args.id, "title": args.title, "message": args.message, "silent": args.silent}
         res = requests.post(f"{get_base_url()}/confess", json=payload)
         print(f"🤫 {res.json().get('status', 'Confession delivered.')}")
     except Exception:

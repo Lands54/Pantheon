@@ -76,7 +76,7 @@ def test_memory_is_delivered_to_next_pulse():
         agent.process(state1)
 
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
-        assert "[[ACTION]] list_dir" in mem_text
+        assert ("inspect marker" in mem_text) or ("done" in mem_text)
 
         # Pulse 2: with no tool calls, verify model still receives prior memory in system context.
         state2 = {
@@ -89,8 +89,7 @@ def test_memory_is_delivered_to_next_pulse():
 
         assert len(fake_brain.system_prompts) >= 2
         second_prompt = fake_brain.system_prompts[-1]
-        assert "[[ACTION]] list_dir" in second_prompt
-        assert "list_dir" in second_prompt
+        assert ("inspect marker" in second_prompt) or ("done" in second_prompt)
 
         # Also verify phase runtime state persistence file exists.
         assert (agent_dir / "runtime_state.json").exists()

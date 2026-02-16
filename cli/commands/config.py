@@ -35,6 +35,13 @@ def cmd_config(args):
             print(f"   Event Inject Budget: {proj.get('pulse_event_inject_budget', 3)}")
             print(f"   Interrupt Mode: {proj.get('pulse_interrupt_mode', 'after_action')}")
             print(f"   Inbox Event Enabled: {proj.get('inbox_event_enabled', True)}")
+            print(f"   Angelia Enabled: {proj.get('angelia_enabled', True)}")
+            print(f"   Angelia Timer Enabled: {proj.get('angelia_timer_enabled', True)}")
+            print(f"   Angelia Timer Idle: {proj.get('angelia_timer_idle_sec', 60)}s")
+            print(f"   Angelia Max Attempts: {proj.get('angelia_event_max_attempts', 3)}")
+            print(f"   Angelia Processing Timeout: {proj.get('angelia_processing_timeout_sec', 60)}s")
+            print(f"   Angelia Cooldown Preempt Types: {proj.get('angelia_cooldown_preempt_types', ['inbox_event','manual'])}")
+            print(f"   Angelia Dedupe Window: {proj.get('angelia_dedupe_window_sec', 5)}s")
             
             print(f"\n📊 Memory:")
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
@@ -161,6 +168,14 @@ def cmd_config(args):
                 "pulse_interrupt_mode",
                 "inbox_event_enabled",
                 "pulse_priority_weights",
+                "angelia_enabled",
+                "angelia_worker_per_agent",
+                "angelia_event_max_attempts",
+                "angelia_processing_timeout_sec",
+                "angelia_cooldown_preempt_types",
+                "angelia_timer_enabled",
+                "angelia_timer_idle_sec",
+                "angelia_dedupe_window_sec",
                 "command_executor",
                 "docker_enabled",
                 "docker_image",
@@ -190,7 +205,15 @@ def cmd_config(args):
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
             }:
-                if direct_key in {"queue_idle_heartbeat_sec", "pulse_event_inject_budget"}:
+                if direct_key in {
+                    "queue_idle_heartbeat_sec",
+                    "pulse_event_inject_budget",
+                    "angelia_worker_per_agent",
+                    "angelia_event_max_attempts",
+                    "angelia_processing_timeout_sec",
+                    "angelia_timer_idle_sec",
+                    "angelia_dedupe_window_sec",
+                }:
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_memory_limit_mb"}:
                     data["projects"][pid][direct_key] = int(args.value)
@@ -212,7 +235,7 @@ def cmd_config(args):
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
                     data["projects"][pid][direct_key] = float(args.value)
-                elif direct_key == "inbox_event_enabled":
+                elif direct_key in {"inbox_event_enabled", "angelia_enabled", "angelia_timer_enabled"}:
                     data["projects"][pid][direct_key] = args.value.lower() == "true"
                 elif direct_key in {
                     "docker_enabled",
@@ -258,6 +281,16 @@ def cmd_config(args):
                         data["projects"][pid][direct_key] = payload
                     except Exception as e:
                         print(f"❌ invalid JSON for pulse_priority_weights: {e}")
+                        return
+                elif direct_key == "angelia_cooldown_preempt_types":
+                    try:
+                        payload = json.loads(args.value)
+                        if not isinstance(payload, list):
+                            print("❌ angelia_cooldown_preempt_types must be a JSON array")
+                            return
+                        data["projects"][pid][direct_key] = [str(x).strip() for x in payload if str(x).strip()]
+                    except Exception as e:
+                        print(f"❌ invalid JSON for angelia_cooldown_preempt_types: {e}")
                         return
                 else:
                     data["projects"][pid][direct_key] = args.value
@@ -680,6 +713,21 @@ def cmd_config(args):
         except Exception as e:
             print(f"❌ Error: {e}")
     
+    elif args.subcommand == "check-memory-policy":
+        try:
+            res = requests.get(f"{base_url}/config")
+            data = res.json()
+            pid = (args.project or data.get("current_project", "default")).strip()
+            from gods.mnemosyne import validate_memory_policy
+
+            out = validate_memory_policy(pid, ensure_exists=True)
+            print(f"✅ memory policy valid for project={pid}")
+            print(f"   required_keys: {out.get('required_keys', 0)}")
+            print(f"   validated_keys: {out.get('validated_keys', 0)}")
+        except Exception as e:
+            print(f"❌ memory policy invalid: {e}")
+            raise SystemExit(1)
+
     elif args.subcommand == "models":
         # Fetch available models from OpenRouter API
         print("\n🤖 Fetching Available Models from OpenRouter...")

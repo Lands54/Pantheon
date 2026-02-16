@@ -24,6 +24,7 @@ from cli.commands.detach import cmd_detach
 from cli.commands.context import cmd_context
 from cli.commands.pulse import cmd_pulse
 from cli.commands.inbox import cmd_inbox
+from cli.commands.angelia import cmd_angelia
 from cli.commands.project import cmd_project as cmd_project_v2
 from cli.commands.agent import cmd_agent as cmd_agent_v2
 from cli.commands.communication import (
@@ -205,6 +206,8 @@ def main():
     )
     p_config_set.add_argument("value", help="Config value")
     config_sub.add_parser("models", help="List available models")
+    p_config_check_mem = config_sub.add_parser("check-memory-policy", help="Validate strict Mnemosyne memory policy")
+    p_config_check_mem.add_argument("--project", default="", help="Project ID (default: current project)")
 
     # Project management
     p_proj = subparsers.add_parser("project", help="Manage Worlds (Projects)")
@@ -333,8 +336,8 @@ def main():
     p_ctx_reports.add_argument("agent")
     p_ctx_reports.add_argument("--limit", type=int, default=20)
 
-    # pulse queue operations
-    p_pulse = subparsers.add_parser("pulse", help="Pulse queue operations")
+    # pulse queue operations (deprecated)
+    p_pulse = subparsers.add_parser("pulse", help="Pulse queue operations (deprecated, use angelia)")
     pulse_sub = p_pulse.add_subparsers(dest="subcommand")
     p_pulse_queue = pulse_sub.add_parser("queue", help="Show pulse queue events")
     p_pulse_queue.add_argument("--agent", default="")
@@ -344,13 +347,39 @@ def main():
     p_pulse_push.add_argument("agent")
     p_pulse_push.add_argument("--type", default="manual", choices=["manual", "system", "timer", "inbox_event"])
 
-    # inbox event operations
-    p_inbox = subparsers.add_parser("inbox", help="Inbox event operations")
+    # inbox event operations (deprecated)
+    p_inbox = subparsers.add_parser("inbox", help="Inbox event operations (deprecated)")
     inbox_sub = p_inbox.add_subparsers(dest="subcommand")
     p_inbox_events = inbox_sub.add_parser("events", help="Show inbox event records")
     p_inbox_events.add_argument("--agent", default="")
     p_inbox_events.add_argument("--state", default="")
     p_inbox_events.add_argument("--limit", type=int, default=50)
+    p_inbox_outbox = inbox_sub.add_parser("outbox", help="Show outbox receipt records")
+    p_inbox_outbox.add_argument("--agent", default="")
+    p_inbox_outbox.add_argument("--to", default="")
+    p_inbox_outbox.add_argument("--status", default="")
+    p_inbox_outbox.add_argument("--limit", type=int, default=50)
+
+    # angelia event loop operations
+    p_ang = subparsers.add_parser("angelia", help="Angelia event queue and wakeup operations")
+    ang_sub = p_ang.add_subparsers(dest="subcommand")
+    p_ang_enqueue = ang_sub.add_parser("enqueue", help="Enqueue one event")
+    p_ang_enqueue.add_argument("agent")
+    p_ang_enqueue.add_argument("--type", default="manual")
+    p_ang_enqueue.add_argument("--priority", type=int, default=None)
+    p_ang_enqueue.add_argument("--payload", default="{}")
+    p_ang_enqueue.add_argument("--dedupe-key", default="")
+    p_ang_events = ang_sub.add_parser("events", help="List events")
+    p_ang_events.add_argument("--agent", default="")
+    p_ang_events.add_argument("--state", default="")
+    p_ang_events.add_argument("--type", default="")
+    p_ang_events.add_argument("--limit", type=int, default=50)
+    ang_sub.add_parser("agents", help="Show agent runtime statuses")
+    p_ang_wake = ang_sub.add_parser("wake", help="Wake one agent")
+    p_ang_wake.add_argument("agent")
+    p_ang_retry = ang_sub.add_parser("retry", help="Retry dead/failed event")
+    p_ang_retry.add_argument("event_id")
+    ang_sub.add_parser("timer-tick", help="Run one timer injection pass")
 
     # activate / deactivate
     subparsers.add_parser("activate").add_argument("id")
@@ -368,6 +397,7 @@ def main():
     # confess
     p_cf = subparsers.add_parser("confess")
     p_cf.add_argument("id")
+    p_cf.add_argument("--title", required=True, help="Message title")
     p_cf.add_argument("message")
     p_cf.add_argument("--silent", action="store_true", help="Send message without triggering an immediate pulse")
     
@@ -422,6 +452,9 @@ def main():
     if args.command == "inbox" and not args.subcommand:
         p_inbox.print_help()
         sys.exit(0)
+    if args.command == "angelia" and not args.subcommand:
+        p_ang.print_help()
+        sys.exit(0)
     
     if args.command == "init": cmd_init(args)
     elif args.command == "list": cmd_list(args)
@@ -435,6 +468,7 @@ def main():
     elif args.command == "context": cmd_context(args)
     elif args.command == "pulse": cmd_pulse(args)
     elif args.command == "inbox": cmd_inbox(args)
+    elif args.command == "angelia": cmd_angelia(args)
     elif args.command == "agent": cmd_agent(args)
     elif args.command == "broadcast": cmd_broadcast(args)
     elif args.command == "test": cmd_test(args)

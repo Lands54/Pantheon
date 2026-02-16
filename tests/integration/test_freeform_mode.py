@@ -66,8 +66,9 @@ def test_freeform_strategy_uses_legacy_loop():
         assert out["next_step"] == "finish"
 
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
-        assert "[MODE] freeform" in mem_text
         assert "[[ACTION]] list_dir" in mem_text
+        runtime_text = (Path("projects") / project_id / "mnemosyne" / "runtime_events" / f"{agent_id}.jsonl").read_text(encoding="utf-8")
+        assert "agent.mode.freeform" in runtime_text
         assert not (agent_dir / "runtime_state.json").exists()
     finally:
         if old_project is None:

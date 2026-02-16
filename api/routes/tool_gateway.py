@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from gods.config import runtime_config
 from gods.tools.communication import (
     check_inbox,
+    check_outbox,
     send_message,
     list_agents,
 )
@@ -29,8 +30,17 @@ class CheckInboxRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     from_id: str
     to_id: str
+    title: str = ""
     message: str
     project_id: str | None = None
+
+
+class CheckOutboxRequest(BaseModel):
+    agent_id: str
+    project_id: str | None = None
+    to_id: str = ""
+    status: str = ""
+    limit: int = 50
 
 
 def _pick_project(project_id: str | None) -> str:
@@ -63,6 +73,29 @@ async def gw_check_inbox(req: CheckInboxRequest) -> dict:
     return {"project_id": pid, "agent_id": req.agent_id, "result": text, "messages": parsed}
 
 
+@router.post("/check_outbox")
+async def gw_check_outbox(req: CheckOutboxRequest) -> dict:
+    pid = _pick_project(req.project_id)
+    agent_dir = Path("projects") / pid / "agents" / req.agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Agent '{req.agent_id}' not found in '{pid}'")
+    text = check_outbox.invoke(
+        {
+            "caller_id": req.agent_id,
+            "project_id": pid,
+            "to_id": req.to_id,
+            "status": req.status,
+            "limit": int(req.limit),
+        }
+    )
+    parsed = None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        parsed = None
+    return {"project_id": pid, "agent_id": req.agent_id, "result": text, "items": parsed}
+
+
 @router.post("/send_message")
 async def gw_send_message(req: SendMessageRequest) -> dict:
     pid = _pick_project(req.project_id)
@@ -73,14 +106,16 @@ async def gw_send_message(req: SendMessageRequest) -> dict:
         raise HTTPException(status_code=404, detail=f"Sender agent '{req.from_id}' not found in '{pid}'")
     if not to_dir.exists():
         raise HTTPException(status_code=404, detail=f"Target agent '{req.to_id}' not found in '{pid}'")
+    if not str(req.title or "").strip():
+        raise HTTPException(status_code=400, detail="title is required")
 
     text = send_message.invoke(
         {
             "to_id": req.to_id,
+            "title": req.title,
             "message": req.message,
             "caller_id": req.from_id,
             "project_id": pid,
         }
     )
     return {"project_id": pid, "from_id": req.from_id, "to_id": req.to_id, "result": text}
-

@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Any
 
-from gods.hermes import store
+from . import store
 from gods.hermes.errors import HermesError, HERMES_BAD_REQUEST
 
 

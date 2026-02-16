@@ -13,7 +13,7 @@ from gods.hermes.models import InvokeRequest, InvokeResult, JobRecord
 from gods.hermes.registry import HermesRegistry
 from gods.hermes.router import route_provider
 from gods.hermes.schema import validate_schema
-from gods.hermes import store
+from . import store
 from gods.hermes.events import hermes_events
 from gods.hermes.policy import allow_agent_tool_provider
 

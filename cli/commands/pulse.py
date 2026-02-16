@@ -9,6 +9,7 @@ from cli.utils import get_base_url
 
 
 def cmd_pulse(args):
+    print("⚠️  Deprecated: use `temple.sh angelia ...` instead of `pulse`.")
     base = get_base_url()
     try:
         cfg = requests.get(f"{base}/config", timeout=3).json()

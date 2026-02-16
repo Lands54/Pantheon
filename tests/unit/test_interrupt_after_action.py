@@ -13,6 +13,7 @@ def test_after_action_interrupt_injects_inbox_message():
             project_id=project_id,
             agent_id=agent_id,
             sender="b",
+            title="ping title",
             content="ping",
             msg_type="private",
             trigger_pulse=False,
@@ -22,7 +23,7 @@ def test_after_action_interrupt_injects_inbox_message():
         count = inject_inbox_after_action_if_any(state, project_id, agent_id)
         assert count == 1
         assert state["messages"]
-        assert "Event Inbox Delivery" in str(state["messages"][-1].content)
+        assert "[INBOX UNREAD]" in str(state["messages"][-1].content)
         assert state.get("__inbox_delivered_ids")
     finally:
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)

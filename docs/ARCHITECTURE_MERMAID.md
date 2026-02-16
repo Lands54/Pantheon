@@ -410,3 +410,196 @@ flowchart TD
     Report --> Out2["projects/{id}/reports/project_report.md"]
     Report --> Out3["reports/project_{id}_latest.md"]
 ```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant EQ as AngeliaQueue
+    participant W as AngeliaWorker
+    participant IS as InboxStore
+    participant AG as GodAgent.process
+    participant PR as AgentPhaseRuntime._think
+    participant J as JanusService.build_llm_messages
+    participant S as StructuredV1Strategy
+    participant B as GodBrain.think_with_tools (LLM1)
+
+    Note over EQ,W: 触发源：inbox_event / manual / system / timer
+    EQ->>W: pick_next_event(agent_id,event_type,payload)
+
+    rect rgb(245,245,245)
+    Note over W,IS: Pulse启动前运行时注入
+    W->>IS: fetch_inbox_context(project_id,agent_id,budget)
+    IS-->>W: [Event Inbox Delivery]文本 + delivered_ids(可空)
+    W->>AG: state.messages += HumanMessage("PULSE_EVENT: reason")
+    W->>AG: state.context = "Autonomous pulse reason=..."
+    W->>AG: (可选)state.messages += SystemMessage(name="event_inbox",content=正文)
+    end
+
+    AG->>PR: run(strategy=strict_triad 或 iterative_action)
+
+    loop LLM调用#1: Reason阶段
+        PR->>J: build_llm_messages(req{state,directives,local_memory,inbox_hint,phase_block,tools_desc})
+        J->>S: strategy.build(req)
+        S-->>J: system_blocks + recent_messages(来自state.messages预算筛选)
+        J-->>PR: llm_messages=[SystemMessage(拼接blocks)] + recent_messages
+        PR->>B: think_with_tools(llm_messages,tools)
+        B-->>PR: AIMessage(reason输出)
+    end
+
+    loop LLM调用#2..N: Act阶段(每轮一次)
+        PR->>J: build_llm_messages(最新state)
+        J->>S: build(同上)
+        S-->>J: blocks + recent_messages
+        J-->>PR: llm_messages
+        PR->>B: think_with_tools(...)
+        B-->>PR: AIMessage(act工具调用列表)
+
+        Note over PR: 执行每个工具后，可能追加新上下文
+        opt after_action有新inbox
+            PR->>IS: fetch_inbox_context(...)
+            IS-->>PR: 新正文 + ids
+            PR->>PR: state.messages追加event_inbox SystemMessage
+        end
+    end
+
+    loop LLM调用#(最后): Observe阶段(每轮一次)
+        PR->>J: build_llm_messages(再次读取最新state)
+        J->>S: build
+        S-->>J: blocks + recent_messages
+        J-->>PR: llm_messages
+        PR->>B: think_with_tools(...)
+        B-->>PR: AIMessage(文本或finalize工具调用)
+    end
+
+    alt observe调用finalize
+        PR-->>AG: next_step=finish
+    else 未finalize
+        PR-->>AG: next_step=continue
+    end
+
+    AG-->>W: new_state + __inbox_delivered_ids
+    W->>IS: ack_handled(delivered_ids)
+    W->>EQ: mark_event_done / 失败则requeue或dead
+
+```
+
+
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant EQ as AngeliaQueue
+    participant W as AngeliaWorker
+    participant AG as "GodAgent.process (freeform)"
+    participant J as JanusService
+    participant S as StructuredV1
+    participant B as "LLM1 (GodBrain)"
+    participant T as Tools
+
+    EQ->>W: pick event (inbox/manual/system/timer)
+    W->>AG: 注入 PULSE_EVENT 与 reason（可选 event_inbox 正文）
+
+    loop 每轮自由执行（最多 tool_loop_max）
+        AG->>J: build_llm_messages(最新 state)
+        J->>S: build structured_v1 + recent_messages
+        S-->>J: system_blocks + recent_messages
+        J-->>AG: llm_messages
+        AG->>B: think_with_tools(llm_messages, tools)
+        B-->>AG: AIMessage(content + tool_calls)
+
+        alt 无 tool_calls
+            AG-->>W: next_step=finish
+        else 有 tool_calls
+            loop 执行本轮全部 tool_calls
+                AG->>T: execute_tool(name,args)
+                T-->>AG: observation/result
+                AG->>AG: 写入 state.messages 与 chronicle
+            end
+            opt after_action 有新 inbox
+                AG->>AG: 注入 event_inbox 到 state.messages
+            end
+        end
+    end
+
+    alt 达到循环上限仍有工作
+        AG-->>W: next_step=continue
+    end
+
+    W->>W: ack handled inbox + mark event done/requeue
+
+```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CLI as "CLI / Human"
+    participant API as "FastAPI Routes"
+    participant SVC as "api/services"
+    participant CFG as "gods.config"
+    participant ANG as "gods.angelia.scheduler"
+    participant AST as "gods.angelia.store"
+    participant IBS as "gods.inbox.store"
+    participant WK as "gods.angelia.worker"
+    participant AG as "gods.agents.base.GodAgent"
+    participant PH as "gods.agents.phase_runtime"
+    participant JAN as "gods.janus.service"
+    participant JSTR as "gods.janus.structured_v1"
+    participant BRAIN as "gods.agents.brain (LLM)"
+    participant TOOLS as "gods.tools.*"
+    participant HERMES as "gods.hermes.service"
+    participant MNE as "Mnemosyne (chronicles/profiles)"
+
+    Note over API,SVC: 启动期
+    API->>SVC: startup_event()
+    SVC->>ANG: start()
+    SVC->>CFG: 读取项目配置
+    SVC->>AST: 迁移/恢复 Angelia 事件存储（若需要）
+
+    Note over CLI,API: 事件入口（confess/send_message/manual/timer）
+    CLI->>API: /confess 或 /angelia/events/enqueue
+    API->>IBS: 写 inbox message (pending)（若是消息类）
+    API->>ANG: enqueue_event(project_id,agent_id,event_type,payload)
+
+    ANG->>AST: 持久化 AngeliaEvent(queued)
+    ANG->>WK: notify(agent mailbox)
+
+    loop 每个活跃 agent 单 worker 常驻
+        WK->>AST: pick_next_event(priority+FIFO+cooldown策略)
+        AST-->>WK: event
+        WK->>WK: 构建 pulse state (PULSE_EVENT/reason)
+        WK->>IBS: fetch_inbox_context(budget)
+        IBS-->>WK: [Event Inbox Delivery] + delivered_ids(可空)
+
+        WK->>AG: agent.process(state)
+        AG->>MNE: 读取 directives/profile + local chronicle
+        AG->>PH: 进入 phase runtime (或 freeform)
+
+        loop 每次 LLM 调用
+            PH->>JAN: build_llm_messages(req)
+            JAN->>JSTR: 组装 structured_v1(system blocks + recent messages)
+            JSTR-->>JAN: ContextBuildResult
+            JAN-->>PH: llm_messages
+            PH->>BRAIN: think_with_tools(llm_messages, tools)
+            BRAIN-->>PH: AIMessage(tool_calls/content)
+            PH->>TOOLS: execute tool calls
+            TOOLS-->>PH: observation/result
+
+            opt 工具为 Hermes 类
+                TOOLS->>HERMES: register/invoke/route/contracts/ports
+                HERMES-->>TOOLS: result/error
+            end
+
+            PH->>MNE: 追加 chronicle / observation
+        end
+
+        AG-->>WK: new_state(next_step, delivered_ids)
+        WK->>IBS: ack_handled(delivered_ids)
+        WK->>AST: mark_done / requeue / dead
+    end
+
+    Note over API,CLI: 观测与调试
+    CLI->>API: /agents/status /angelia/events /project report
+    API->>AST: 读取事件/状态
+    API->>MNE: 读取归档/报告
+    API-->>CLI: JSON/摘要输出
+```

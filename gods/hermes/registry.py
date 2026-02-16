@@ -6,7 +6,7 @@ from typing import Optional
 
 from gods.hermes.errors import HermesError, HERMES_PROTOCOL_NOT_FOUND, HERMES_BAD_REQUEST
 from gods.hermes.models import ProtocolSpec
-from gods.hermes import store
+from . import store
 from gods.hermes.events import hermes_events
 
 

@@ -76,6 +76,7 @@ def enqueue_inbox_event(
     project_id: str,
     agent_id: str,
     sender: str,
+    title: str,
     content: str,
     msg_type: str = "private",
     meta: dict | None = None,
@@ -86,6 +87,7 @@ def enqueue_inbox_event(
         project_id=project_id,
         agent_id=agent_id,
         sender=sender,
+        title=title,
         msg_type=msg_type,
         content=content,
         created_at=now,
@@ -186,13 +188,14 @@ def take_deliverable_inbox_events(project_id: str, agent_id: str, budget: int) -
     return list(_with_locked_rows(project_id, _mut) or [])
 
 
-def mark_inbox_events_handled(project_id: str, event_ids: list[str]):
+def mark_inbox_events_handled(project_id: str, event_ids: list[str]) -> list[InboxEvent]:
     ids = {str(x) for x in (event_ids or []) if x}
     if not ids:
-        return
+        return []
     now = time.time()
 
     def _mut(rows: list[dict]):
+        changed_rows: list[dict] = []
         for row in rows:
             eid = str(row.get("event_id", ""))
             if eid not in ids:
@@ -200,6 +203,8 @@ def mark_inbox_events_handled(project_id: str, event_ids: list[str]):
             current = InboxMessageState(str(row.get("state", InboxMessageState.PENDING.value)))
             if InboxMessageState.HANDLED in _ALLOWED_TRANSITIONS.get(current, set()):
                 _update_state_fields(row, InboxMessageState.HANDLED, now)
-        return rows, True
+                changed_rows.append(dict(row))
+        return rows, changed_rows
 
-    _with_locked_rows(project_id, _mut)
+    changed = list(_with_locked_rows(project_id, _mut) or [])
+    return [InboxEvent.from_dict(row) for row in changed]

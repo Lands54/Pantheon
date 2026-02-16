@@ -94,6 +94,14 @@ class AgentPhaseRuntime:
             allowed_tools=", ".join(phase.allowed_tools),
         )
 
+    def _append_memory(self, text: str, record_type: str = "llm.response", payload: dict | None = None):
+        """Compatibility wrapper for old test doubles using _append_to_memory(text) signature."""
+        fn = getattr(self.agent, "_append_to_memory")
+        try:
+            fn(text, record_type=record_type, payload=payload or {})
+        except TypeError:
+            fn(text)
+
     def _finish(self, state):
         """
         Sets the state to finish and resets the runtime persistence.
@@ -140,7 +148,11 @@ class AgentPhaseRuntime:
             trace_meta=pulse_meta,
         )
         state["messages"].append(response)
-        self.agent._append_to_memory(response.content or "[No textual response]")
+        self._append_memory(
+            response.content or "[No textual response]",
+            record_type="llm.response",
+            payload={"phase": phase.name, "content": response.content or "[No textual response]"},
+        )
         return response
 
     def _violation_feedback(self, phase_name: str) -> str:
@@ -275,7 +287,11 @@ class AgentPhaseRuntime:
                     obs = f"Policy Block: Tool '{tool_name}' is not allowed in phase 'reason'."
                     tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                    self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                    self._append_memory(
+                        obs,
+                        record_type=f"tool.{tool_name}.blocked",
+                        payload={"tool_name": tool_name, "status": "blocked", "result": obs, "phase": "reason"},
+                    )
                     tracer.event(
                         "tool_blocked",
                         phase_name="reason",
@@ -286,7 +302,11 @@ class AgentPhaseRuntime:
                 if reason_try < phase_retry_limit:
                     fb = self._violation_feedback("reason")
                     state["messages"].append(SystemMessage(content=fb))
-                    self.agent._append_to_memory(f"[PHASE_RETRY] reason -> {fb}")
+                    self._append_memory(
+                        f"[PHASE_RETRY] reason -> {fb}",
+                        record_type="phase.retry.reason",
+                        payload={"phase": "reason", "message": fb},
+                    )
                     tracer.event("phase_retry", phase_name="reason", attempt=reason_try, reason="tool_call_not_allowed")
 
             act_phase = phases[1]
@@ -314,7 +334,11 @@ class AgentPhaseRuntime:
                 if self._act_require_tool_call() and len(act_calls) == 0:
                     fb = self._act_violation_feedback("no_tool")
                     state["messages"].append(SystemMessage(content=fb))
-                    self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                    self._append_memory(
+                        f"[PHASE_RETRY] act -> {fb}",
+                        record_type="phase.retry.act",
+                        payload={"phase": "act", "message": fb},
+                    )
                     tracer.event(
                         "phase_retry",
                         phase_name="act",
@@ -331,7 +355,11 @@ class AgentPhaseRuntime:
                     if not any(n in PRODUCTIVE_ACT_TOOLS for n in names):
                         fb = self._act_violation_feedback("no_productive")
                         state["messages"].append(SystemMessage(content=fb))
-                        self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                        self._append_memory(
+                            f"[PHASE_RETRY] act -> {fb}",
+                            record_type="phase.retry.act",
+                            payload={"phase": "act", "message": fb},
+                        )
                         tracer.event(
                             "phase_retry",
                             phase_name="act",
@@ -355,7 +383,11 @@ class AgentPhaseRuntime:
                     if block_reason:
                         obs = f"Policy Block: {block_reason}"
                         state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                        self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                        self._append_memory(
+                            obs,
+                            record_type=f"tool.{tool_name}.blocked",
+                            payload={"tool_name": tool_name, "status": "blocked", "result": obs, "phase": "act"},
+                        )
                         tracer.event(
                             "tool_blocked",
                             phase_name="act",
@@ -367,14 +399,15 @@ class AgentPhaseRuntime:
                         )
                         injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
                         if injected > 0:
-                            self.agent._append_to_memory(
-                                f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                            self._append_memory(
+                                f"[EVENT_INJECTED] {injected} inbox event(s) appended after action.",
+                                record_type="agent.event.injected",
+                                payload={"count": int(injected)},
                             )
                         continue
                     obs = self.agent.execute_tool(tool_name, args)
                     policy.record(tool_name, args)
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                    self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
                     tracer.event(
                         "tool_executed",
                         phase_name="act",
@@ -387,8 +420,10 @@ class AgentPhaseRuntime:
                     )
                     injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
                     if injected > 0:
-                        self.agent._append_to_memory(
-                            f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                        self._append_memory(
+                            f"[EVENT_INJECTED] {injected} inbox event(s) appended after action.",
+                            record_type="agent.event.injected",
+                            payload={"count": int(injected)},
                         )
 
                 # OBSERVE
@@ -419,7 +454,11 @@ class AgentPhaseRuntime:
                             tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
                             obs = "Policy Block: Tool '{}' is not allowed in phase 'observe'.".format(tool_name)
                             state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                            self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                            self._append_memory(
+                                obs,
+                                record_type=f"tool.{tool_name}.blocked",
+                                payload={"tool_name": tool_name, "status": "blocked", "result": obs, "phase": "observe"},
+                            )
                             tracer.event(
                                 "tool_blocked",
                                 phase_name="observe",
@@ -433,7 +472,11 @@ class AgentPhaseRuntime:
                         if observe_try < phase_retry_limit:
                             fb = self._violation_feedback("observe")
                             state["messages"].append(SystemMessage(content=fb))
-                            self.agent._append_to_memory(f"[PHASE_RETRY] observe -> {fb}")
+                            self._append_memory(
+                                f"[PHASE_RETRY] observe -> {fb}",
+                                record_type="phase.retry.observe",
+                                payload={"phase": "observe", "message": fb},
+                            )
                             tracer.event(
                                 "phase_retry",
                                 phase_name="observe",
@@ -451,7 +494,6 @@ class AgentPhaseRuntime:
                         tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
                         obs = self.agent.execute_tool("finalize", args)
                         state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
-                        self.agent._append_to_memory(f"[[ACTION]] finalize -> {obs}")
                         tracer.event(
                             "tool_executed",
                             phase_name="observe",
@@ -542,7 +584,11 @@ class AgentPhaseRuntime:
                     obs = f"Policy Block: Tool '{tool_name}' is not allowed in phase 'reason'."
                     tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                    self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                    self._append_memory(
+                        obs,
+                        record_type=f"tool.{tool_name}.blocked",
+                        payload={"tool_name": tool_name, "status": "blocked", "result": obs, "phase": "reason"},
+                    )
                     tracer.event(
                         "tool_blocked",
                         phase_name="reason",
@@ -554,7 +600,11 @@ class AgentPhaseRuntime:
                 if reason_try < phase_retry_limit:
                     fb = self._violation_feedback("reason")
                     state["messages"].append(SystemMessage(content=fb))
-                    self.agent._append_to_memory(f"[PHASE_RETRY] reason -> {fb}")
+                    self._append_memory(
+                        f"[PHASE_RETRY] reason -> {fb}",
+                        record_type="phase.retry.reason",
+                        payload={"phase": "reason", "message": fb},
+                    )
                     tracer.event("phase_retry", phase_name="reason", attempt=reason_try, reason="tool_call_not_allowed")
 
             # Stage 2: ACTION (batch tools)
@@ -577,7 +627,11 @@ class AgentPhaseRuntime:
             if self._act_require_tool_call() and len(act_calls) == 0:
                 fb = self._act_violation_feedback("no_tool")
                 state["messages"].append(SystemMessage(content=fb))
-                self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                self._append_memory(
+                    f"[PHASE_RETRY] act -> {fb}",
+                    record_type="phase.retry.act",
+                    payload={"phase": "act", "message": fb},
+                )
                 tracer.event("phase_retry", phase_name="act", attempt=1, reason="no_tool_call")
                 tracer.event("continue_decision", reason="act_no_tool_call")
                 terminal_reason = "act_no_tool_call"
@@ -588,7 +642,11 @@ class AgentPhaseRuntime:
                 if not any(n in PRODUCTIVE_ACT_TOOLS for n in names):
                     fb = self._act_violation_feedback("no_productive")
                     state["messages"].append(SystemMessage(content=fb))
-                    self.agent._append_to_memory(f"[PHASE_RETRY] act -> {fb}")
+                    self._append_memory(
+                        f"[PHASE_RETRY] act -> {fb}",
+                        record_type="phase.retry.act",
+                        payload={"phase": "act", "message": fb},
+                    )
                     tracer.event("phase_retry", phase_name="act", attempt=1, reason="no_productive_tool_call")
                     tracer.event("continue_decision", reason="act_no_productive_tool")
                     terminal_reason = "act_no_productive_tool"
@@ -602,7 +660,11 @@ class AgentPhaseRuntime:
                 if block_reason:
                     obs = f"Policy Block: {block_reason}"
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                    self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                    self._append_memory(
+                        obs,
+                        record_type=f"tool.{tool_name}.blocked",
+                        payload={"tool_name": tool_name, "status": "blocked", "result": obs, "phase": "act"},
+                    )
                     tracer.event(
                         "tool_blocked",
                         phase_name="act",
@@ -613,15 +675,16 @@ class AgentPhaseRuntime:
                     )
                     injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
                     if injected > 0:
-                        self.agent._append_to_memory(
-                            f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                        self._append_memory(
+                            f"[EVENT_INJECTED] {injected} inbox event(s) appended after action.",
+                            record_type="agent.event.injected",
+                            payload={"count": int(injected)},
                         )
                     continue
 
                 obs = self.agent.execute_tool(tool_name, args)
                 policy.record(tool_name, args)
                 state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
                 tracer.event(
                     "tool_executed",
                     phase_name="act",
@@ -633,8 +696,10 @@ class AgentPhaseRuntime:
                 )
                 injected = inject_inbox_after_action_if_any(state, self.agent.project_id, self.agent.agent_id)
                 if injected > 0:
-                    self.agent._append_to_memory(
-                        f"[EVENT_INJECTED] {injected} inbox event(s) appended after action."
+                    self._append_memory(
+                        f"[EVENT_INJECTED] {injected} inbox event(s) appended after action.",
+                        record_type="agent.event.injected",
+                        payload={"count": int(injected)},
                     )
 
             # Stage 3: OBSERVE (only finalize is allowed)
@@ -663,7 +728,11 @@ class AgentPhaseRuntime:
                         tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
                         obs = "Policy Block: Tool '{}' is not allowed in phase 'observe'.".format(tool_name)
                         state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name))
-                        self.agent._append_to_memory(f"[[ACTION]] {tool_name} -> {obs}")
+                        self._append_memory(
+                            obs,
+                            record_type=f"tool.{tool_name}.blocked",
+                            payload={"tool_name": tool_name, "status": "blocked", "result": obs, "phase": "observe"},
+                        )
                         tracer.event(
                             "tool_blocked",
                             phase_name="observe",
@@ -676,7 +745,11 @@ class AgentPhaseRuntime:
                     if observe_try < phase_retry_limit:
                         fb = self._violation_feedback("observe")
                         state["messages"].append(SystemMessage(content=fb))
-                        self.agent._append_to_memory(f"[PHASE_RETRY] observe -> {fb}")
+                        self._append_memory(
+                            f"[PHASE_RETRY] observe -> {fb}",
+                            record_type="phase.retry.observe",
+                            payload={"phase": "observe", "message": fb},
+                        )
                         tracer.event(
                             "phase_retry",
                             phase_name="observe",
@@ -693,7 +766,6 @@ class AgentPhaseRuntime:
                     tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
                     obs = self.agent.execute_tool("finalize", args)
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
-                    self.agent._append_to_memory(f"[[ACTION]] finalize -> {obs}")
                     tracer.event(
                         "tool_executed",
                         phase_name="observe",

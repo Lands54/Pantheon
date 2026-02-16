@@ -35,6 +35,7 @@ def test_tool_gateway_send_and_check_inbox_roundtrip():
             json={
                 "from_id": "sender",
                 "to_id": "receiver",
+                "title": "gateway-title",
                 "message": "hello from gateway",
                 "project_id": project_id,
             },
@@ -50,6 +51,15 @@ def test_tool_gateway_send_and_check_inbox_roundtrip():
         msgs = inbox_res.json().get("messages", [])
         assert isinstance(msgs, list)
         assert any(m.get("content") == "hello from gateway" for m in msgs)
+
+        outbox_res = client.post(
+            "/tool-gateway/check_outbox",
+            json={"agent_id": "sender", "project_id": project_id},
+        )
+        assert outbox_res.status_code == 200
+        items = outbox_res.json().get("items", [])
+        assert isinstance(items, list)
+        assert any(i.get("title") == "gateway-title" for i in items)
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

@@ -23,6 +23,7 @@ class InboxEvent:
     project_id: str
     agent_id: str
     sender: str
+    title: str
     msg_type: str
     content: str
     created_at: float
@@ -37,6 +38,7 @@ class InboxEvent:
             "project_id": self.project_id,
             "agent_id": self.agent_id,
             "sender": self.sender,
+            "title": self.title,
             "msg_type": self.msg_type,
             "content": self.content,
             "created_at": self.created_at,
@@ -53,6 +55,7 @@ class InboxEvent:
             project_id=str(row.get("project_id", "")),
             agent_id=str(row.get("agent_id", "")),
             sender=str(row.get("sender", "")),
+            title=str(row.get("title", "(untitled)") or "(untitled)"),
             msg_type=str(row.get("msg_type", "private")),
             content=str(row.get("content", "")),
             created_at=float(row.get("created_at", 0.0)),

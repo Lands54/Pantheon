@@ -1,11 +1,10 @@
-"""Simulation scheduling service for server lifecycle."""
+"""Simulation scheduling service for server lifecycle (Angelia-backed)."""
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
-from api.scheduler import pick_pulse_batch, pulse_agent_sync
+from gods.angelia.scheduler import angelia_supervisor
 from gods.config import runtime_config
 from gods.runtime.docker import DockerRuntimeManager
 
@@ -41,7 +40,14 @@ class SimulationService:
         else:
             logger.warning(f"Runtime health: Docker unavailable ({msg})")
 
+    def start(self):
+        angelia_supervisor.start()
+
+    def stop(self):
+        angelia_supervisor.stop()
+
     async def pulse_once(self) -> dict[str, Any]:
+        # Compatibility shim for tests and manual checks.
         proj = runtime_config.projects.get(runtime_config.current_project)
         if not proj or (not proj.simulation_enabled) or (not proj.active_agents):
             return {"triggered": 0}
@@ -62,26 +68,8 @@ class SimulationService:
                 )
                 return {"triggered": 0, "error": f"docker_unavailable: {msg}", "project_id": project_id}
 
-        active_agents = list(proj.active_agents)
-        batch_size = max(1, int(getattr(proj, "autonomous_batch_size", 4)))
-        # Scheduler prioritizes inbox-driven agents before heartbeat candidates.
-        batch = pick_pulse_batch(project_id, active_agents, batch_size)
-        if not batch:
-            return {"triggered": 0}
-
-        logger.info(f"✨ Event Pulse: {len(batch)} agents in {project_id}")
-        tasks = [
-            asyncio.to_thread(pulse_agent_sync, project_id, agent_id, reason, False, pulse_event_id)
-            for agent_id, reason, pulse_event_id in batch
-        ]
-        await asyncio.gather(*tasks, return_exceptions=True)
-        return {"triggered": len(batch)}
-
-    async def simulation_loop(self, poll_interval_sec: float = 1.0):
-        logger.info("Universal Simulation Heartbeat initiated.")
-        while True:
-            await self.pulse_once()
-            await asyncio.sleep(poll_interval_sec)
+        emitted = angelia_supervisor.tick_timer_once(project_id).get("emitted", 0)
+        return {"triggered": int(emitted)}
 
 
 simulation_service = SimulationService()

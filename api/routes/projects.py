@@ -5,8 +5,9 @@ Handles /projects endpoints for multi-project operations.
 from fastapi import APIRouter, HTTPException, Request
 from api.services import project_service
 from api.scheduler import push_manual_pulse
-from gods.inbox import InboxMessageState, list_events
-from gods.pulse import PulseEventStatus, list_pulse_events
+from gods.angelia.models import AngeliaEventState
+from gods.angelia import store as angelia_store
+from gods.inbox import InboxMessageState, list_events, list_outbox_receipts
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -84,26 +85,32 @@ async def get_context_reports(project_id: str, agent_id: str, limit: int = 20):
 
 @router.get("/{project_id}/pulse/queue")
 async def get_pulse_queue(project_id: str, agent_id: str = "", status: str = "queued", limit: int = 100):
-    """Inspect project pulse queue events (debug)."""
+    """Deprecated: inspect Angelia queue via legacy pulse endpoint."""
     project_service.ensure_exists(project_id)
     st = None
     if status:
         try:
-            st = PulseEventStatus(status)
+            st = AngeliaEventState(status)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"invalid status: {status}") from e
-    rows = list_pulse_events(
+    rows = angelia_store.list_events(
         project_id=project_id,
-        agent_id=(agent_id or None),
-        status=st,
+        agent_id=(agent_id or ""),
+        state=st,
+        event_type="",
         limit=max(1, min(limit, 500)),
     )
-    return {"project_id": project_id, "items": [r.to_dict() for r in rows]}
+    return {
+        "project_id": project_id,
+        "deprecated": True,
+        "message": "Use /angelia/events instead.",
+        "items": [r.to_dict() for r in rows],
+    }
 
 
 @router.post("/{project_id}/pulse/enqueue")
 async def enqueue_pulse(project_id: str, req: Request):
-    """Push manual/system pulse event to queue."""
+    """Deprecated: enqueue Angelia event via legacy pulse endpoint."""
     project_service.ensure_exists(project_id)
     data = await req.json()
     agent_id = str(data.get("agent_id", "")).strip()
@@ -116,7 +123,7 @@ async def enqueue_pulse(project_id: str, req: Request):
 
 @router.get("/{project_id}/inbox/events")
 async def get_inbox_events(project_id: str, agent_id: str = "", state: str = "", limit: int = 100):
-    """Inspect project inbox events (debug)."""
+    """Deprecated: inspect inbox events (legacy payload source for Angelia inbox_event)."""
     project_service.ensure_exists(project_id)
     st = None
     if state:
@@ -128,6 +135,31 @@ async def get_inbox_events(project_id: str, agent_id: str = "", state: str = "",
         project_id=project_id,
         agent_id=(agent_id or None),
         state=st,
+        limit=max(1, min(limit, 500)),
+    )
+    return {
+        "project_id": project_id,
+        "deprecated": True,
+        "message": "Use /angelia/events for wake queue facts; inbox events remain payload source.",
+        "items": [r.to_dict() for r in rows],
+    }
+
+
+@router.get("/{project_id}/inbox/outbox")
+async def get_outbox_receipts(
+    project_id: str,
+    from_agent_id: str = "",
+    to_agent_id: str = "",
+    status: str = "",
+    limit: int = 100,
+):
+    """Inspect outbox receipts for sender-side message status."""
+    project_service.ensure_exists(project_id)
+    rows = list_outbox_receipts(
+        project_id=project_id,
+        from_agent_id=from_agent_id,
+        to_agent_id=to_agent_id,
+        status=status,
         limit=max(1, min(limit, 500)),
     )
     return {"project_id": project_id, "items": [r.to_dict() for r in rows]}
