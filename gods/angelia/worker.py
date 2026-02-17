@@ -12,9 +12,9 @@ from . import policy, store
 from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.models import AgentRunState, AgentRuntimeStatus
-from gods.iris.service import ack_handled, fetch_inbox_context, has_pending
+from gods.iris.facade import ack_handled, fetch_inbox_context, has_pending
+from gods.mnemosyne.facade import intent_from_angelia_event
 from gods.mnemosyne import record_intent
-from gods.mnemosyne.intent_builders import intent_from_angelia_event
 from gods.prompts import prompt_registry
 from gods.angelia.pulse.policy import get_inject_budget
 

@@ -14,7 +14,7 @@ from gods.iris.store import (
     take_deliverable_inbox_events,
 )
 from gods.mnemosyne import load_memory_policy, record_intent
-from gods.mnemosyne.intent_builders import (
+from gods.mnemosyne.facade import (
     intent_from_inbox_read,
     intent_from_inbox_received,
     intent_from_outbox_status,

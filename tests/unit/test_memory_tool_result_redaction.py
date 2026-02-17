@@ -1,4 +1,4 @@
-from gods.mnemosyne.intent_builders import intent_from_tool_result
+from gods.mnemosyne.facade import intent_from_tool_result
 
 
 def test_tool_result_compact_redacts_noisy_ids():

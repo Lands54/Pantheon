@@ -317,8 +317,8 @@ class HermesContracts:
             return sent
 
         try:
-            from gods.iris import enqueue_message
-            from gods.angelia.pulse import get_priority_weights, is_inbox_event_enabled
+            from gods.iris.facade import enqueue_message
+            from gods.angelia.facade import get_priority_weights, is_inbox_event_enabled
         except Exception:
             return sent
 
@@ -357,8 +357,8 @@ class HermesContracts:
             return sent
 
         try:
-            from gods.iris import enqueue_message
-            from gods.angelia.pulse import get_priority_weights, is_inbox_event_enabled
+            from gods.iris.facade import enqueue_message
+            from gods.angelia.facade import get_priority_weights, is_inbox_event_enabled
         except Exception:
             return sent
 

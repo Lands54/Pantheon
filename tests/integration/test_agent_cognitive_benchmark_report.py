@@ -17,10 +17,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from gods.agents.base import GodAgent
 from gods.config import AgentModelConfig, ProjectConfig, runtime_config
-from gods.iris.service import enqueue_message
+from gods.iris.facade import enqueue_message
 from gods.mnemosyne import write_entry
-from gods.angelia.pulse.scheduler_hooks import inject_inbox_before_pulse
-from gods.runtime.detach import submit as detach_submit
+from gods.angelia.facade import inject_inbox_before_pulse
+from gods.runtime.facade import detach_submit
 
 
 def _mk_project(round_idx: int) -> tuple[str, str]:
@@ -563,7 +563,7 @@ def _prepare_tool_preconditions(project_id: str, agent_id: str, tool_name: str) 
         job = detach_submit(project_id=project_id, agent_id=agent_id, command="python sleeper.py")
         return {"job_id": str(job.get("job_id", ""))}
     if tool_name in {"commit_contract", "list_contracts", "disable_contract"}:
-        from gods.hermes.service import hermes_service
+        from gods.hermes.facade import hermes_service
 
         try:
             hermes_service.contracts.register(project_id, json.loads(_minimal_contract_json(agent_id)))

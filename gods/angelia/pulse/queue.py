@@ -1,4 +1,8 @@
-"""Pulse queue store and operations."""
+"""Pulse queue store and operations.
+
+@orphaned: runtime primary path currently uses Angelia event store; keep this queue as
+diagnostic/compat capability and cover through boundary audit until decision to remove.
+"""
 from __future__ import annotations
 
 import fcntl

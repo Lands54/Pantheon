@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from gods.config import ProjectConfig, runtime_config
-from gods.runtime.detach.service import DetachError, submit
+from gods.runtime.facade import DetachError, detach_submit
 
 
 def test_detach_backend_guard_and_disable(monkeypatch):
@@ -21,22 +21,22 @@ def test_detach_backend_guard_and_disable(monkeypatch):
         )
 
         with pytest.raises(DetachError) as e1:
-            submit(project_id=project_id, agent_id="alpha", command="echo hi")
+            detach_submit(project_id=project_id, agent_id="alpha", command="echo hi")
         assert e1.value.code == "DETACH_BACKEND_UNSUPPORTED"
 
         runtime_config.projects[project_id].command_executor = "docker"
         runtime_config.projects[project_id].detach_enabled = False
         with pytest.raises(DetachError) as e2:
-            submit(project_id=project_id, agent_id="alpha", command="echo hi")
+            detach_submit(project_id=project_id, agent_id="alpha", command="echo hi")
         assert e2.value.code == "DETACH_DISABLED"
 
         runtime_config.projects[project_id].detach_enabled = True
         with pytest.raises(DetachError) as e3:
-            submit(project_id=project_id, agent_id="alpha", command="echo hi; rm -rf /")
+            detach_submit(project_id=project_id, agent_id="alpha", command="echo hi; rm -rf /")
         assert e3.value.code == "DETACH_COMMAND_INVALID"
 
         monkeypatch.setattr("gods.runtime.detach.service.start_job", lambda *a, **k: True)
-        res = submit(project_id=project_id, agent_id="alpha", command="echo hi")
+        res = detach_submit(project_id=project_id, agent_id="alpha", command="echo hi")
         assert res.get("ok") is True
         assert res.get("job_id")
     finally:
@@ -45,4 +45,3 @@ def test_detach_backend_guard_and_disable(monkeypatch):
         else:
             runtime_config.projects[project_id] = old
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
-

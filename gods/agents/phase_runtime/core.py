@@ -17,7 +17,7 @@ from gods.prompts import prompt_registry
 from gods.agents.tool_policy import SOCIAL_TOOLS, get_disabled_tools
 from gods.agents.debug_trace import PulseTraceLogger
 from gods.agents.runtime_policy import resolve_phase_strategy
-from gods.angelia.pulse.scheduler_hooks import inject_inbox_after_action_if_any
+from gods.angelia.facade import inject_inbox_after_action_if_any
 from gods.janus import janus_service, ContextBuildRequest
 from gods.agents.phase_runtime.policy import (
     AgentPhase,

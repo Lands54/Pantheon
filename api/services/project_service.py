@@ -7,23 +7,16 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from gods.angelia import facade as angelia_facade
 from gods.config import ProjectConfig, runtime_config
-from gods.iris import list_outbox_receipts
-from gods.project.reporting import build_project_report, load_project_report
+from gods.iris import facade as iris_facade
+from gods.janus import facade as janus_facade
+from gods.project import build_project_report, load_project_report
 from gods.protocols import build_knowledge_graph
-from gods.angelia.scheduler import angelia_supervisor
-from gods.runtime.detach import DetachError, get_logs as detach_get_logs, list_for_api as detach_list_for_api
-from gods.runtime.detach import reconcile as detach_reconcile
-from gods.runtime.detach import stop as detach_stop
-from gods.runtime.detach import submit as detach_submit
-from gods.runtime.docker import DockerRuntimeManager
-from gods.janus import janus_service
+from gods.runtime import facade as runtime_facade
 
 
 class ProjectService:
-    def __init__(self):
-        self._docker = DockerRuntimeManager()
-
     def list_projects(self) -> dict[str, Any]:
         return {"projects": runtime_config.projects, "current": runtime_config.current_project}
 
@@ -47,7 +40,7 @@ class ProjectService:
 
         # Stop project workers first to avoid runtime-dir deletion race.
         try:
-            angelia_supervisor.stop_project_workers(project_id)
+            angelia_facade.stop_project_workers(project_id)
         except Exception:
             pass
 
@@ -85,7 +78,7 @@ class ProjectService:
             getattr(target, "command_executor", "local")
         ) == "docker"
         if requires_docker:
-            ok, msg = self._docker.docker_available()
+            ok, msg = runtime_facade.docker_available()
             if not ok:
                 # Hard guard: never keep simulation enabled when docker runtime is unavailable.
                 target.simulation_enabled = False
@@ -104,12 +97,12 @@ class ProjectService:
         runtime_info = {"enabled": False, "ensured": []}
         if bool(getattr(proj, "docker_enabled", True)) and str(getattr(proj, "command_executor", "local")) == "docker":
             if bool(getattr(proj, "docker_auto_start_on_project_start", True)):
-                ok, msg = self._docker.docker_available()
+                ok, msg = runtime_facade.docker_available()
                 runtime_info = {"enabled": True, "available": ok, "detail": msg, "ensured": []}
                 if ok:
                     for aid in proj.active_agents:
                         try:
-                            st = self._docker.ensure_agent_runtime(project_id, aid)
+                            st = runtime_facade.ensure_agent_runtime(project_id, aid)
                             runtime_info["ensured"].append(
                                 {
                                     "agent_id": aid,
@@ -123,7 +116,7 @@ class ProjectService:
         runtime_config.save()
         try:
             for aid in proj.active_agents:
-                angelia_supervisor.wake_agent(project_id, aid)
+                angelia_facade.wake_agent(project_id, aid)
         except Exception:
             pass
         return {
@@ -142,7 +135,7 @@ class ProjectService:
         if bool(getattr(proj, "docker_enabled", True)) and str(getattr(proj, "command_executor", "local")) == "docker":
             if bool(getattr(proj, "docker_auto_stop_on_project_stop", True)):
                 for aid in proj.active_agents:
-                    self._docker.stop_agent_runtime(project_id, aid)
+                    runtime_facade.stop_agent_runtime(project_id, aid)
                     runtime_info["stopped"].append(aid)
         runtime_config.save()
         return {
@@ -156,8 +149,8 @@ class ProjectService:
     def runtime_status(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         proj = runtime_config.projects[project_id]
-        rows = self._docker.list_project_runtimes(project_id, proj.active_agents)
-        ok, msg = self._docker.docker_available()
+        rows = runtime_facade.list_project_runtimes(project_id, proj.active_agents)
+        ok, msg = runtime_facade.docker_available()
         return {"project_id": project_id, "docker_available": ok, "docker_detail": msg, "agents": rows}
 
     def runtime_restart_agent(self, project_id: str, agent_id: str) -> dict[str, Any]:
@@ -165,10 +158,10 @@ class ProjectService:
         proj = runtime_config.projects[project_id]
         if agent_id not in proj.active_agents:
             raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' is not active in project '{project_id}'")
-        ok, msg = self._docker.docker_available()
+        ok, msg = runtime_facade.docker_available()
         if not ok:
             raise HTTPException(status_code=503, detail=f"Docker unavailable: {msg}")
-        st = self._docker.restart_agent_runtime(project_id, agent_id)
+        st = runtime_facade.restart_agent_runtime(project_id, agent_id)
         return {
             "project_id": project_id,
             "agent_id": agent_id,
@@ -182,44 +175,44 @@ class ProjectService:
     def runtime_reconcile(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         proj = runtime_config.projects[project_id]
-        ok, msg = self._docker.docker_available()
+        ok, msg = runtime_facade.docker_available()
         if not ok:
             raise HTTPException(status_code=503, detail=f"Docker unavailable: {msg}")
-        return self._docker.reconcile_project(project_id, proj.active_agents)
+        return runtime_facade.reconcile_project(project_id, proj.active_agents)
 
     def detach_submit(self, project_id: str, agent_id: str, command: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         try:
-            return detach_submit(project_id=project_id, agent_id=agent_id, command=command)
-        except DetachError as e:
+            return runtime_facade.detach_submit(project_id=project_id, agent_id=agent_id, command=command)
+        except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
     def detach_list(self, project_id: str, agent_id: str, status: str, limit: int) -> dict[str, Any]:
         self.ensure_exists(project_id)
         try:
-            return detach_list_for_api(project_id=project_id, agent_id=agent_id, status=status, limit=limit)
-        except DetachError as e:
+            return runtime_facade.detach_list_for_api(project_id=project_id, agent_id=agent_id, status=status, limit=limit)
+        except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
     def detach_stop(self, project_id: str, job_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         try:
-            return detach_stop(project_id=project_id, job_id=job_id, reason="manual")
-        except DetachError as e:
+            return runtime_facade.detach_stop(project_id=project_id, job_id=job_id, reason="manual")
+        except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
     def detach_reconcile(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         try:
-            return detach_reconcile(project_id=project_id)
-        except DetachError as e:
+            return runtime_facade.detach_reconcile(project_id=project_id)
+        except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
     def detach_logs(self, project_id: str, job_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         try:
-            return detach_get_logs(project_id=project_id, job_id=job_id)
-        except DetachError as e:
+            return runtime_facade.detach_get_logs(project_id=project_id, job_id=job_id)
+        except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
     def build_report(self, project_id: str) -> dict[str, Any]:
@@ -239,7 +232,7 @@ class ProjectService:
 
     def context_preview(self, project_id: str, agent_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        row = janus_service.context_preview(project_id, agent_id)
+        row = janus_facade.context_preview(project_id, agent_id)
         return {
             "project_id": project_id,
             "agent_id": agent_id,
@@ -248,7 +241,7 @@ class ProjectService:
 
     def context_reports(self, project_id: str, agent_id: str, limit: int) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        rows = janus_service.context_reports(project_id, agent_id, limit=max(1, min(limit, 500)))
+        rows = janus_facade.context_reports(project_id, agent_id, limit=max(1, min(limit, 500)))
         return {
             "project_id": project_id,
             "agent_id": agent_id,
@@ -264,7 +257,7 @@ class ProjectService:
         limit: int = 100,
     ) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        rows = list_outbox_receipts(
+        rows = iris_facade.list_outbox_receipts(
             project_id=project_id,
             from_agent_id=from_agent_id,
             to_agent_id=to_agent_id,

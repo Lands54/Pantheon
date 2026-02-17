@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from gods.iris.service import ack_handled, enqueue_message, fetch_inbox_context, list_outbox_receipts
+from gods.iris.facade import ack_handled, enqueue_message, fetch_inbox_context, list_outbox_receipts
 
 
 def test_outbox_receipt_status_flow_pending_delivered_handled():

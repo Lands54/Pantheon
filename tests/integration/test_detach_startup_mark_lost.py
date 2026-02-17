@@ -3,9 +3,13 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from api.app import app
-from gods.runtime.detach.models import DetachStatus
-from gods.runtime.detach.service import startup_mark_lost
-from gods.runtime.detach.store import create_job, get_job, transition_job
+from gods.runtime.facade import (
+    DetachStatus,
+    create_job,
+    detach_startup_mark_lost,
+    get_job,
+    transition_job,
+)
 
 client = TestClient(app)
 
@@ -28,7 +32,7 @@ def test_detach_startup_mark_lost():
         j2 = create_job(project_id, "genesis", "echo b")
         transition_job(project_id, j2.job_id, DetachStatus.RUNNING)
 
-        changed = startup_mark_lost(project_id)
+        changed = detach_startup_mark_lost(project_id)
         assert changed >= 2
 
         g1 = get_job(project_id, j1.job_id)
@@ -39,4 +43,3 @@ def test_detach_startup_mark_lost():
         assert g2.stop_reason == "startup_lost"
     finally:
         client.delete(f"/projects/{project_id}")
-

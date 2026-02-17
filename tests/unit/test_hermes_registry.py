@@ -4,8 +4,8 @@ import shutil
 import uuid
 from pathlib import Path
 
-from gods.hermes.registry import HermesRegistry
-from gods.hermes.models import ProtocolSpec
+from gods.hermes.facade import HermesRegistry
+from gods.hermes.facade import ProtocolSpec
 
 
 def test_hermes_registry_register_and_get():

@@ -21,7 +21,7 @@ from gods.agents.phase_runtime import AgentPhaseRuntime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
 from gods.paths import agent_dir, mnemosyne_dir
-from gods.angelia.pulse.scheduler_hooks import inject_inbox_after_action_if_any
+from gods.angelia.facade import inject_inbox_after_action_if_any
 from gods.janus import janus_service, record_observation, ContextBuildRequest, ObservationRecord
 from gods.janus.journal import profile_path
 from gods.agents.state_window_store import load_state_window, save_state_window

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gods.hermes.client import HermesClient
+from gods.hermes.facade import HermesClient
 
 
 class _Resp:

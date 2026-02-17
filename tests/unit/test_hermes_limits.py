@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from gods.hermes.errors import HermesError, HERMES_BUSY, HERMES_RATE_LIMITED
-from gods.hermes.limits import HermesLimiter
+from gods.hermes.facade import HermesError, HERMES_BUSY, HERMES_RATE_LIMITED
+from gods.hermes.facade import HermesLimiter
 
 
 def test_hermes_limits_concurrency_and_rate():

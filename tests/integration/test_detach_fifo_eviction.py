@@ -5,9 +5,13 @@ import time
 from fastapi.testclient import TestClient
 
 from api.app import app
-from gods.runtime.detach.models import DetachStatus
-from gods.runtime.detach.service import reconcile
-from gods.runtime.detach.store import create_job, transition_job, update_job
+from gods.runtime.facade import (
+    DetachStatus,
+    create_job,
+    detach_reconcile,
+    transition_job,
+    update_job,
+)
 
 client = TestClient(app)
 
@@ -49,7 +53,7 @@ def test_detach_fifo_eviction(monkeypatch):
         update_job(project_id, j1.job_id, started_at=now - 2)
         update_job(project_id, j2.job_id, started_at=now - 1)
 
-        res = reconcile(project_id)
+        res = detach_reconcile(project_id)
         assert j1.job_id in res.get("evicted", [])
         assert (j1.job_id, "limit_fifo") in victim_calls
     finally:

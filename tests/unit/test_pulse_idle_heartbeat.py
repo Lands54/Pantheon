@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 
 from gods.config import ProjectConfig, runtime_config
-from gods.angelia.scheduler import angelia_supervisor
+from gods.angelia.facade import angelia_supervisor
 from gods.angelia import store
 
 

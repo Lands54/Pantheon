@@ -1,7 +1,6 @@
 from langchain_core.messages import HumanMessage
 
-from gods.janus.models import ContextBuildRequest
-from gods.janus.strategies.structured_v1 import StructuredV1ContextStrategy
+from gods.janus.facade import ContextBuildRequest, StructuredV1ContextStrategy
 
 
 def test_structured_v1_uses_dynamic_recent_budget_not_fixed_8(tmp_path, monkeypatch):

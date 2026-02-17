@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from gods.iris.service import build_inbox_overview
+from gods.iris.facade import build_inbox_overview
 from gods.janus.journal import list_observations, read_profile, read_task_state
 from gods.janus.models import ContextBuildRequest, ContextBuildResult
 from gods.janus.strategy_base import ContextStrategy
-from gods.mnemosyne.compaction import load_chronicle_for_context
+from gods.mnemosyne.facade import load_chronicle_for_context
 
 
 def _tok_len(text: str) -> int:

@@ -1,11 +1,10 @@
 """Mnemosyne API routes for durable archives."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from gods.config import runtime_config
-from gods.mnemosyne import write_entry, list_entries, read_entry, VALID_VAULTS
+from api.services import mnemosyne_service
 
 router = APIRouter(prefix="/mnemosyne", tags=["mnemosyne"])
 
@@ -19,37 +18,23 @@ class MnemoWriteRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-def _pick_project(project_id: str | None) -> str:
-    pid = project_id or runtime_config.current_project
-    if pid not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail=f"Project '{pid}' not found")
-    return pid
-
-
 @router.post("/write")
 async def mnemo_write(req: MnemoWriteRequest) -> dict:
-    pid = _pick_project(req.project_id)
-    if req.vault not in VALID_VAULTS:
-        raise HTTPException(status_code=400, detail=f"invalid vault: {req.vault}")
-    row = write_entry(pid, req.vault, req.author, req.title, req.content, req.tags)
-    return {"status": "success", "project_id": pid, "entry": row}
+    return mnemosyne_service.write(
+        project_id=req.project_id,
+        vault=req.vault,
+        author=req.author,
+        title=req.title,
+        content=req.content,
+        tags=req.tags,
+    )
 
 
 @router.get("/list")
 async def mnemo_list(project_id: str | None = None, vault: str = "human", limit: int = 30) -> dict:
-    pid = _pick_project(project_id)
-    if vault not in VALID_VAULTS:
-        raise HTTPException(status_code=400, detail=f"invalid vault: {vault}")
-    rows = list_entries(pid, vault, limit=limit)
-    return {"project_id": pid, "vault": vault, "entries": rows}
+    return mnemosyne_service.list(project_id=project_id, vault=vault, limit=limit)
 
 
 @router.get("/read/{entry_id}")
 async def mnemo_read(entry_id: str, project_id: str | None = None, vault: str = "human") -> dict:
-    pid = _pick_project(project_id)
-    if vault not in VALID_VAULTS:
-        raise HTTPException(status_code=400, detail=f"invalid vault: {vault}")
-    row = read_entry(pid, vault, entry_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="entry not found")
-    return {"project_id": pid, "vault": vault, **row}
+    return mnemosyne_service.read(entry_id=entry_id, project_id=project_id, vault=vault)

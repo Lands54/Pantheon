@@ -6,6 +6,7 @@
 - Inbox message: business message record (`inbox_events.jsonl`).
 - Outbox receipt: sender-side delivery status (`outbox_receipts.jsonl`).
 - Config source: `config.json` via `gods.config` package.
+- Boundary rule: `api/routes -> api/services -> gods.<domain>.facade`.
 
 ## 1. Global Layered View (Mermaid)
 ```mermaid

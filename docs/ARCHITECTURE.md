@@ -117,6 +117,7 @@ Gods Platform 采用三层结构：
 - `api/services/config_service.py`：配置脱敏读取、配置保存编排。
 - `api/services/project_service.py`：项目生命周期、知识图谱重建、Project 报告编排。
 - `api/services/simulation_service.py`：调度循环与 startup 安全暂停策略。
+- `api/services/*`：统一调用 `gods.<domain>.facade`，不直连域内 `store/policy/models/...`。
 
 说明：`api/routes/*` 只做协议适配，业务逻辑下沉到 service，避免 API 膨胀。
 

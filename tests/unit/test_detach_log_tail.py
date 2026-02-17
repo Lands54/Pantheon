@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from gods.runtime.detach.store import append_log, read_log_tail
+from gods.runtime.facade import append_log, read_log_tail
 
 
 def test_detach_log_tail_cropping():
@@ -19,4 +19,3 @@ def test_detach_log_tail_cropping():
         assert len(tail) <= 400
     finally:
         shutil.rmtree(base, ignore_errors=True)
-

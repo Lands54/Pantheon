@@ -5,8 +5,8 @@ import logging
 from typing import Any
 
 from gods.config import runtime_config
-from gods.iris import enqueue_message
-from gods.angelia.pulse import get_priority_weights, is_inbox_event_enabled
+from gods.angelia import facade as angelia_facade
+from gods.iris import facade as iris_facade
 
 logger = logging.getLogger("GodsServer")
 
@@ -14,9 +14,9 @@ logger = logging.getLogger("GodsServer")
 class CommunicationService:
     def confess(self, agent_id: str, title: str, message: str, silent: bool = False) -> dict[str, Any]:
         project_id = runtime_config.current_project
-        weights = get_priority_weights(project_id)
-        trigger_pulse = (not bool(silent)) and is_inbox_event_enabled(project_id)
-        res = enqueue_message(
+        weights = angelia_facade.get_priority_weights(project_id)
+        trigger_pulse = (not bool(silent)) and angelia_facade.is_inbox_event_enabled(project_id)
+        res = iris_facade.enqueue_message(
             project_id=project_id,
             agent_id=agent_id,
             sender="High Overseer",

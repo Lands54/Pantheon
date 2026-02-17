@@ -7,9 +7,9 @@ import time
 
 from langchain_core.tools import tool
 
-from gods.iris import enqueue_message
+from gods.iris.facade import enqueue_message
+from gods.angelia import facade as angelia_facade
 from gods.paths import mnemosyne_dir, project_buffers_dir, project_dir
-from gods.angelia.pulse import get_priority_weights, is_inbox_event_enabled
 from gods.tools.comm_common import format_comm_error
 
 
@@ -42,8 +42,8 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
                 project_id,
             )
 
-        weights = get_priority_weights(project_id)
-        trigger = is_inbox_event_enabled(project_id)
+        weights = angelia_facade.get_priority_weights(project_id)
+        trigger = angelia_facade.is_inbox_event_enabled(project_id)
         queued = enqueue_message(
             project_id=project_id,
             agent_id=to_id,
