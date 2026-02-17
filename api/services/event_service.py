@@ -20,6 +20,29 @@ EVENT_AGENT_TRIGGER = "interaction.agent.trigger"
 
 
 class EventService:
+    def catalog(self, project_id: str | None) -> dict[str, Any]:
+        pid = resolve_project(project_id)
+        base = events_bus.event_catalog()
+        known = {str(x.get("event_type", "")) for x in base}
+        seen = {
+            str(x.event_type)
+            for x in events_bus.list_events(pid, limit=5000)
+            if str(getattr(x, "event_type", "")).strip()
+        }
+        dynamic: list[dict[str, Any]] = []
+        for et in sorted(seen - known):
+            dynamic.append(
+                {
+                    "event_type": et,
+                    "domain": "unknown",
+                    "title": "未登记事件",
+                    "description": "该事件在运行中出现，但尚未在事件目录中登记。",
+                    "feeds_llm": None,
+                    "llm_note": "未知，请补充事件目录定义。",
+                }
+            )
+        return {"project_id": pid, "items": base + dynamic}
+
     def submit(
         self,
         project_id: str | None,
@@ -115,13 +138,13 @@ class EventService:
                     dedupe_key=dedupe_key,
                 )
             # message.sent/hermes.notice single-target path.
-            to_id = str(payload.get("to_id", "") or payload.get("agent_id", "")).strip()
-            sender_id = str(payload.get("sender_id", "") or payload.get("sender", "")).strip()
+            to_id = str(payload.get("to_id", "")).strip()
+            sender_id = str(payload.get("sender_id", "")).strip()
             title = str(payload.get("title", "")).strip()
             content = str(payload.get("content", ""))
             msg_type = str(payload.get("msg_type", "private")).strip() or "private"
             if not to_id or not sender_id or not title:
-                raise HTTPException(status_code=400, detail="interaction.message.sent requires payload.to_id|agent_id, payload.sender_id, payload.title")
+                raise HTTPException(status_code=400, detail="interaction.message.sent requires payload.to_id, payload.sender_id, payload.title")
             return interaction_facade.submit_message_event(
                 project_id=pid,
                 to_id=to_id,
@@ -140,19 +163,14 @@ class EventService:
             raise HTTPException(status_code=410, detail="iris mail events moved to domain=interaction,event_type=interaction.message.sent")
 
         # Angelia scheduling path
-        if domain == "angelia" and event_type in {"timer_event", "manual_event", "system_event"}:
-            mapped = {
-                "timer_event": "timer",
-                "manual_event": "manual",
-                "system_event": "system",
-            }[event_type]
+        if domain == "angelia" and event_type in {"timer", "manual", "system"}:
             agent_id = str(payload.get("agent_id", "")).strip()
             if not agent_id:
                 raise HTTPException(status_code=400, detail="angelia events require payload.agent_id")
             row = angelia_facade.enqueue_event(
                 project_id=pid,
                 agent_id=agent_id,
-                event_type=mapped,
+                event_type=event_type,
                 payload=payload,
                 priority=pri,
                 dedupe_key=dedupe_key,

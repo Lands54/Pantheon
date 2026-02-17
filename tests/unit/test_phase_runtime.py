@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage
 
 from gods.agents.phase_runtime import AgentPhaseRuntime, PhaseToolPolicy, base_phases
 from gods.config import runtime_config, ProjectConfig, AgentModelConfig
+from gods.mnemosyne import MemoryIntent
 
 
 def test_base_phases_match_new_state_machine():
@@ -52,8 +53,9 @@ class _DummyAgent:
     def get_tools(self):
         return []
 
-    def _append_to_memory(self, text: str):
-        self.memory_log.append(text)
+    def _record_intent(self, intent: MemoryIntent):
+        self.memory_log.append(intent.fallback_text)
+        return {"intent_key": intent.intent_key}
 
     def _load_local_memory(self):
         return ""

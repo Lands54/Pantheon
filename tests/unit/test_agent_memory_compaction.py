@@ -1,8 +1,10 @@
 from pathlib import Path
 import shutil
+import time
 
 from gods.agents.base import GodAgent
 from gods.config import runtime_config, ProjectConfig
+from gods.mnemosyne import MemoryIntent
 
 
 def test_agent_memory_compaction_rolls_old_content():
@@ -28,7 +30,17 @@ def test_agent_memory_compaction_rolls_old_content():
         initial_mem = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
         assert initial_mem.startswith("### SYSTEM_SEED")
         for i in range(180):
-            agent._append_to_memory(f"entry {i}: " + ("x" * 180))
+            agent._record_intent(
+                MemoryIntent(
+                    intent_key="llm.response",
+                    project_id=project_id,
+                    agent_id=agent_id,
+                    source_kind="llm",
+                    payload={"phase": "freeform", "content": f"entry {i}: " + ("x" * 180)},
+                    fallback_text=f"entry {i}: " + ("x" * 180),
+                    timestamp=time.time(),
+                )
+            )
 
         mem_path = Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md"
         archive_path = Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}_archive.md"

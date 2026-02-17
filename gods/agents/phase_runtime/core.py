@@ -6,6 +6,7 @@ Reason -> Action (batch tool calls) -> Observe (finalize decision)
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -31,6 +32,7 @@ from gods.agents.phase_runtime.strategies import (
     PHASE_STRATEGY_ITERATIVE_ACTION,
     PHASE_STRATEGIES,
 )
+from gods.mnemosyne import MemoryIntent
 
 
 class AgentPhaseRuntime:
@@ -95,12 +97,31 @@ class AgentPhaseRuntime:
         )
 
     def _append_memory(self, text: str, record_type: str = "llm.response", payload: dict | None = None):
-        """Compatibility wrapper for old test doubles using _append_to_memory(text) signature."""
-        fn = getattr(self.agent, "_append_to_memory")
-        try:
-            fn(text, record_type=record_type, payload=payload or {})
-        except TypeError:
-            fn(text)
+        key = str(record_type or "").strip() or "llm.response"
+        source_kind = "agent"
+        if key.startswith("phase.retry."):
+            source_kind = "phase"
+        elif key.startswith("tool."):
+            source_kind = "tool"
+        elif key.startswith("event."):
+            source_kind = "event"
+        elif key.startswith("inbox."):
+            source_kind = "inbox"
+        elif key.startswith("llm."):
+            source_kind = "llm"
+        if key == "llm.response" and hasattr(self.agent, "_is_transient_llm_error_text"):
+            if bool(self.agent._is_transient_llm_error_text(str(text or ""))):
+                return
+        intent = MemoryIntent(
+            intent_key=key,
+            project_id=self.agent.project_id,
+            agent_id=self.agent.agent_id,
+            source_kind=source_kind,  # type: ignore[arg-type]
+            payload=dict(payload or {}),
+            fallback_text=str(text or ""),
+            timestamp=time.time(),
+        )
+        self.agent._record_intent(intent)
 
     def _finish(self, state):
         """

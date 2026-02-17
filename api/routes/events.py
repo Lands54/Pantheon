@@ -1,8 +1,13 @@
 """Unified EventBus API routes."""
 from __future__ import annotations
 
+import asyncio
+import json
+import time
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from api.services.event_service import event_service
 
@@ -64,6 +69,11 @@ async def list_events(
     )
 
 
+@router.get("/catalog")
+async def event_catalog(project_id: str | None = None) -> dict:
+    return event_service.catalog(project_id=project_id)
+
+
 @router.post("/{event_id}/retry")
 async def retry_event(event_id: str, req: RetryEventRequest) -> dict:
     return event_service.retry(project_id=req.project_id, event_id=event_id)
@@ -82,3 +92,47 @@ async def reconcile(req: ReconcileRequest) -> dict:
 @router.get("/metrics")
 async def metrics(project_id: str | None = None) -> dict:
     return event_service.metrics(project_id=project_id)
+
+
+@router.get("/stream")
+async def stream_events(
+    project_id: str | None = None,
+    domain: str = "",
+    event_type: str = "",
+    state: str = "",
+    agent_id: str = "",
+    limit: int = 100,
+):
+    async def gen():
+        last_sig = ""
+        last_heartbeat = 0.0
+        while True:
+            rows = event_service.list(
+                project_id=project_id,
+                domain=domain,
+                event_type=event_type,
+                state=state,
+                limit=limit,
+                agent_id=agent_id,
+            )
+            items = rows.get("items", [])
+            sig = "|".join(
+                f"{x.get('event_id','')}:{x.get('state','')}:{x.get('attempt',0)}:{x.get('done_at',0)}:{x.get('error_code','')}"
+                for x in items
+            )
+            now = time.time()
+            if sig != last_sig:
+                payload = {
+                    "type": "snapshot",
+                    "project_id": rows.get("project_id", ""),
+                    "items": items,
+                    "at": now,
+                }
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                last_sig = sig
+            elif now - last_heartbeat >= 15:
+                yield f"event: heartbeat\ndata: {int(now)}\n\n"
+                last_heartbeat = now
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(gen(), media_type="text/event-stream")

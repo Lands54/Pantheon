@@ -18,9 +18,18 @@ from gods.mnemosyne.facade import intent_from_angelia_event
 from gods.mnemosyne import record_intent
 from gods.prompts import prompt_registry
 from gods.angelia.pulse.policy import get_inject_budget
-from gods.interaction.handler import register_handlers as register_interaction_handlers
 
-register_interaction_handlers()
+_INTERACTION_HANDLERS_READY = False
+
+
+def _ensure_interaction_handlers_registered():
+    global _INTERACTION_HANDLERS_READY
+    if _INTERACTION_HANDLERS_READY:
+        return
+    from gods.interaction.handler import register_handlers as _register_handlers
+
+    _register_handlers()
+    _INTERACTION_HANDLERS_READY = True
 
 
 @dataclass
@@ -58,6 +67,11 @@ def _to_record(event) -> events_bus.EventRecord:
 
 
 def _resolve_handler(event_type: str) -> events_bus.EventHandler:
+    meta = events_bus.event_meta(event_type)
+    if meta is None:
+        raise ValueError(f"EVENT_CATALOG_MISSING: event_type '{event_type}' is not registered in catalog")
+    if meta.get("feeds_llm") is False:
+        raise ValueError(f"EVENT_LLM_DISALLOWED: event_type '{event_type}' is marked feeds_llm=false")
     h = events_bus.get_handler(event_type)
     if h is not None:
         return h
@@ -155,6 +169,7 @@ def _set_error_backoff(st: AgentRuntimeStatus, err: str, delay_sec: int):
 
 
 def worker_loop(ctx: WorkerContext):
+    _ensure_interaction_handlers_registered()
     project_id = ctx.project_id
     agent_id = ctx.agent_id
     stop_event = ctx.stop_event

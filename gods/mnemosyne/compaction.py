@@ -42,6 +42,16 @@ def _project(project_id: str):
     return runtime_config.projects.get(project_id)
 
 
+def llm_call_delay_sec(project_id: str) -> float:
+    proj = _project(project_id)
+    raw = getattr(proj, "llm_call_delay_sec", 1) if proj else 1
+    try:
+        delay = float(raw)
+    except Exception:
+        delay = 1.0
+    return max(0.0, min(delay, 60.0))
+
+
 def compact_trigger_tokens(project_id: str) -> int:
     proj = _project(project_id)
     v = int(getattr(proj, "memory_compact_trigger_tokens", 12000) if proj else 12000)
@@ -178,6 +188,9 @@ def _semantic_summary_with_llm(project_id: str, old_text: str, seed_block: str) 
             "Do not invent facts.\n\n"
             f"[MISSION_SEED]\n{anchor}\n\n[ARCHIVED_HISTORY]\n{snippet}"
         )
+        delay = llm_call_delay_sec(project_id)
+        if delay > 0:
+            time.sleep(delay)
         resp = llm.invoke(prompt)
         content = str(getattr(resp, "content", "") or "").strip()
         if not content:

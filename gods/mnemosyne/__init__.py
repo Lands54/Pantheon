@@ -7,8 +7,11 @@ from gods.mnemosyne.policy_registry import (
     MemoryTemplateMissingError,
     ensure_memory_policy,
     required_intent_keys,
+    list_policy_rules,
+    upsert_policy_rule,
     validate_memory_policy,
 )
+from gods.mnemosyne.intent_schema_registry import template_vars_for_intent
 from gods.mnemosyne.compaction import (
     ensure_compacted,
     load_chronicle_for_context,
@@ -29,7 +32,10 @@ __all__ = [
     "MemoryTemplateMissingError",
     "ensure_memory_policy",
     "required_intent_keys",
+    "list_policy_rules",
+    "upsert_policy_rule",
     "validate_memory_policy",
+    "template_vars_for_intent",
     "ensure_compacted",
     "load_chronicle_for_context",
     "note_llm_token_io",

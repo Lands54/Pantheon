@@ -23,7 +23,8 @@ class MemoryIntent:
 class MemorySinkPolicy:
     to_chronicle: bool
     to_runtime_log: bool
-    template: str = ""
+    chronicle_template_key: str = ""
+    runtime_log_template_key: str = ""
 
 
 @dataclass
@@ -33,4 +34,3 @@ class MemoryDecision:
     runtime_log_written: bool
     text: str
     policy: MemorySinkPolicy
-

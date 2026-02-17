@@ -42,6 +42,21 @@ class GodBrain:
         proj = getattr(runtime_config, "projects", {}).get(current_project)
         return bool(getattr(proj, "debug_llm_trace_enabled", True) if proj else True)
 
+    def _llm_call_delay_sec(self) -> float:
+        current_project = self.project_id or getattr(runtime_config, "current_project", "default")
+        proj = getattr(runtime_config, "projects", {}).get(current_project)
+        raw = getattr(proj, "llm_call_delay_sec", 1) if proj else 1
+        try:
+            delay = float(raw)
+        except Exception:
+            delay = 1.0
+        return max(0.0, min(delay, 60.0))
+
+    def _sleep_before_llm_invoke(self):
+        delay = self._llm_call_delay_sec()
+        if delay > 0:
+            time.sleep(delay)
+
     def _serialize_message(self, msg):
         """
         Serializes a message object into a JSON-compatible dictionary for tracing.
@@ -173,6 +188,7 @@ class GodBrain:
                 response_message=None,
                 trace_meta=trace_meta,
             )
+            self._sleep_before_llm_invoke()
             response = llm.invoke(context)
             if isinstance(response, AIMessage):
                 self._write_llm_trace(
@@ -219,6 +235,7 @@ class GodBrain:
                 trace_meta=trace_meta,
             )
             llm = llm_raw.bind_tools(tools)
+            self._sleep_before_llm_invoke()
             response = llm.invoke(messages)
             if isinstance(response, AIMessage):
                 self._write_llm_trace(

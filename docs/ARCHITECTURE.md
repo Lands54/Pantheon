@@ -1,6 +1,7 @@
 # Gods Platform 架构概览（当前实现）
 
 > 最新模块职责、依赖关系与模块内部运行图请以 `docs/BACKEND_MODULES_RUNTIME_MAP.md` 为唯一事实源。
+> 开发强约束与 Agent/Event 交互规范请先阅读 `docs/DEVELOPER_CONSTRAINTS.md`。
 
 ## 1. 总体结构
 
@@ -10,6 +11,7 @@ Gods Platform 采用三层结构：
 - 用例服务层：`api/services/`
 - API 服务：`api/`
 - 命令行：`cli/`
+- 前端控制台：`frontend/`（React + Vite，Event 驱动观测/控制）
 
 所有运行时世界数据都存放在 `projects/{project_id}/` 下，形成物理隔离。
 
@@ -131,6 +133,18 @@ Gods Platform 采用三层结构：
   - 事件调试：`events submit/list/retry/ack/reconcile`、`inbox outbox`
   - 后台任务：`detach submit/list/stop/logs`
 
+## 4.1 前端层（`frontend/`）
+
+- 入口：`frontend/src/App.jsx`
+- 结构：`api/hooks/store/pages/components/types`
+- MVP 页面：
+  - `Dashboard`：项目总览、agent 运行状态、Hermes SSE 实时流
+  - `Events`：按 `agent/domain/type/state` 过滤事件并执行 retry/ack
+  - `Message Center`：统一提交 `interaction.message.sent`
+  - `Agent Detail`：Janus context + Iris inbox/outbox + agent recent events
+  - `Project Control`：`create/start/stop` 控制
+- 禁用旧链路：前端不再使用 `/broadcast`、`/prayers/check`、`/confess`
+
 ## 5. 多项目隔离模型
 
 每个项目目录结构：
@@ -157,7 +171,7 @@ projects/{project_id}/
 
 ## 6. 数据流（关键路径）
 
-1. 人类/Agent 发送私信 -> 写入 `events.jsonl`（`domain=iris,event_type=mail_event,state=queued`）。  
+1. 人类/Agent 发送私信 -> 写入 `events.jsonl`（`domain=interaction,event_type=interaction.message.sent,state=queued`）。  
 2. Angelia 仅通过 mailbox `notify/wait` 做快速唤醒，不再维护独立主事件账本。  
 3. worker 从统一事件总线执行 pick/process/done/requeue/dead。  
 4. pulse 期间批量注入可投递 mail event，并将其推进到 `delivered/handled`。  

@@ -1,4 +1,4 @@
-"""Public config API (compat exports)."""
+"""Public config API."""
 from gods.config.models import CONFIG_FILE, AgentModelConfig, ProjectConfig, SystemConfig
 from gods.config.runtime import (
     runtime_config,

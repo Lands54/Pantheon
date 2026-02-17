@@ -22,6 +22,46 @@ SERVER_LOG="${GODS_SERVER_LOG:-/tmp/gods_server.log}"
 SERVER_PID_FILE="${GODS_SERVER_PID:-/tmp/gods_server.pid}"
 DOCKER_IMAGE="${GODS_DOCKER_IMAGE:-gods-agent-base:py311}"
 
+echo "==> Preflight config/template cleanup..."
+python - <<'PY'
+import json
+from pathlib import Path
+
+cfg_path = Path("config.json")
+if cfg_path.exists():
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        cfg = {}
+else:
+    cfg = {}
+
+projects = cfg.get("projects", {}) if isinstance(cfg.get("projects", {}), dict) else {}
+default_proj = projects.get("default", {})
+if not isinstance(default_proj, dict):
+    default_proj = {}
+
+cfg["projects"] = {"default": default_proj}
+cfg["current_project"] = "default"
+cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+# Ensure template memory_policy.json is valid JSON object.
+tpl_policy = Path("projects/templates/default/mnemosyne/memory_policy.json")
+tpl_policy.parent.mkdir(parents=True, exist_ok=True)
+try:
+    if tpl_policy.exists():
+        raw = tpl_policy.read_text(encoding="utf-8").strip()
+        if not raw:
+            raise ValueError("empty")
+        val = json.loads(raw)
+        if not isinstance(val, dict):
+            raise ValueError("not object")
+    else:
+        raise ValueError("missing")
+except Exception:
+    tpl_policy.write_text("{}\n", encoding="utf-8")
+PY
+
 echo "==> Restarting server..."
 
 # Stop by pid file first
@@ -68,6 +108,7 @@ echo "==> Initializing project: ${PROJECT_ID}"
 BASE_URL="${BASE_URL}" PROJECT_ID="${PROJECT_ID}" DOCKER_IMAGE="${DOCKER_IMAGE}" python - <<'PY'
 import json
 import os
+import shutil
 from pathlib import Path
 import requests
 
@@ -176,6 +217,7 @@ def req(method: str, path: str, **kwargs):
 
 # Best-effort delete old project
 req("DELETE", f"/projects/{project_id}")
+shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
 
 r = req("POST", "/projects/create", json={"id": project_id})
 r.raise_for_status()

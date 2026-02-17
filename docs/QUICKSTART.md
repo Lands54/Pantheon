@@ -35,9 +35,9 @@ API 文档：`http://localhost:8000/docs`
 ### 4.2 Agent 管理
 
 ```bash
-./temple.sh list
-./temple.sh activate genesis
-./temple.sh deactivate genesis
+./temple.sh agent list
+./temple.sh agent status
+./temple.sh agent status --agent-id genesis
 ./temple.sh agent view genesis
 ./temple.sh agent edit genesis
 ```
@@ -70,6 +70,15 @@ cd frontend
 npm install
 npm run dev
 ```
+
+前端地址（默认）：`http://localhost:5173`
+
+前端 MVP 页面：
+1. `Dashboard`：项目切换 + Agent 状态 + Hermes 实时事件流
+2. `Events`：事件筛选、重试、ack
+3. `Message Center`：`human.overseer` 向 agent 发送 interaction 事件
+4. `Agent Detail`：Janus context + Iris 回执 + 最近事件
+5. `Project Control`：project create/start/stop
 
 ## 6. 测试（建议）
 

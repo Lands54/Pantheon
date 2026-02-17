@@ -1,6 +1,7 @@
 """Project lifecycle/report use-case service."""
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -11,12 +12,77 @@ from gods.angelia import facade as angelia_facade
 from gods.config import ProjectConfig, runtime_config
 from gods.iris import facade as iris_facade
 from gods.janus import facade as janus_facade
+from gods.mnemosyne import facade as mnemosyne_facade
+from gods.mnemosyne import template_registry as mnemosyne_templates
 from gods.project import build_project_report, load_project_report
 from gods.protocols import build_knowledge_graph
 from gods.runtime import facade as runtime_facade
+from gods.paths import runtime_debug_dir
 
 
 class ProjectService:
+    @staticmethod
+    def _read_latest_jsonl_row(path: Path) -> dict[str, Any] | None:
+        if not path.exists():
+            return None
+        last_line = ""
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last_line = line.strip()
+        if not last_line:
+            return None
+        try:
+            row = json.loads(last_line)
+        except Exception:
+            return None
+        return row if isinstance(row, dict) else None
+
+    @staticmethod
+    def _ensure_project_layout(project_root: Path):
+        runtime = project_root / "runtime"
+        mnemosyne = project_root / "mnemosyne"
+        (runtime / "locks").mkdir(parents=True, exist_ok=True)
+        (mnemosyne / "agent_profiles").mkdir(parents=True, exist_ok=True)
+        (project_root / "agents").mkdir(parents=True, exist_ok=True)
+        (project_root / "buffers").mkdir(parents=True, exist_ok=True)
+
+        events_file = runtime / "events.jsonl"
+        detach_file = runtime / "detach_jobs.jsonl"
+        policy_file = mnemosyne / "memory_policy.json"
+        runtime_tpl_file = mnemosyne / "runtime_log_templates.json"
+        chronicle_tpl_file = mnemosyne / "chronicle_templates.json"
+        if not events_file.exists():
+            events_file.write_text("", encoding="utf-8")
+        if not detach_file.exists():
+            detach_file.write_text("", encoding="utf-8")
+        required_keys = set(mnemosyne_facade.required_intent_keys())
+        should_rewrite_policy = not policy_file.exists()
+        if not should_rewrite_policy:
+            try:
+                raw = json.loads(policy_file.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict) or not required_keys.issubset(set(raw.keys())):
+                    should_rewrite_policy = True
+            except Exception:
+                should_rewrite_policy = True
+        if should_rewrite_policy:
+            payload = mnemosyne_facade.default_memory_policy()
+            policy_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if not runtime_tpl_file.exists() or not chronicle_tpl_file.exists():
+            mnemosyne_templates.ensure_memory_templates(project_root.name)
+
+    @staticmethod
+    def _scaffold_project_root(project_id: str):
+        root = Path("projects")
+        root.mkdir(parents=True, exist_ok=True)
+        project_root = root / project_id
+        template_root = root / "templates" / "default"
+        if template_root.exists():
+            shutil.copytree(template_root, project_root, dirs_exist_ok=True)
+        else:
+            project_root.mkdir(parents=True, exist_ok=True)
+        ProjectService._ensure_project_layout(project_root)
+
     def list_projects(self) -> dict[str, Any]:
         return {"projects": runtime_config.projects, "current": runtime_config.current_project}
 
@@ -28,8 +94,8 @@ class ProjectService:
 
         runtime_config.projects[pid] = ProjectConfig()
         runtime_config.save()
-        # Create minimal project root; no default agent is auto-created.
-        Path("projects").joinpath(pid).mkdir(parents=True, exist_ok=True)
+        # Create project root from templates/default and enforce current runtime layout.
+        self._scaffold_project_root(pid)
         return {"status": "success"}
 
     def delete_project(self, project_id: str) -> dict[str, str]:
@@ -246,6 +312,24 @@ class ProjectService:
             "project_id": project_id,
             "agent_id": agent_id,
             "reports": rows,
+        }
+
+    def context_llm_latest(self, project_id: str, agent_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        trace_file = runtime_debug_dir(project_id, agent_id) / "llm_io.jsonl"
+        row = self._read_latest_jsonl_row(trace_file)
+        if not row:
+            return {
+                "project_id": project_id,
+                "agent_id": agent_id,
+                "available": False,
+                "trace": None,
+            }
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "available": True,
+            "trace": row,
         }
 
     def outbox_receipts(

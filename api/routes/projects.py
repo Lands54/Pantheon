@@ -79,6 +79,14 @@ async def get_context_reports(project_id: str, agent_id: str, limit: int = 20):
     return project_service.context_reports(project_id, str(agent_id).strip(), limit=max(1, min(limit, 500)))
 
 
+@router.get("/{project_id}/context/llm-latest")
+async def get_context_llm_latest(project_id: str, agent_id: str):
+    """Get latest full LLM request/response trace row for one agent."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_llm_latest(project_id, str(agent_id).strip())
+
+
 @router.get("/{project_id}/inbox/outbox")
 async def get_outbox_receipts(
     project_id: str,

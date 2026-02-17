@@ -33,3 +33,48 @@
 1. 禁止 `Module -> Agent内部对象` 旁路调用。
 2. 禁止 `LLM -> Store` 直写。
 3. 禁止新增 legacy/compat 迁移逻辑。
+
+```mermaid
+flowchart LR
+  subgraph Producer["事件生产方"]
+    H["Human(human.overseer)"]
+    A["Agent"]
+    M["Module(Hermes/Detach/ToolGateway/CLI/API)"]
+  end
+
+  subgraph Bus["事件总线层"]
+    ES["POST /events/submit"]
+    EB["events.jsonl(EventBus)\nstate: queued/picked/processing/done/failed/dead"]
+    WK["Angelia Worker"]
+    RG["Handler Registry"]
+    IH["Interaction Handlers\nmessage.sent/read\nhermes.notice\ndetach.notice\nagent.trigger"]
+  end
+
+  subgraph Domain["业务模块层(状态机各自维护)"]
+    IR["Iris Mailbox\n(enqueue/ack/list)"]
+    HE["Hermes State"]
+    DT["Detach State"]
+    MN["Mnemosyne(runtime/chronicle策略写入)"]
+  end
+
+  H --> ES
+  A -->|"tool: send_message / produce event"| ES
+  M --> ES
+
+  ES --> EB
+  EB --> WK
+  WK --> RG
+  RG --> IH
+
+  IH --> IR
+  IH --> HE
+  IH --> DT
+  IH --> MN
+
+  IR -->|"可选：再产出交互事件"| ES
+  HE -->|"可选：Hermes notice事件"| ES
+  DT -->|"可选：Detach notice事件"| ES
+
+  IR -->|"Agent inbox可见"| A
+
+```

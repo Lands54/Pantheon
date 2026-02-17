@@ -23,16 +23,13 @@ def cmd_angelia(args):
 
     if args.subcommand == "enqueue":
         payload = json.loads(args.payload) if args.payload else {}
-        raw_type = str(args.type or "").strip().lower()
-        mapped_type = {
-            "timer": "timer_event",
-            "manual": "manual_event",
-            "system": "system_event",
-        }.get(raw_type, raw_type if raw_type.endswith("_event") else "manual_event")
+        raw_type = str(args.type or "").strip().lower() or "manual"
+        if raw_type not in {"timer", "manual", "system"}:
+            raise SystemExit("--type 仅支持: timer|manual|system")
         req = {
             "project_id": pid,
             "domain": "angelia",
-            "event_type": mapped_type,
+            "event_type": raw_type,
             "priority": args.priority,
             "payload": {"agent_id": args.agent, **payload},
             "dedupe_key": args.dedupe_key,
@@ -42,17 +39,14 @@ def cmd_angelia(args):
 
     elif args.subcommand == "events":
         raw_type = str(args.type or "").strip().lower()
-        mapped_type = {
-            "timer": "timer_event",
-            "manual": "manual_event",
-            "system": "system_event",
-        }.get(raw_type, raw_type)
+        if raw_type and raw_type not in {"timer", "manual", "system"}:
+            raise SystemExit("--type 仅支持: timer|manual|system")
         params = {
             "project_id": pid,
             "domain": "angelia",
             "agent_id": args.agent or "",
             "state": args.state or "",
-            "event_type": mapped_type or "",
+            "event_type": raw_type or "",
             "limit": args.limit,
         }
         res = requests.get(f"{base}/events", params=params, timeout=10)

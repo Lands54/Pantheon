@@ -19,8 +19,8 @@ class AgentModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str = "stepfun/step-3.5-flash:free"
-    # Event-driven inbox is default path; check_inbox is opt-in for debug/audit.
-    disabled_tools: List[str] = Field(default_factory=lambda: ["check_inbox"])
+    # Event-driven inbox/outbox is default path; polling tools are opt-in for debug/audit.
+    disabled_tools: List[str] = Field(default_factory=lambda: ["check_inbox", "check_outbox"])
     # Optional agent-level phase runtime overrides (fallback to project defaults when None).
     phase_mode_enabled: Optional[bool] = None
     phase_strategy: Optional[str] = None
@@ -98,6 +98,7 @@ class ProjectConfig(BaseModel):
     debug_trace_max_events: int = 200
     debug_trace_full_content: bool = True
     debug_llm_trace_enabled: bool = True
+    llm_call_delay_sec: int = 1
 
     command_max_parallel: int = 2
     command_timeout_sec: int = 60

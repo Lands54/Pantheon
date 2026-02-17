@@ -3,14 +3,11 @@ Gods Temple CLI - Sacred Command Interface
 A high-efficiency tool for managing the divine system.
 """
 import argparse
-import sys
 import json
 import requests
 import os
 from pathlib import Path
-from typing import Optional
 import sys
-import os
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,8 +22,10 @@ from cli.commands.context import cmd_context
 from cli.commands.inbox import cmd_inbox
 from cli.commands.angelia import cmd_angelia
 from cli.commands.events import cmd_events
+from cli.commands.msg import cmd_msg
 from cli.commands.project import cmd_project as cmd_project_v2
 from cli.commands.agent import cmd_agent as cmd_agent_v2
+from cli.commands.doctor import cmd_doctor
 from cli.utils import get_base_url
 from gods.identity import HUMAN_AGENT_ID
 
@@ -64,39 +63,6 @@ def cmd_init(args):
         print("🚀 Synchronized with living server.")
     else:
         print("⚠️  Server not reachable. Saved to disk only.")
-
-def cmd_list(args):
-    """List all Beings and Simulation Status"""
-    try:
-        res = requests.get(f"{get_base_url()}/config")
-        data = res.json()
-        pid = args.project or data.get("current_project", "default")
-        proj = data["projects"].get(pid)
-        
-        if not proj:
-            print(f"❌ Project '{pid}' not found.")
-            return
-
-        print(f"\n🏛  TEMPLE STATUS - Project: {pid} ({proj.get('name')})")
-        print(f"API Key:   {'SET' if data['openrouter_api_key'] else 'MISSING'}")
-        sim_status = "🟢 ON" if proj.get("simulation_enabled") else "🔴 OFF"
-        print(f"Simulation: {sim_status} (Pulse: {proj.get('simulation_interval_min')}-{proj.get('simulation_interval_max')}s)")
-        
-        print("\n--- BEINGS ---")
-        active = proj.get("active_agents", [])
-        settings = proj.get("agent_settings", {})
-        
-        # Get agents for this project
-        agents_res = requests.get(f"{get_base_url()}/config") # available_agents depends on current_project in server
-        # We might need an endpoint for project-specific available agents if we want to list another project's agents
-        # For now, let's assume we list current project's agents
-        
-        for agent in data["available_agents"]:
-            status = "🟢 [ACTIVE]" if agent in active else "⚪ [LATENT]"
-            model = settings.get(agent, {}).get("model", "default")
-            print(f"{status} {agent:<12} | Model: {model}")
-    except Exception as e:
-        print(f"❌ Server error: {e}")
 
 def cmd_project(args):
     cmd_project_v2(args)
@@ -189,12 +155,27 @@ def main():
     p_init = subparsers.add_parser("init", help="Enshrine API Key")
     p_init.add_argument("key")
 
-    # list
-    subparsers.add_parser("list", help="List agents in current project")
-
     # check
     p_check = subparsers.add_parser("check", help="Check agent's recent activity and responses")
     p_check.add_argument("agent_id", help="Agent ID to check")
+
+    # doctor
+    p_doctor = subparsers.add_parser("doctor", help="Auto-repair project and run readiness checks")
+    p_doctor.add_argument("--project", "-p", dest="project", default="", help="Project ID (default: current project)")
+    p_doctor.add_argument("--skip-guards", action="store_true", help="Skip repository guard scripts")
+    p_doctor.add_argument("--strict", action="store_true", help="Treat guard script failures as blocking")
+
+    # msg (human friendly interaction commands)
+    p_msg = subparsers.add_parser("msg", help="Human-friendly interaction commands")
+    msg_sub = p_msg.add_subparsers(dest="subcommand")
+    p_msg_send = msg_sub.add_parser("send", help="Send a message to an agent")
+    p_msg_send.add_argument("--to", required=True, help="Target agent id")
+    p_msg_send.add_argument("--title", required=True)
+    p_msg_send.add_argument("--content", required=True)
+    p_msg_send.add_argument("--sender", default=HUMAN_AGENT_ID, help=f"Sender agent id (default: {HUMAN_AGENT_ID})")
+    p_msg_send.add_argument("--msg-type", default="confession")
+    p_msg_send.add_argument("--no-pulse", action="store_true", help="Do not trigger immediate pulse")
+    p_msg_send.add_argument("--max-attempts", type=int, default=3)
 
     # config
     p_config = subparsers.add_parser("config", help="Manage configuration")
@@ -393,14 +374,26 @@ def main():
     p_ev_reconcile = ev_sub.add_parser("reconcile", help="Reconcile stale processing events")
     p_ev_reconcile.add_argument("--timeout-sec", type=int, default=60)
 
-    # activate / deactivate
-    subparsers.add_parser("activate").add_argument("id")
-    subparsers.add_parser("deactivate").add_argument("id")
-
-    # agent [view/edit]
-    p_agent = subparsers.add_parser("agent")
-    p_agent.add_argument("subcommand", choices=["view", "edit"])
-    p_agent.add_argument("id")
+    # agent operations
+    p_agent = subparsers.add_parser("agent", help="Agent operations")
+    agent_sub = p_agent.add_subparsers(dest="subcommand")
+    agent_sub.add_parser("list", help="List agents in current project")
+    p_agent_create = agent_sub.add_parser("create", help="Create one agent")
+    p_agent_create.add_argument("id")
+    p_agent_create.add_argument("--directives", required=True)
+    p_agent_delete = agent_sub.add_parser("delete", help="Delete one agent")
+    p_agent_delete.add_argument("id")
+    p_agent_activate = agent_sub.add_parser("activate", help="Activate one agent")
+    p_agent_activate.add_argument("id")
+    p_agent_deactivate = agent_sub.add_parser("deactivate", help="Deactivate one agent")
+    p_agent_deactivate.add_argument("id")
+    p_agent_status = agent_sub.add_parser("status", help="Show scheduler/runtime status for agents")
+    p_agent_status.add_argument("--agent-id", default="", help="Filter by one agent id")
+    p_agent_status.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_agent_view = agent_sub.add_parser("view", help="View agent directives")
+    p_agent_view.add_argument("id")
+    p_agent_edit = agent_sub.add_parser("edit", help="Edit agent directives from stdin")
+    p_agent_edit.add_argument("id")
 
     # test
     p_test = subparsers.add_parser("test", help="Run automated integration tests")
@@ -453,44 +446,36 @@ def main():
     if args.command == "events" and not args.subcommand:
         p_ev.print_help()
         sys.exit(0)
+    if args.command == "msg" and not args.subcommand:
+        p_msg.print_help()
+        sys.exit(0)
+    if args.command == "agent" and not args.subcommand:
+        p_agent.print_help()
+        sys.exit(0)
     
-    if args.command == "init": cmd_init(args)
-    elif args.command == "list": cmd_list(args)
-    elif args.command == "check": cmd_check(args)
-    elif args.command == "config": cmd_config(args)
-    elif args.command == "project": cmd_project(args)
-    elif args.command == "protocol": cmd_protocol(args)
-    elif args.command == "mnemosyne": cmd_mnemosyne(args)
-    elif args.command == "runtime": cmd_runtime(args)
-    elif args.command == "detach": cmd_detach(args)
-    elif args.command == "context": cmd_context(args)
-    elif args.command == "inbox": cmd_inbox(args)
-    elif args.command == "angelia": cmd_angelia(args)
-    elif args.command == "events": cmd_events(args)
-    elif args.command == "agent": cmd_agent(args)
-    elif args.command == "test": cmd_test(args)
-    elif args.command == "activate":
-        try:
-            res = requests.get(f"{get_base_url()}/config").json()
-            pid = args.project or res.get("current_project", "default")
-            proj = res["projects"].get(pid)
-            if args.id not in proj["active_agents"]:
-                proj["active_agents"].append(args.id)
-                requests.post(f"{get_base_url()}/config/save", json=res)
-                print(f"✨ {args.id} activated in {pid}.")
-        except: print("❌ Server error.")
-    elif args.command == "deactivate":
-        try:
-            res = requests.get(f"{get_base_url()}/config").json()
-            pid = args.project or res.get("current_project", "default")
-            proj = res["projects"].get(pid)
-            if args.id in proj["active_agents"]:
-                proj["active_agents"].remove(args.id)
-                requests.post(f"{get_base_url()}/config/save", json=res)
-                print(f"🌘 {args.id} deactivated in {pid}.")
-        except: print("❌ Server error.")
-    else:
+    dispatch = {
+        "init": cmd_init,
+        "check": cmd_check,
+        "doctor": cmd_doctor,
+        "config": cmd_config,
+        "project": cmd_project,
+        "protocol": cmd_protocol,
+        "mnemosyne": cmd_mnemosyne,
+        "runtime": cmd_runtime,
+        "detach": cmd_detach,
+        "context": cmd_context,
+        "inbox": cmd_inbox,
+        "angelia": cmd_angelia,
+        "events": cmd_events,
+        "msg": cmd_msg,
+        "agent": cmd_agent,
+        "test": cmd_test,
+    }
+    fn = dispatch.get(args.command)
+    if fn is None:
         parser.print_help()
+        return
+    fn(args)
 
 if __name__ == "__main__":
     main()

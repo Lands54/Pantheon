@@ -11,7 +11,7 @@ def test_agent_model_config_defaults():
     """Test AgentModelConfig default values."""
     config = AgentModelConfig()
     assert config.model == "stepfun/step-3.5-flash:free"
-    assert config.disabled_tools == ["check_inbox"]
+    assert config.disabled_tools == ["check_inbox", "check_outbox"]
 
 
 def test_project_config_defaults():
@@ -28,6 +28,7 @@ def test_project_config_defaults():
     assert config.phase_act_productive_from_interaction == 2
     assert config.context_strategy == "structured_v1"
     assert config.context_token_budget_total == 32000
+    assert config.llm_call_delay_sec == 1
 
 
 def test_project_config_custom():

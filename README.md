@@ -97,7 +97,9 @@ The `temple.sh` script is your divine scepter for controlling the simulation.
 |---------|-------------|
 | `./temple.sh project list` | Show all available worlds. |
 | `./temple.sh project switch <name>` | Set the active world context. |
-| `./temple.sh list` | List active/latent agents in current world. |
+| `./temple.sh agent list` | List agents in current world. |
+| `./temple.sh agent status` | Show scheduler/runtime status for agents. |
+| `./temple.sh msg send --to <agent> --title <title> --content <content>` | Human-friendly message send (internally submits interaction event). |
 | `./temple.sh events submit --domain interaction --type interaction.message.sent --payload '...` | Send a private instruction to an agent via interaction events. |
 | `./temple.sh angelia events --project <project>` | Inspect unified event bus queue. |
 | `./temple.sh angelia enqueue <agent> --type manual --project <project>` | Manually enqueue one wake event. |

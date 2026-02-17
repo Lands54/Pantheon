@@ -108,6 +108,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.phase_no_progress_limit = _clamp_int(proj.phase_no_progress_limit, 1, 64)
 
     proj.debug_trace_max_events = _clamp_int(proj.debug_trace_max_events, 10, 2000)
+    proj.llm_call_delay_sec = _clamp_int(proj.llm_call_delay_sec, 0, 60)
 
     proj.command_max_parallel = _clamp_int(proj.command_max_parallel, 1, 64)
     proj.command_timeout_sec = _clamp_int(proj.command_timeout_sec, 1, 3600)

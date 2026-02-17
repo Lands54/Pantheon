@@ -74,6 +74,7 @@ def cmd_config(args):
             print(f"   Max Events Per Pulse: {proj.get('debug_trace_max_events', 200)}")
             print(f"   Full Content: {proj.get('debug_trace_full_content', True)}")
             print(f"   LLM IO Trace Enabled: {proj.get('debug_llm_trace_enabled', True)}")
+            print(f"   LLM Call Delay: {proj.get('llm_call_delay_sec', 1)}s")
             print(f"\n📡 Hermes Bus:")
             print(f"   Enabled: {proj.get('hermes_enabled', True)}")
             print(f"   Default Timeout: {proj.get('hermes_default_timeout_sec', 30)}s")
@@ -119,29 +120,7 @@ def cmd_config(args):
                 if disabled:
                     print(f"      Disabled Tools: {', '.join(disabled)}")
 
-            # Show scheduler runtime status
-            try:
-                s_res = requests.get(f"{base_url}/agents/status", params={"project_id": pid}, timeout=3)
-                s_data = s_res.json()
-                agents = s_data.get("agents", [])
-                if agents:
-                    from datetime import datetime
-                    print(f"\n🧭 Scheduler Status:")
-                    for item in agents:
-                        status = item.get("status", "unknown")
-                        lp = item.get("last_pulse_at", 0) or 0
-                        ne = item.get("next_eligible_at", 0) or 0
-                        lp_s = datetime.fromtimestamp(lp).strftime("%Y-%m-%d %H:%M:%S") if lp > 0 else "N/A"
-                        ne_s = datetime.fromtimestamp(ne).strftime("%Y-%m-%d %H:%M:%S") if ne > 0 else "N/A"
-                        print(f"   {item.get('agent_id')}: {status}")
-                        print(f"      Last Pulse: {lp_s}")
-                        print(f"      Next Eligible: {ne_s}")
-                        print(f"      Empty Cycles: {item.get('empty_cycles', 0)}")
-                        print(f"      Pending Inbox: {item.get('has_pending_inbox', False)}")
-                else:
-                    print(f"\n🧭 Scheduler Status: No active agents in this project")
-            except Exception as e:
-                print(f"\n🧭 Scheduler Status: unavailable ({e})")
+            print("\n💡 Agent runtime status moved to: temple.sh agent status")
         except Exception as e:
             print(f"❌ Error: {e}")
     
@@ -200,6 +179,7 @@ def cmd_config(args):
                 "context_observation_window",
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
+                "llm_call_delay_sec",
             }:
                 if direct_key in {
                     "pulse_event_inject_budget",
@@ -225,7 +205,8 @@ def cmd_config(args):
                     "context_budget_inbox",
                     "context_budget_state_window",
                     "context_state_window_limit",
-                "context_observation_window",
+                    "context_observation_window",
+                    "llm_call_delay_sec",
                 }:
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
@@ -435,6 +416,12 @@ def cmd_config(args):
                 else:
                     print(f"❌ Unknown debug key: {parts[1]}")
                     return
+            elif parts[0] == "llm" and len(parts) >= 2:
+                if parts[1] == "call_delay_sec":
+                    data["projects"][pid]["llm_call_delay_sec"] = int(args.value)
+                else:
+                    print(f"❌ Unknown llm key: {parts[1]}")
+                    return
             elif parts[0] == "hermes" and len(parts) >= 2:
                 if parts[1] == "enabled":
                     data["projects"][pid]["hermes_enabled"] = args.value.lower() == "true"
@@ -633,6 +620,7 @@ def cmd_config(args):
                 print("  debug.max_events (number)")
                 print("  debug.full (true/false)")
                 print("  debug.llm_trace (true/false)")
+                print("  llm.call_delay_sec (0-60)")
                 print("  hermes.enabled (true/false)")
                 print("  hermes.timeout (seconds)")
                 print("  hermes.rate (calls/min)")
@@ -666,6 +654,7 @@ def cmd_config(args):
                 print("  context_observation_window (count)")
                 print("  context_include_inbox_status_hints (true/false)")
                 print("  context_write_build_report (true/false)")
+                print("  llm_call_delay_sec (0-60)")
                 print("  executor.command (docker|local)")
                 print("  docker.enabled (true/false)")
                 print("  docker.image (image tag)")
