@@ -3,8 +3,13 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from gods.runtime.detach.models import DetachStatus
-from gods.runtime.detach.store import create_job, get_job, mark_non_final_as_lost, transition_job
+from gods.runtime.facade import (
+    DetachStatus,
+    create_job,
+    get_job,
+    mark_non_final_as_lost,
+    transition_job,
+)
 
 
 def test_detach_store_transitions_and_mark_lost():
@@ -37,4 +42,3 @@ def test_detach_store_transitions_and_mark_lost():
         assert got.stop_reason == "startup_lost"
     finally:
         shutil.rmtree(base, ignore_errors=True)
-

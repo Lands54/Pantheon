@@ -6,8 +6,8 @@ import uuid
 from pathlib import Path
 
 from gods.config import runtime_config, ProjectConfig
-from gods.hermes.executor import HermesExecutor
-from gods.hermes.models import InvokeRequest, ProtocolSpec
+from gods.hermes.facade import HermesExecutor
+from gods.hermes.facade import InvokeRequest, ProtocolSpec
 
 
 def test_hermes_executor_async_job_lifecycle():

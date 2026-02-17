@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from gods.runtime.detach.models import DetachJob, DetachStatus
-from gods.runtime.detach.policy import select_fifo_victims
+from gods.runtime.facade import DetachJob, DetachStatus, select_fifo_victims
 
 
 def _job(job_id: str, agent_id: str, started_at: float) -> DetachJob:
@@ -31,4 +30,3 @@ def test_detach_fifo_policy_project_and_agent_limits():
     ids = [v.job_id for v in victims]
     assert "j1" in ids
     assert "j2" not in ids
-

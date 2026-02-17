@@ -7,8 +7,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from gods.agents.base import GodAgent
 from gods.config import AgentModelConfig, ProjectConfig, runtime_config
-from gods.inbox.service import enqueue_message
-from gods.pulse.scheduler_hooks import inject_inbox_before_pulse
+from gods.iris.facade import enqueue_message
+from gods.angelia.facade import inject_inbox_before_pulse
 
 
 class _CaptureBrain:
@@ -33,8 +33,8 @@ def test_inbox_context_contains_handled_semantics_for_agent_confidence():
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
         context_strategy="structured_v1",
-        context_budget_recent_messages=20000,
-        context_recent_message_limit=50,
+        context_budget_state_window=20000,
+        context_state_window_limit=50,
         agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
     )
     try:

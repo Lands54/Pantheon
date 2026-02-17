@@ -1,0 +1,704 @@
+{
+  "event.mail_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.timer": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.manual": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.system": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.interaction.message.sent": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.interaction.message.read": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.interaction.hermes.notice": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.interaction.detach.notice": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.interaction.agent.trigger": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.hermes_protocol_invoked_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.hermes_job_updated_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.hermes_contract_registered_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.hermes_contract_committed_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.hermes_contract_disabled_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_submitted_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_started_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_stopping_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_stopped_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_failed_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_reconciled_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "event.detach_lost_event": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "inbox.received.unread": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "inbox.notice.contract_commit_notice": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_inbox_notice_contract_commit",
+    "runtime_log_template_key": ""
+  },
+  "inbox.notice.contract_fully_committed": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_inbox_notice_contract_fully_committed",
+    "runtime_log_template_key": ""
+  },
+  "inbox.read_ack": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "outbox.sent.pending": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "outbox.sent.delivered": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "outbox.sent.handled": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "outbox.sent.failed": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "llm.response": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_llm_response",
+    "runtime_log_template_key": ""
+  },
+  "agent.mode.freeform": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "agent.safety.tool_loop_cap": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "agent.event.injected": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "phase.retry.reason": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "phase.retry.act": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "phase.retry.observe": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.abstain_from_synod.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.abstain_from_synod.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.abstain_from_synod.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.check_inbox.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.check_inbox.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.check_inbox.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.check_outbox.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.check_outbox.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.check_outbox.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.commit_contract.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.commit_contract.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.commit_contract.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.detach_list.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.detach_list.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.detach_list.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.detach_stop.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.detach_stop.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.detach_stop.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.disable_contract.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.disable_contract.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.disable_contract.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.finalize.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.finalize.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.finalize.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.insert_content.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.insert_content.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.insert_content.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_agents.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_agents.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_agents.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_contracts.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_contracts.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_contracts.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_dir.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_dir.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_dir.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_port_leases.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_port_leases.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.list_port_leases.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_list_agent.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_list_agent.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_list_agent.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_read_agent.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_read_agent.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_read_agent.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_write_agent.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_write_agent.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.mnemo_write_agent.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.multi_replace.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.multi_replace.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.multi_replace.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.post_to_synod.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.post_to_synod.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.post_to_synod.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.read_file.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.read_file.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.read_file.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.register_contract.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.register_contract.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.register_contract.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.release_port.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.release_port.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.release_port.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.replace_content.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.replace_content.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.replace_content.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.reserve_port.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.reserve_port.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.reserve_port.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.run_command.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.run_command.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.run_command.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.run_command_detach.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.run_command_detach.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.run_command_detach.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.send_message.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.send_message.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.send_message.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  },
+  "tool.write_file.ok": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "chronicle_template_key": "memory_tool_ok",
+    "runtime_log_template_key": ""
+  },
+  "tool.write_file.error": {
+    "to_chronicle": true,
+    "to_runtime_log": true,
+    "chronicle_template_key": "memory_tool_error",
+    "runtime_log_template_key": ""
+  },
+  "tool.write_file.blocked": {
+    "to_chronicle": false,
+    "to_runtime_log": true,
+    "chronicle_template_key": "",
+    "runtime_log_template_key": ""
+  }
+}

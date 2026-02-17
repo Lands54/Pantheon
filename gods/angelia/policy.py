@@ -5,7 +5,7 @@ from gods.config import runtime_config
 
 
 _DEFAULT_WEIGHTS = {
-    "inbox_event": 100,
+    "mail_event": 100,
     "manual": 80,
     "system": 60,
     "timer": 10,
@@ -36,8 +36,7 @@ def dedupe_window_sec(project_id: str) -> int:
 
 def timer_idle_sec(project_id: str) -> int:
     proj = _project(project_id)
-    legacy = int(getattr(proj, "queue_idle_heartbeat_sec", 60) if proj else 60)
-    v = int(getattr(proj, "angelia_timer_idle_sec", legacy) if proj else legacy)
+    v = int(getattr(proj, "angelia_timer_idle_sec", 60) if proj else 60)
     return max(5, min(v, 3600))
 
 
@@ -48,10 +47,10 @@ def timer_enabled(project_id: str) -> bool:
 
 def cooldown_preempt_types(project_id: str) -> set[str]:
     proj = _project(project_id)
-    raw = getattr(proj, "angelia_cooldown_preempt_types", ["inbox_event", "manual"]) if proj else ["inbox_event", "manual"]
+    raw = getattr(proj, "angelia_cooldown_preempt_types", ["mail_event", "manual"]) if proj else ["mail_event", "manual"]
     out = {str(x).strip() for x in (raw or []) if str(x).strip()}
     if not out:
-        out = {"inbox_event", "manual"}
+        out = {"mail_event", "manual"}
     return out
 
 
@@ -85,3 +84,32 @@ def cooldown_from_next_step(project_id: str, next_step: str, empty_cycles: int) 
         cooldown = max(2, min_interval // 2)
     max_next = max(10, max_interval * 8)
     return min(int(cooldown), int(max_next))
+
+
+def finalize_quiescent_enabled(project_id: str) -> bool:
+    proj = _project(project_id)
+    return bool(getattr(proj, "finalize_quiescent_enabled", True) if proj else True)
+
+
+def finalize_sleep_bounds(project_id: str) -> tuple[int, int, int]:
+    proj = _project(project_id)
+    min_sec = int(getattr(proj, "finalize_sleep_min_sec", 15) if proj else 15)
+    default_sec = int(getattr(proj, "finalize_sleep_default_sec", 120) if proj else 120)
+    max_sec = int(getattr(proj, "finalize_sleep_max_sec", 1800) if proj else 1800)
+    min_sec = max(5, min(min_sec, 3600))
+    max_sec = max(min_sec, min(max_sec, 24 * 3600))
+    default_sec = max(min_sec, min(default_sec, max_sec))
+    return min_sec, default_sec, max_sec
+
+
+def finalize_sleep_sec(project_id: str, requested: int | None) -> int:
+    min_sec, default_sec, max_sec = finalize_sleep_bounds(project_id)
+    if requested is None:
+        return default_sec
+    try:
+        val = int(requested)
+    except Exception:
+        return default_sec
+    if val <= 0:
+        return default_sec
+    return max(min_sec, min(val, max_sec))

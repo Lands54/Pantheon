@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from typing import Any
 
 from gods.config import runtime_config
+from gods.paths import runtime_debug_dir
 
 
 def _clip(value: Any, max_chars: int = 240) -> str:
@@ -92,7 +92,7 @@ class PulseTraceLogger:
             "event_count": len(events),
             "events": events,
         }
-        path = Path("projects") / self.project_id / "agents" / self.agent_id / "debug" / "pulse_trace.jsonl"
+        path = runtime_debug_dir(self.project_id, self.agent_id) / "pulse_trace.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(trace, ensure_ascii=False) + "\n")

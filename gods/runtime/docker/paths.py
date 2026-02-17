@@ -4,17 +4,21 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from gods.paths import agent_dir as _agent_dir
+from gods.paths import project_dir as _project_dir
+from gods.paths import repo_root as _repo_root
+
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return _repo_root()
 
 
 def project_root(project_id: str) -> Path:
-    return repo_root() / "projects" / project_id
+    return _project_dir(project_id)
 
 
 def agent_territory(project_id: str, agent_id: str) -> Path:
-    return project_root(project_id) / "agents" / agent_id
+    return _agent_dir(project_id, agent_id)
 
 
 def _slug(raw: str) -> str:

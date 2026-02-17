@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from gods.inbox.service import build_inbox_overview
+from gods.iris.facade import build_inbox_overview
 from gods.janus.journal import list_observations, read_profile, read_task_state
 from gods.janus.models import ContextBuildRequest, ContextBuildResult
 from gods.janus.strategy_base import ContextStrategy
+from gods.mnemosyne.facade import load_chronicle_for_context
 
 
 def _tok_len(text: str) -> int:
@@ -71,6 +72,47 @@ def _render_observations(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _message_role(msg: Any) -> str:
+    t = str(getattr(msg, "type", "") or "").lower()
+    if t:
+        return t
+    cls = msg.__class__.__name__.lower()
+    if "human" in cls:
+        return "human"
+    if "tool" in cls:
+        return "tool"
+    if "ai" in cls:
+        return "ai"
+    if "system" in cls:
+        return "system"
+    return "message"
+
+
+def _render_state_window(messages: list[Any], recent_limit: int, token_budget: int) -> tuple[str, int, int]:
+    src_recent = list(messages or [])[-max(1, recent_limit) :]
+    kept_recent: list[Any] = []
+    used_recent_tokens = 0
+    for m in reversed(src_recent):
+        content = str(getattr(m, "content", "") or "")
+        t = _tok_len(content)
+        if used_recent_tokens + t > token_budget:
+            continue
+        kept_recent.append(m)
+        used_recent_tokens += t
+    kept_recent.reverse()
+    if not kept_recent:
+        return "(no in-pulse state messages)", 0, 0
+
+    lines = []
+    for m in kept_recent:
+        role = _message_role(m)
+        name = str(getattr(m, "name", "") or "")
+        header = role if not name else f"{role}:{name}"
+        content = str(getattr(m, "content", "") or "")
+        lines.append(f"[{header}] {content}")
+    return "\n".join(lines), len(kept_recent), used_recent_tokens
+
+
 class StructuredV1ContextStrategy(ContextStrategy):
     name = "structured_v1"
 
@@ -82,12 +124,13 @@ class StructuredV1ContextStrategy(ContextStrategy):
         b_inbox_unread = int(cfg.get("budget_inbox_unread", 2000))
         b_inbox_read_recent = int(cfg.get("budget_inbox_read_recent", 1000))
         b_inbox_receipts = int(cfg.get("budget_inbox_receipts", 1000))
-        b_recent = int(cfg.get("budget_recent_messages", 12000))
-        recent_limit = int(cfg.get("recent_message_limit", 50))
+        b_state_window = int(cfg.get("budget_state_window", 12000))
+        state_window_limit = int(cfg.get("state_window_limit", 50))
         obs_window = int(cfg.get("observation_window", 30))
         include_inbox_hints = bool(cfg.get("include_inbox_status_hints", True))
 
         profile = read_profile(req.project_id, req.agent_id)
+        chronicle = load_chronicle_for_context(req.project_id, req.agent_id, fallback=req.local_memory or "")
         task_state = read_task_state(req.project_id, req.agent_id, objective_fallback=str(req.state.get("context", "")))
 
         obs_rows = list_observations(req.project_id, req.agent_id, limit=max(obs_window * 3, 30))
@@ -129,54 +172,47 @@ class StructuredV1ContextStrategy(ContextStrategy):
         )
         inbox_block = _clip_by_tokens(inbox_block, b_inbox)
 
-        # Keep recent messages by dynamic token budget instead of fixed [-8].
-        src_recent = (req.state.get("messages", []) or [])[-max(1, recent_limit) :]
-        kept_recent = []
-        used_recent_tokens = 0
-        for m in reversed(src_recent):
-            content = str(getattr(m, "content", "") or "")
-            t = _tok_len(content)
-            if used_recent_tokens + t > b_recent:
-                continue
-            kept_recent.append(m)
-            used_recent_tokens += t
-        kept_recent.reverse()
-
-        policy_block = (
-            "Policy:\n"
-            "- Follow phase/tool policy constraints strictly.\n"
-            "- Prefer progressing objective with productive actions.\n"
-            "- Avoid repeated same tool+args when no new evidence appears."
+        state_window_block, state_window_count, state_window_tokens = _render_state_window(
+            req.state.get("messages", []) or [],
+            recent_limit=state_window_limit,
+            token_budget=b_state_window,
+        )
+        combined_memory_block = (
+            "[CHRONICLE]\n"
+            f"{chronicle or '(no chronicle yet)'}\n\n"
+            "[STATE_WINDOW]\n"
+            f"{state_window_block}"
         )
 
         system_blocks = [
+            f"# COMBINED MEMORY\n{combined_memory_block}",
             f"# IDENTITY\n{_clip_by_tokens(profile, 3000)}\nProject: {req.project_id}",
             f"# TASK STATE\n{task_block}",
             f"# INBOX\n{inbox_block}",
-            f"# OBSERVATIONS\n{obs_block}",
-            f"# LOCAL MEMORY (recent excerpt)\n{_clip_by_tokens(req.local_memory or '', 4000)}",
+            f"# DIRECTIVES\n{req.directives}",
             f"# PHASE\nCurrent Phase: {req.phase_name}\n{req.phase_block}",
             f"# TOOLS\n{req.tools_desc}",
-            f"# EXECUTION POLICY\n{policy_block}",
         ]
 
         usage = {
+            "chronicle_tokens": _tok_len(chronicle),
+            "combined_memory_tokens": _tok_len(combined_memory_block),
+            "state_window_tokens": state_window_tokens,
+            "state_window_messages": state_window_count,
             "task_tokens": _tok_len(task_block),
-            "obs_tokens": _tok_len(obs_block),
+            "obs_tokens_unused": _tok_len(obs_block),
             "inbox_tokens": _tok_len(inbox_block),
-            "recent_tokens": used_recent_tokens,
-            "recent_messages": len(kept_recent),
         }
         preview = {
             "mode": self.name,
-            "recent_messages": len(kept_recent),
-            "selected_observations": len(selected),
+            "state_window_messages": state_window_count,
+            "selected_observations_unused": len(selected),
             "phase": req.phase_name,
         }
         return ContextBuildResult(
             strategy_used=self.name,
             system_blocks=system_blocks,
-            recent_messages=kept_recent,
+            recent_messages=[],
             token_usage=usage,
             preview=preview,
         )

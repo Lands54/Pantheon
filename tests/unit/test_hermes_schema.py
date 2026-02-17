@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from gods.hermes.errors import HermesError, HERMES_SCHEMA_INVALID
-from gods.hermes.schema import validate_schema
+from gods.hermes.facade import HermesError, HERMES_SCHEMA_INVALID
+from gods.hermes.facade import validate_schema
 
 
 def test_hermes_schema_validate_success():

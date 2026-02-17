@@ -11,7 +11,6 @@ from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.worker import WorkerContext, worker_loop
 from gods.config import runtime_config
-from gods.inbox.service import set_wake_enqueue
 
 logger = logging.getLogger("GodsServer")
 
@@ -37,7 +36,6 @@ class AngeliaSupervisor:
                 return
             self._running = True
             self._stop_event.clear()
-            set_wake_enqueue(self.enqueue_event)
             self._manager_thread = threading.Thread(target=self._manager_loop, name="angelia-manager", daemon=True)
             self._manager_thread.start()
             logger.info("Angelia supervisor started")
@@ -58,7 +56,6 @@ class AngeliaSupervisor:
         mt = self._manager_thread
         if mt:
             mt.join(timeout=2.0)
-        set_wake_enqueue(None)
         logger.info("Angelia supervisor stopped")
 
     def notify(self, project_id: str, agent_id: str):
@@ -68,6 +65,20 @@ class AngeliaSupervisor:
         self._ensure_worker(project_id, agent_id)
         self.notify(project_id, agent_id)
         return {"project_id": project_id, "agent_id": agent_id, "status": "notified"}
+
+    def stop_project_workers(self, project_id: str):
+        to_stop: list[tuple[tuple[str, str], _WorkerHandle]] = []
+        with self._lock:
+            for key, handle in list(self._workers.items()):
+                pid, _aid = key
+                if pid == project_id:
+                    to_stop.append((key, handle))
+            for key, _handle in to_stop:
+                self._workers.pop(key, None)
+
+        for (_pid, _aid), handle in to_stop:
+            handle.stop_event.set()
+            handle.thread.join(timeout=1.0)
 
     def enqueue_event(
         self,
@@ -97,11 +108,11 @@ class AngeliaSupervisor:
 
     def _validate_payload(self, event_type: str, payload: dict):
         et = str(event_type or "").strip()
-        if et == "inbox_event":
+        if et == "mail_event":
             if not isinstance(payload, dict):
-                raise ValueError("inbox_event payload must be object")
-            if not str(payload.get("inbox_event_id", "")).strip():
-                raise ValueError("inbox_event payload.inbox_event_id is required")
+                raise ValueError("mail_event payload must be object")
+            if not str(payload.get("mail_event_id", "")).strip():
+                raise ValueError("mail_event payload.mail_event_id is required")
             return
         if et in {"manual", "system"}:
             if not isinstance(payload, dict):

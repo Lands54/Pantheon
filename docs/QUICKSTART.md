@@ -35,9 +35,9 @@ API 文档：`http://localhost:8000/docs`
 ### 4.2 Agent 管理
 
 ```bash
-./temple.sh list
-./temple.sh activate genesis
-./temple.sh deactivate genesis
+./temple.sh agent list
+./temple.sh agent status
+./temple.sh agent status --agent-id genesis
 ./temple.sh agent view genesis
 ./temple.sh agent edit genesis
 ```
@@ -45,11 +45,10 @@ API 文档：`http://localhost:8000/docs`
 ### 4.3 通信与观测
 
 ```bash
-./temple.sh broadcast "讨论当前目标"
-./temple.sh confess genesis "请先处理收件箱"
-./temple.sh confess genesis "先记录，不要立即执行" --silent
+./temple.sh events submit --domain interaction --type interaction.message.sent --payload '{"to_id":"genesis","sender_id":"human.overseer","title":"任务指令","content":"请先处理收件箱","msg_type":"confession","trigger_pulse":true}'
+./temple.sh events submit --domain interaction --type interaction.message.sent --payload '{"to_id":"genesis","sender_id":"human.overseer","title":"记录","content":"先记录，不要立即执行","msg_type":"confession","trigger_pulse":false}'
 ./temple.sh check genesis
-./temple.sh prayers
+./temple.sh inbox outbox --agent "human.overseer" --to genesis --limit 20
 ```
 
 ### 4.4 配置
@@ -71,6 +70,15 @@ cd frontend
 npm install
 npm run dev
 ```
+
+前端地址（默认）：`http://localhost:5173`
+
+前端 MVP 页面：
+1. `Dashboard`：项目切换 + Agent 状态 + Hermes 实时事件流
+2. `Events`：事件筛选、重试、ack
+3. `Message Center`：`human.overseer` 向 agent 发送 interaction 事件
+4. `Agent Detail`：Janus context + Iris 回执 + 最近事件
+5. `Project Control`：project create/start/stop
 
 ## 6. 测试（建议）
 

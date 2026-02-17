@@ -46,7 +46,7 @@ flowchart LR
       HM["hermes/*"]
       MN["mnemosyne/*"]
       TL["tools/*"]
-      CFG["config.py"]
+      CFG["gods.config package"]
     end
 
     SRV --> APP
@@ -80,18 +80,15 @@ flowchart TD
 sequenceDiagram
     participant App as "api.app startup"
     participant Sim as "SimulationService"
-    participant Sch as "api.scheduler"
+    participant Sch as "gods.angelia.scheduler"
     participant Agent as "GodAgent"
 
     App->>Sim: "pause_all_projects_on_startup()"
-    App->>Sim: "create simulation_loop task"
+    App->>Sim: "start angelia supervisor"
     loop "every 1s"
-      Sim->>Sch: "pick_pulse_batch(project, active_agents, batch_size)"
-      Sch-->>Sim: "[(agent_id, reason)]"
-      par "for each agent"
-        Sim->>Sch: "pulse_agent_sync(project, agent, reason)"
-        Sch->>Agent: "process(state)"
-      end
+      Sim->>Sch: "tick_timer_once(project)"
+      Sch-->>Sim: "enqueue timer events if needed"
+      Sch->>Agent: "worker loop consumes queued events"
     end
 ```
 
@@ -239,9 +236,9 @@ flowchart LR
 ## 16. Agent 间交互方案（消息 + 协议双通道）
 ```mermaid
 flowchart TD
-    A["Agent A"] --> Msg["send_message / confess"]
+    A["Agent A"] --> Msg["send_message / events submit"]
     Msg --> Buf["projects/{id}/buffers/{agent}.jsonl"]
-    Buf --> Sch["Scheduler inbox_event priority"]
+    Buf --> Sch["Scheduler mail_event priority"]
     Sch --> B["Agent B pulse"]
     B --> Inbox["check_inbox tool"]
     Inbox --> Decision["Reason/Act/Observe decision"]
@@ -382,7 +379,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     subgraph Msg["消息通道 (buffers/*.jsonl)"]
-      M1["send_message/confess"] --> M2["check_inbox"]
+      M1["send_message/events submit"] --> M2["check_inbox"]
       M2 --> M3["协商文本 / 任务分配"]
     end
 
@@ -423,7 +420,7 @@ sequenceDiagram
     participant S as StructuredV1Strategy
     participant B as GodBrain.think_with_tools (LLM1)
 
-    Note over EQ,W: 触发源：inbox_event / manual / system / timer
+    Note over EQ,W: 触发源：mail_event / manual / system / timer
     EQ->>W: pick_next_event(agent_id,event_type,payload)
 
     rect rgb(245,245,245)
@@ -538,7 +535,7 @@ sequenceDiagram
     participant CFG as "gods.config"
     participant ANG as "gods.angelia.scheduler"
     participant AST as "gods.angelia.store"
-    participant IBS as "gods.inbox.store"
+    participant IBS as "gods.iris.store"
     participant WK as "gods.angelia.worker"
     participant AG as "gods.agents.base.GodAgent"
     participant PH as "gods.agents.phase_runtime"
@@ -553,14 +550,14 @@ sequenceDiagram
     API->>SVC: startup_event()
     SVC->>ANG: start()
     SVC->>CFG: 读取项目配置
-    SVC->>AST: 迁移/恢复 Angelia 事件存储（若需要）
+    SVC->>AST: 严格健康检查（发现 legacy 文件直接失败）
 
-    Note over CLI,API: 事件入口（confess/send_message/manual/timer）
-    CLI->>API: /confess 或 /angelia/events/enqueue
-    API->>IBS: 写 inbox message (pending)（若是消息类）
+    Note over CLI,API: 事件入口（events submit/send_message/manual/timer）
+    CLI->>API: /events/submit
+    API->>IBS: 写 inbox message (queued)（若是消息类）
     API->>ANG: enqueue_event(project_id,agent_id,event_type,payload)
 
-    ANG->>AST: 持久化 AngeliaEvent(queued)
+    ANG->>AST: 持久化 EventRecord(queued)
     ANG->>WK: notify(agent mailbox)
 
     loop 每个活跃 agent 单 worker 常驻
@@ -598,8 +595,73 @@ sequenceDiagram
     end
 
     Note over API,CLI: 观测与调试
-    CLI->>API: /agents/status /angelia/events /project report
+    CLI->>API: /agents/status /events /project report
     API->>AST: 读取事件/状态
     API->>MNE: 读取归档/报告
     API-->>CLI: JSON/摘要输出
+```
+
+```mermaid
+flowchart LR
+    subgraph RT["运行时层"]
+        E["Angelia Event Queue"]
+        W["Worker"]
+        G["GodAgent.process"]
+    end
+
+    subgraph MEM["Mnemosyne 资产层"]
+        P["agent_profiles/*.md"]
+        C["chronicles/*.md"]
+        A["chronicles/*_archive.md"]
+        T["task_state/*.json (task_card)"]
+        R["runtime_events/*.jsonl"]
+        POL["memory_policy.json (strict)"]
+        TOK["token_io/*.jsonl"]
+        CR["context_reports/*.jsonl"]
+        ID["inbox_digest/*.jsonl"]
+        CMP["Compaction Engine"]
+    end
+
+    subgraph JAN["Janus 构建层 structured_v1"]
+        JP["read_profile()"]
+        JC["load_chronicle_for_context()"]
+        JT["read_task_state()"]
+        JI["build_inbox_overview()"]
+        JO["list_observations()"]
+        ASM["assemble_llm_messages()"]
+        SYS["SystemMessage"]
+    end
+
+    subgraph LLM["推理层"]
+        B["Brain.think_with_tools"]
+        O["AIMessage / Tool Calls"]
+    end
+
+    E --> W --> G
+    G -->|"record_intent"| POL
+    POL -->|"to_chronicle"| C
+    POL -->|"to_runtime_log"| R
+    C --> CMP
+    CMP -->|"rewrite compacted"| C
+    CMP -->|"archive old"| A
+
+    G -->|"update task state"| T
+    B -->|"token usage"| TOK
+
+    P --> JP
+    C --> JC
+    T --> JT
+    R --> JI
+    R --> JO
+
+    JP --> ASM
+    JC --> ASM
+    JT --> ASM
+    JI --> ASM
+    JO --> ASM
+
+    ASM --> SYS --> B --> O --> G
+    ASM -->|"write build report"| CR
+    W -->|"inbox delivery digest"| ID
+
 ```

@@ -22,6 +22,46 @@ SERVER_LOG="${GODS_SERVER_LOG:-/tmp/gods_server.log}"
 SERVER_PID_FILE="${GODS_SERVER_PID:-/tmp/gods_server.pid}"
 DOCKER_IMAGE="${GODS_DOCKER_IMAGE:-gods-agent-base:py311}"
 
+echo "==> Preflight config/template cleanup..."
+python - <<'PY'
+import json
+from pathlib import Path
+
+cfg_path = Path("config.json")
+if cfg_path.exists():
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        cfg = {}
+else:
+    cfg = {}
+
+projects = cfg.get("projects", {}) if isinstance(cfg.get("projects", {}), dict) else {}
+default_proj = projects.get("default", {})
+if not isinstance(default_proj, dict):
+    default_proj = {}
+
+cfg["projects"] = {"default": default_proj}
+cfg["current_project"] = "default"
+cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+# Ensure template memory_policy.json is valid JSON object.
+tpl_policy = Path("projects/templates/default/mnemosyne/memory_policy.json")
+tpl_policy.parent.mkdir(parents=True, exist_ok=True)
+try:
+    if tpl_policy.exists():
+        raw = tpl_policy.read_text(encoding="utf-8").strip()
+        if not raw:
+            raise ValueError("empty")
+        val = json.loads(raw)
+        if not isinstance(val, dict):
+            raise ValueError("not object")
+    else:
+        raise ValueError("missing")
+except Exception:
+    tpl_policy.write_text("{}\n", encoding="utf-8")
+PY
+
 echo "==> Restarting server..."
 
 # Stop by pid file first
@@ -68,6 +108,7 @@ echo "==> Initializing project: ${PROJECT_ID}"
 BASE_URL="${BASE_URL}" PROJECT_ID="${PROJECT_ID}" DOCKER_IMAGE="${DOCKER_IMAGE}" python - <<'PY'
 import json
 import os
+import shutil
 from pathlib import Path
 import requests
 
@@ -89,7 +130,7 @@ Hermes + Python 执行规范（必须遵守）
 1) 所有实现必须通过 Python 代码落地（.py 文件 + 可执行命令验证）。
 2) 跨代理调用统一使用 HermesClient（优先 route），禁止假设对方文件结构。
 3) 协商后先走 contract-register -> commit-contract -> resolve-contract，再实现代码。
-4) 每完成一个可验证里程碑，调用 send_to_human 汇报：已完成内容/风险/下一步。
+4) 每完成一个可验证里程碑，调用 send_message(to_id='human.overseer', ...) 汇报：已完成内容/风险/下一步。
 5) 禁止只提交自然语言协议或伪代码，必须给出可运行实现。
 
 Python 示例：
@@ -176,6 +217,7 @@ def req(method: str, path: str, **kwargs):
 
 # Best-effort delete old project
 req("DELETE", f"/projects/{project_id}")
+shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
 
 r = req("POST", "/projects/create", json={"id": project_id})
 r.raise_for_status()
@@ -216,7 +258,23 @@ msg = (
     "协议条款先 contract-register/commit/resolve。实现必须是 Python 可运行代码。"
 )
 for aid in agents.keys():
-    req("POST", "/confess", json={"agent_id": aid, "message": msg, "silent": False}).raise_for_status()
+    req(
+        "POST",
+        "/events/submit",
+        json={
+            "project_id": project_id,
+            "domain": "interaction",
+            "event_type": "interaction.message.sent",
+            "payload": {
+                "to_id": aid,
+                "sender_id": "human.overseer",
+                "title": "animal_world.bootstrap",
+                "content": msg,
+                "msg_type": "confession",
+                "trigger_pulse": True,
+            },
+        },
+    ).raise_for_status()
 
 status = req("GET", f"/agents/status?project_id={project_id}").json()
 print(json.dumps({"project_id": project_id, "agents_status": status.get("agents", [])}, ensure_ascii=False, indent=2))

@@ -1,8 +1,8 @@
 import shutil
 from pathlib import Path
 
-from gods.janus.journal import list_observations, observations_path, record_observation
-from gods.janus.models import ObservationRecord
+from gods.janus.facade import list_observations, observations_path, record_observation
+from gods.janus.facade import ObservationRecord
 
 
 def test_observation_journal_write_and_read():

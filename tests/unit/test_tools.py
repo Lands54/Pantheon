@@ -33,6 +33,18 @@ def test_validate_path_outside_territory():
         validate_path("test_agent", "test_project", "../../../etc/passwd")
 
 
+def test_validate_path_blocks_similar_prefix_escape():
+    """validate_path must reject escapes into sibling-like directory names."""
+    with pytest.raises(PermissionError):
+        validate_path("a", "test_project_prefix_escape", "../ab/secret.txt")
+
+
+def test_validate_path_blocks_absolute_path():
+    """validate_path must reject absolute paths outside territory."""
+    with pytest.raises(PermissionError):
+        validate_path("test_agent", "test_project_abs_escape", "/tmp/escape.txt")
+
+
 def test_gods_tools_list():
     """Test that GODS_TOOLS contains all expected tools."""
     from gods.tools import GODS_TOOLS
@@ -42,7 +54,6 @@ def test_gods_tools_list():
     # Communication tools
     assert "check_inbox" in tool_names
     assert "send_message" in tool_names
-    assert "send_to_human" in tool_names
     assert "finalize" in tool_names
     
     # Filesystem tools

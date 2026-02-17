@@ -1,8 +1,8 @@
 from pathlib import Path
 import shutil
 
-from gods.inbox.service import enqueue_message
-from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
+from gods.iris.facade import enqueue_message
+from gods.angelia.facade import inject_inbox_after_action_if_any
 
 
 def test_after_action_interrupt_injects_inbox_message():

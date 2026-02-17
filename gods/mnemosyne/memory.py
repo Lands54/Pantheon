@@ -5,21 +5,24 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from string import Template
 from typing import Any
 
 from gods.mnemosyne.contracts import MemoryDecision, MemoryIntent, MemorySinkPolicy
 from gods.mnemosyne.policy_registry import (
     MemoryPolicyMissingError,
     MemoryTemplateMissingError,
+    ensure_intent_policy_rule,
     ensure_memory_policy,
     load_memory_policy as _load_strict_policy,
 )
-from gods.prompts import prompt_registry
+from gods.mnemosyne.intent_schema_registry import observe_intent_payload
+from gods.mnemosyne.template_registry import render_memory_template
+from gods.paths import mnemosyne_dir
+from gods.mnemosyne.compaction import ensure_compacted
 
 
 def _mn_root(project_id: str) -> Path:
-    p = Path("projects") / project_id / "mnemosyne"
+    p = mnemosyne_dir(project_id)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -65,40 +68,73 @@ def _resolve_policy(intent: MemoryIntent) -> MemorySinkPolicy:
     key = str(intent.intent_key or "").strip()
     rule = policy.get(key)
     if not isinstance(rule, dict):
-        raise MemoryPolicyMissingError(
-            f"no memory policy for intent_key='{key}' in project={intent.project_id}"
-        )
-    return MemorySinkPolicy(
+        rule = ensure_intent_policy_rule(intent.project_id, key)
+        policy = load_memory_policy(intent.project_id)
+        rule = policy.get(key)
+    if not isinstance(rule, dict):
+        raise MemoryPolicyMissingError(f"no memory policy for intent_key='{key}' in project={intent.project_id}")
+    tpl_chronicle = str(rule.get("chronicle_template_key", "") or "").strip()
+    tpl_runtime = str(rule.get("runtime_log_template_key", "") or "").strip()
+    sink = MemorySinkPolicy(
         to_chronicle=bool(rule.get("to_chronicle", False)),
         to_runtime_log=bool(rule.get("to_runtime_log", False)),
-        template=str(rule.get("template", "") or "").strip(),
+        chronicle_template_key=tpl_chronicle,
+        runtime_log_template_key=tpl_runtime,
     )
-
-
-def _render_text(intent: MemoryIntent, sink: MemorySinkPolicy) -> str:
-    if not sink.template:
-        return str(intent.fallback_text or "")
-    try:
-        raw = prompt_registry.get(sink.template, project_id=intent.project_id)
-    except Exception as e:
+    if sink.to_chronicle and not sink.chronicle_template_key:
         raise MemoryTemplateMissingError(
-            f"template '{sink.template}' not found for intent_key='{intent.intent_key}' "
-            f"(project={intent.project_id})"
-        ) from e
+            f"to_chronicle=true requires chronicle_template_key for intent_key='{key}' (project={intent.project_id})"
+        )
+    return sink
+
+
+def _render_template(intent: MemoryIntent, scope: str, template_key: str) -> str:
+    if not template_key:
+        return str(intent.fallback_text or "")
     render_vars = dict(intent.payload or {})
     render_vars.setdefault("project_id", intent.project_id)
     render_vars.setdefault("agent_id", intent.agent_id)
     render_vars.setdefault("intent_key", intent.intent_key)
-    return Template(raw).safe_substitute(**render_vars)
+    try:
+        return render_memory_template(intent.project_id, scope, template_key, render_vars)
+    except Exception as e:
+        raise MemoryTemplateMissingError(
+            f"template '{template_key}' not found for intent_key='{intent.intent_key}' "
+            f"(project={intent.project_id})"
+        ) from e
+
+
+def _render_runtime_fallback(intent: MemoryIntent) -> str:
+    summary = str(intent.fallback_text or f"[{intent.source_kind}] {intent.intent_key}").strip()
+    payload = intent.payload or {}
+    try:
+        payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        payload_json = "{}"
+    text = f"{summary}\n\npayload={payload_json}".strip()
+    return text[:12000]
 
 
 def record_intent(intent: MemoryIntent) -> dict[str, Any]:
+    observe_intent_payload(intent.project_id, intent.intent_key, intent.payload or {})
     sink = _resolve_policy(intent)
-    text = _render_text(intent, sink)
+    chronicle_text = ""
+    runtime_text = ""
+    if sink.to_chronicle:
+        chronicle_text = _render_template(intent, "chronicle", sink.chronicle_template_key)
+    if sink.to_runtime_log:
+        if sink.runtime_log_template_key:
+            runtime_text = _render_template(intent, "runtime_log", sink.runtime_log_template_key)
+        else:
+            runtime_text = _render_runtime_fallback(intent)
 
     chronicle_written = False
-    if sink.to_chronicle and str(text or "").strip():
-        _append_chronicle(intent.project_id, intent.agent_id, text)
+    if sink.to_chronicle and str(chronicle_text or "").strip():
+        _append_chronicle(intent.project_id, intent.agent_id, chronicle_text)
+        try:
+            ensure_compacted(intent.project_id, intent.agent_id)
+        except Exception:
+            pass
         chronicle_written = True
 
     runtime_written = False
@@ -112,12 +148,13 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
                 "agent_id": intent.agent_id,
                 "intent_key": intent.intent_key,
                 "source_kind": intent.source_kind,
-                "text": text,
+                "text": runtime_text,
                 "payload": intent.payload or {},
                 "rule": {
                     "to_chronicle": sink.to_chronicle,
                     "to_runtime_log": sink.to_runtime_log,
-                    "template": sink.template,
+                    "chronicle_template_key": sink.chronicle_template_key,
+                    "runtime_log_template_key": sink.runtime_log_template_key,
                 },
             },
         )
@@ -127,7 +164,7 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
         intent_key=intent.intent_key,
         chronicle_written=chronicle_written,
         runtime_log_written=runtime_written,
-        text=text,
+        text=chronicle_text or runtime_text,
         policy=sink,
     )
     return {
@@ -135,37 +172,12 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
         "chronicle_written": decision.chronicle_written,
         "runtime_log_written": decision.runtime_log_written,
         "text": decision.text,
+        "chronicle_text": chronicle_text,
+        "runtime_text": runtime_text,
         "rule": {
             "to_chronicle": decision.policy.to_chronicle,
             "to_runtime_log": decision.policy.to_runtime_log,
-            "template": decision.policy.template,
+            "chronicle_template_key": decision.policy.chronicle_template_key,
+            "runtime_log_template_key": decision.policy.runtime_log_template_key,
         },
     }
-
-
-def record_memory_event(
-    *,
-    project_id: str,
-    agent_id: str,
-    record_type: str,
-    payload: dict[str, Any] | None = None,
-    fallback_text: str = "",
-) -> dict[str, Any]:
-    # Deprecated legacy adapter.
-    legacy_key = str(record_type or "").strip()
-    if legacy_key == "default":
-        legacy_key = "llm.response"
-    elif legacy_key == "freeform_mode_marker":
-        legacy_key = "agent.mode.freeform"
-    elif legacy_key == "tool_loop_safety_cap":
-        legacy_key = "agent.safety.tool_loop_cap"
-    intent = MemoryIntent(
-        intent_key=legacy_key,
-        project_id=project_id,
-        agent_id=agent_id,
-        source_kind="agent",
-        payload=payload or {},
-        fallback_text=str(fallback_text or ""),
-        timestamp=time.time(),
-    )
-    return record_intent(intent)

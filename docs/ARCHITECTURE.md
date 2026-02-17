@@ -1,5 +1,8 @@
 # Gods Platform 架构概览（当前实现）
 
+> 最新模块职责、依赖关系与模块内部运行图请以 `docs/BACKEND_MODULES_RUNTIME_MAP.md` 为唯一事实源。
+> 开发强约束与 Agent/Event 交互规范请先阅读 `docs/DEVELOPER_CONSTRAINTS.md`。
+
 ## 1. 总体结构
 
 Gods Platform 采用三层结构：
@@ -8,6 +11,7 @@ Gods Platform 采用三层结构：
 - 用例服务层：`api/services/`
 - API 服务：`api/`
 - 命令行：`cli/`
+- 前端控制台：`frontend/`（React + Vite，Event 驱动观测/控制）
 
 所有运行时世界数据都存放在 `projects/{project_id}/` 下，形成物理隔离。
 
@@ -43,15 +47,14 @@ Gods Platform 采用三层结构：
 - `service.py`：submit/list/stop/reconcile/startup_lost 统一入口。
 - 一期限制：仅 `command_executor=docker` 可用，local 后端明确拒绝。
 
-### 2.3 Inbox + Pulse 事件模块（`gods/inbox` + `gods/pulse`）
+### 2.3 统一事件总线（`gods/events` + `gods/iris` + `gods/angelia`）
 
-- `gods/inbox/models.py`：Inbox 事件与 4 态（`pending/delivered/deferred/handled`）。
-- `gods/inbox/store.py`：`projects/{project_id}/runtime/inbox_events.jsonl` 读写与状态迁移（文件锁）。
-- `gods/inbox/service.py`：消息入队、批量注入、handled 回执。
-- `gods/pulse/models.py`：Pulse 事件（`inbox_event/timer/manual/system`）与状态。
-- `gods/pulse/queue.py`：`projects/{project_id}/runtime/pulse_events.jsonl` 队列、优先级出队、去重。
-- `gods/pulse/policy.py`：空队列保底心跳与注入预算策略（配置驱动）。
-- `gods/pulse/scheduler_hooks.py`：调度前注入与 `after_action` 软打断注入。
+- `gods/events/models.py`：统一 `EventRecord/EventState/EventEnvelope`。
+- `gods/events/store.py`：`projects/{project_id}/runtime/events.jsonl` + `events.lock`（统一 SSOT）。
+- `gods/events/handler.py` + `registry.py`：`EventHandler` 五阶段与注册表。
+- `gods/iris`：Mail 语义与回执语义（`mail_event/mail_deliver_event/mail_ack_event`）。
+- `gods/angelia`：调度执行与 worker 生命周期；worker 通过 `registry` 分发 `EventHandler`。
+- `gods/angelia/pulse/*`：仅保留注入预算/中断策略，不包含独立事件存储。
 
 ### 2.4 Hermes 协议总线（`gods/hermes/`）
 
@@ -67,11 +70,11 @@ Gods Platform 采用三层结构：
 
 ### 2.5 配置与持久化
 
-- `gods/config.py`：`config.json` 的加载、迁移、保存。
+- `gods/config/*`：`config.json` 的严格模型、加载校验与保存（零兼容，不自动迁移）。
 - `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
 - `projects/{project_id}/mnemosyne/chronicles/{agent_id}.md`：可读记忆日志。
-- `projects/{project_id}/runtime/inbox_events.jsonl`：Inbox 事件存储。
-- `projects/{project_id}/runtime/pulse_events.jsonl`：Pulse 队列存储。
+- `projects/{project_id}/runtime/events.jsonl`：统一事件总线单一事实源（Iris/Angelia/Hermes/Detach）。
+- `projects/{project_id}/runtime/events.lock`：统一事件总线文件锁。
 - `projects/{project_id}/runtime/detach_jobs.jsonl`：Detach 后台任务存储。
 - `projects/{project_id}/runtime/detach_logs/{job_id}.log`：Detach 任务日志。
 - `projects/{project_id}/runtime/locks/*.lock`：Inbox/Pulse 文件锁。
@@ -91,32 +94,30 @@ Gods Platform 采用三层结构：
   - `GET /projects/{project_id}/runtime/agents`
   - `POST /projects/{project_id}/runtime/agents/{agent_id}/restart`
   - `POST /projects/{project_id}/runtime/reconcile`
-- `api/routes/projects.py`：Detach 后台任务接口：
-  - `POST /projects/{project_id}/detach/submit`
-  - `GET /projects/{project_id}/detach/jobs`
-  - `POST /projects/{project_id}/detach/jobs/{job_id}/stop`
-  - `POST /projects/{project_id}/detach/reconcile`
-  - `GET /projects/{project_id}/detach/jobs/{job_id}/logs`
-- `api/routes/projects.py`：Pulse/Inbox 调试接口：
-  - `GET /projects/{project_id}/pulse/queue`
-  - `POST /projects/{project_id}/pulse/enqueue`
-  - `GET /projects/{project_id}/inbox/events`
+- `api/routes/events.py`：统一事件接口：
+  - `POST /events/submit`
+  - `GET /events`
+  - `POST /events/{event_id}/retry`
+  - `POST /events/{event_id}/ack`
+  - `POST /events/reconcile`
+  - `GET /events/metrics`
+- `api/routes/angelia.py`：仅保留 agent/supervisor 相关接口。
+- `api/routes/projects.py`：不再提供 `/projects/{project_id}/detach/*` 任务接口，统一走 `/events/*`。
 - `api/routes/agents.py`：Agent 增删。
 - `api/routes/hermes.py`：协议注册、调用、任务查询、审计查询。
   - 额外支持：`/hermes/route`（按 `target_agent + function_id` 路由调用）
   - 额外支持：`/hermes/contracts/*`（契约注册/承诺/解析）
   - 额外支持：`/hermes/ports/*`（项目级端口租约 reserve/release/list）
 - `api/routes/mnemosyne.py`：Mnemosyne 档案写入/查询/读取。
-- `api/routes/communication.py`：
-  - `/broadcast`：SSE 输出多 Agent 讨论流。
-  - `/confess`：向指定 Agent 私聊并写入 Inbox Event；默认同时入队 `inbox_event` pulse（`silent=false`）。
-  - `/prayers/check`：读取 Agent 发给人类的消息。
+- Agent 交互消息统一入口：
+  - `POST /events/submit`（`domain=interaction,event_type=interaction.message.sent`）。
 
 ## 3.5 服务层（`api/services/`）
 
 - `api/services/config_service.py`：配置脱敏读取、配置保存编排。
 - `api/services/project_service.py`：项目生命周期、知识图谱重建、Project 报告编排。
 - `api/services/simulation_service.py`：调度循环与 startup 安全暂停策略。
+- `api/services/*`：统一调用 `gods.<domain>.facade`，不直连域内 `store/policy/models/...`。
 
 说明：`api/routes/*` 只做协议适配，业务逻辑下沉到 service，避免 API 膨胀。
 
@@ -127,10 +128,22 @@ Gods Platform 采用三层结构：
 - 子命令：
   - 项目管理：`project list/create/switch/delete`
   - Agent 管理：`list/activate/deactivate/agent view|edit`
-  - 通信：`broadcast/confess/prayers/check`
+  - 通信：`events submit --domain interaction --type interaction.message.sent`
   - 配置：`config show/set/models`
-  - 事件调试：`pulse queue/push`、`inbox events`
+  - 事件调试：`events submit/list/retry/ack/reconcile`、`inbox outbox`
   - 后台任务：`detach submit/list/stop/logs`
+
+## 4.1 前端层（`frontend/`）
+
+- 入口：`frontend/src/App.jsx`
+- 结构：`api/hooks/store/pages/components/types`
+- MVP 页面：
+  - `Dashboard`：项目总览、agent 运行状态、Hermes SSE 实时流
+  - `Events`：按 `agent/domain/type/state` 过滤事件并执行 retry/ack
+  - `Message Center`：统一提交 `interaction.message.sent`
+  - `Agent Detail`：Janus context + Iris inbox/outbox + agent recent events
+  - `Project Control`：`create/start/stop` 控制
+- 禁用旧链路：前端不再使用 `/broadcast`、`/prayers/check`、`/confess`
 
 ## 5. 多项目隔离模型
 
@@ -145,8 +158,7 @@ projects/{project_id}/
 │   ├── chronicles/{agent_id}.md
 │   └── {agent|human|system}/
 ├── runtime/
-│   ├── inbox_events.jsonl
-│   ├── pulse_events.jsonl
+│   ├── events.jsonl
 │   ├── detach_jobs.jsonl
 │   ├── detach_logs/{job_id}.log
 │   └── locks/*.lock
@@ -159,8 +171,8 @@ projects/{project_id}/
 
 ## 6. 数据流（关键路径）
 
-1. 人类/Agent 发送私信 -> 写入 `inbox_events.jsonl`（`pending`）。  
-2. 同步写入 `pulse_events.jsonl`（`inbox_event`，高优先级）。  
-3. 调度器优先消费 Pulse 队列；空队列时按 `queue_idle_heartbeat_sec` 注入 `timer` pulse。  
-4. pulse 开始前注入 Inbox 事件；工具返回后执行 `after_action` 软打断探针。  
-5. pulse 完成后将已注入消息标记为 `handled`；Agent 记忆持续写入 `mnemosyne/chronicles/{agent_id}.md`。  
+1. 人类/Agent 发送私信 -> 写入 `events.jsonl`（`domain=interaction,event_type=interaction.message.sent,state=queued`）。  
+2. Angelia 仅通过 mailbox `notify/wait` 做快速唤醒，不再维护独立主事件账本。  
+3. worker 从统一事件总线执行 pick/process/done/requeue/dead。  
+4. pulse 期间批量注入可投递 mail event，并将其推进到 `delivered/handled`。  
+5. 失败事件按重试策略回退或进入 dead-letter；Agent 记忆持续写入 `mnemosyne/chronicles/{agent_id}.md`。  

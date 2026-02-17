@@ -4,7 +4,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-from gods.hermes.ports import HermesPortRegistry
+from gods.hermes.facade import HermesPortRegistry
 
 
 def test_hermes_ports_reserve_list_release():

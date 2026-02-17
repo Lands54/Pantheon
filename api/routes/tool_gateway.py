@@ -4,19 +4,10 @@ Expose selected communication tools via stable HTTP endpoints for external agent
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
-from gods.config import runtime_config
-from gods.tools.communication import (
-    check_inbox,
-    check_outbox,
-    send_message,
-    list_agents,
-)
+from api.services import tool_gateway_service
 
 
 router = APIRouter(prefix="/tool-gateway", tags=["tool-gateway"])
@@ -43,79 +34,33 @@ class CheckOutboxRequest(BaseModel):
     limit: int = 50
 
 
-def _pick_project(project_id: str | None) -> str:
-    pid = project_id or runtime_config.current_project
-    if pid not in runtime_config.projects:
-        raise HTTPException(status_code=404, detail=f"Project '{pid}' not found")
-    return pid
-
-
 @router.get("/list_agents")
 async def gw_list_agents(project_id: str | None = None, caller_id: str = "external") -> dict:
-    pid = _pick_project(project_id)
-    text = list_agents.invoke({"caller_id": caller_id, "project_id": pid})
-    return {"project_id": pid, "result": text}
+    return tool_gateway_service.list_agents(project_id=project_id, caller_id=caller_id)
 
 
 @router.post("/check_inbox")
 async def gw_check_inbox(req: CheckInboxRequest) -> dict:
-    pid = _pick_project(req.project_id)
-    # validate agent exists physically to avoid silent file creation
-    agent_dir = Path("projects") / pid / "agents" / req.agent_id
-    if not agent_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Agent '{req.agent_id}' not found in '{pid}'")
-    text = check_inbox.invoke({"caller_id": req.agent_id, "project_id": pid})
-    parsed = None
-    try:
-        parsed = json.loads(text)
-    except Exception:
-        parsed = None
-    return {"project_id": pid, "agent_id": req.agent_id, "result": text, "messages": parsed}
+    return tool_gateway_service.check_inbox(project_id=req.project_id, agent_id=req.agent_id)
 
 
 @router.post("/check_outbox")
 async def gw_check_outbox(req: CheckOutboxRequest) -> dict:
-    pid = _pick_project(req.project_id)
-    agent_dir = Path("projects") / pid / "agents" / req.agent_id
-    if not agent_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Agent '{req.agent_id}' not found in '{pid}'")
-    text = check_outbox.invoke(
-        {
-            "caller_id": req.agent_id,
-            "project_id": pid,
-            "to_id": req.to_id,
-            "status": req.status,
-            "limit": int(req.limit),
-        }
+    return tool_gateway_service.check_outbox(
+        project_id=req.project_id,
+        agent_id=req.agent_id,
+        to_id=req.to_id,
+        status=req.status,
+        limit=int(req.limit),
     )
-    parsed = None
-    try:
-        parsed = json.loads(text)
-    except Exception:
-        parsed = None
-    return {"project_id": pid, "agent_id": req.agent_id, "result": text, "items": parsed}
 
 
 @router.post("/send_message")
 async def gw_send_message(req: SendMessageRequest) -> dict:
-    pid = _pick_project(req.project_id)
-    # validate source/target agents exist
-    from_dir = Path("projects") / pid / "agents" / req.from_id
-    to_dir = Path("projects") / pid / "agents" / req.to_id
-    if not from_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Sender agent '{req.from_id}' not found in '{pid}'")
-    if not to_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Target agent '{req.to_id}' not found in '{pid}'")
-    if not str(req.title or "").strip():
-        raise HTTPException(status_code=400, detail="title is required")
-
-    text = send_message.invoke(
-        {
-            "to_id": req.to_id,
-            "title": req.title,
-            "message": req.message,
-            "caller_id": req.from_id,
-            "project_id": pid,
-        }
+    return tool_gateway_service.send_message(
+        project_id=req.project_id,
+        from_id=req.from_id,
+        to_id=req.to_id,
+        title=req.title,
+        message=req.message,
     )
-    return {"project_id": pid, "from_id": req.from_id, "to_id": req.to_id, "result": text}

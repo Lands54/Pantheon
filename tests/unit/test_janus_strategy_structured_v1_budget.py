@@ -1,7 +1,6 @@
 from langchain_core.messages import HumanMessage
 
-from gods.janus.models import ContextBuildRequest
-from gods.janus.strategies.structured_v1 import StructuredV1ContextStrategy
+from gods.janus.facade import ContextBuildRequest, StructuredV1ContextStrategy
 
 
 def test_structured_v1_uses_dynamic_recent_budget_not_fixed_8(tmp_path, monkeypatch):
@@ -18,13 +17,14 @@ def test_structured_v1_uses_dynamic_recent_budget_not_fixed_8(tmp_path, monkeypa
             "budget_task_state": 1000,
             "budget_observations": 1000,
             "budget_inbox": 1000,
-            "budget_recent_messages": 2000,
-            "recent_message_limit": 30,
+            "budget_state_window": 2000,
+            "state_window_limit": 30,
             "observation_window": 10,
             "include_inbox_status_hints": True,
         },
     )
     res = StructuredV1ContextStrategy().build(req)
     assert res.strategy_used == "structured_v1"
-    assert len(res.recent_messages) > 8
-    assert res.token_usage["recent_messages"] == len(res.recent_messages)
+    assert len(res.recent_messages) == 0
+    assert res.token_usage["state_window_messages"] > 8
+    assert "[STATE_WINDOW]" in "\n\n".join(res.system_blocks)

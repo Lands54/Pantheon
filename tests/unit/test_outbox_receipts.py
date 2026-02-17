@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from gods.inbox.service import ack_handled, enqueue_message, fetch_inbox_context, list_outbox_receipts
+from gods.iris.facade import ack_handled, enqueue_message, fetch_inbox_context, list_outbox_receipts
 
 
 def test_outbox_receipt_status_flow_pending_delivered_handled():
@@ -27,7 +27,7 @@ def test_outbox_receipt_status_flow_pending_delivered_handled():
         assert rows0[0].title == "work-update"
 
         _, delivered_ids = fetch_inbox_context(project_id=project_id, agent_id=receiver, budget=3)
-        assert row["inbox_event_id"] in delivered_ids
+        assert row["mail_event_id"] in delivered_ids
         rows1 = list_outbox_receipts(project_id=project_id, from_agent_id=sender, to_agent_id=receiver, limit=20)
         assert any(r.status.value == "delivered" for r in rows1)
 
@@ -36,4 +36,3 @@ def test_outbox_receipt_status_flow_pending_delivered_handled():
         assert any(r.status.value == "handled" for r in rows2)
     finally:
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
-

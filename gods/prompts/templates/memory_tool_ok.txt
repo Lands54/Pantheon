@@ -1,1 +1,1 @@
-[[ACTION]] $tool_name (ok) -> $result
+[[ACTION]] $tool_name (ok) -> $result_compact

@@ -11,25 +11,24 @@ def test_agent_model_config_defaults():
     """Test AgentModelConfig default values."""
     config = AgentModelConfig()
     assert config.model == "stepfun/step-3.5-flash:free"
-    assert config.disabled_tools == ["check_inbox"]
+    assert config.disabled_tools == ["check_inbox", "check_outbox"]
 
 
 def test_project_config_defaults():
     """Test ProjectConfig default values."""
     config = ProjectConfig()
     assert config.name is None
-    assert config.active_agents == ["genesis"]
-    assert "genesis" in config.agent_settings
+    assert config.active_agents == []
+    assert config.agent_settings == {}
     assert config.simulation_enabled is False
     assert config.simulation_interval_min == 10
     assert config.simulation_interval_max == 40
-    assert config.queue_idle_heartbeat_sec == 60
     assert config.pulse_event_inject_budget == 3
     assert config.pulse_interrupt_mode == "after_action"
-    assert config.inbox_event_enabled is True
     assert config.phase_act_productive_from_interaction == 2
     assert config.context_strategy == "structured_v1"
     assert config.context_token_budget_total == 32000
+    assert config.llm_call_delay_sec == 1
 
 
 def test_project_config_custom():

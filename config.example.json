@@ -1,7 +1,6 @@
 {
     "openrouter_api_key": "",
     "current_project": "default",
-    "enable_legacy_social_api": false,
     "projects": {
         "default": {
             "name": "Default World",
@@ -12,11 +11,13 @@
                 "genesis": {
                     "model": "stepfun/step-3.5-flash:free",
                     "disabled_tools": [
-                        "check_inbox"
+                        "check_inbox",
+                        "check_outbox"
                     ]
                 }
             },
             "simulation_enabled": false,
+            "llm_call_delay_sec": 1,
             "command_executor": "docker",
             "docker_enabled": true,
             "docker_image": "gods-agent-base:py311",

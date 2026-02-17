@@ -31,32 +31,30 @@ def cmd_config(args):
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
             print(f"   Interval: {proj.get('simulation_interval_min', 10)}-{proj.get('simulation_interval_max', 40)}s")
             print(f"   Autonomous Batch Size: {proj.get('autonomous_batch_size', 4)}")
-            print(f"   Queue Idle Heartbeat: {proj.get('queue_idle_heartbeat_sec', 60)}s")
             print(f"   Event Inject Budget: {proj.get('pulse_event_inject_budget', 3)}")
             print(f"   Interrupt Mode: {proj.get('pulse_interrupt_mode', 'after_action')}")
-            print(f"   Inbox Event Enabled: {proj.get('inbox_event_enabled', True)}")
             print(f"   Angelia Enabled: {proj.get('angelia_enabled', True)}")
             print(f"   Angelia Timer Enabled: {proj.get('angelia_timer_enabled', True)}")
             print(f"   Angelia Timer Idle: {proj.get('angelia_timer_idle_sec', 60)}s")
             print(f"   Angelia Max Attempts: {proj.get('angelia_event_max_attempts', 3)}")
             print(f"   Angelia Processing Timeout: {proj.get('angelia_processing_timeout_sec', 60)}s")
-            print(f"   Angelia Cooldown Preempt Types: {proj.get('angelia_cooldown_preempt_types', ['inbox_event','manual'])}")
+            print(f"   Angelia Cooldown Preempt Types: {proj.get('angelia_cooldown_preempt_types', ['mail_event','manual'])}")
             print(f"   Angelia Dedupe Window: {proj.get('angelia_dedupe_window_sec', 5)}s")
             
             print(f"\n📊 Memory:")
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
             print(f"   Keep Count: {proj.get('summarize_keep_count', 5)} messages")
             print(f"   Tool Loop Max: {proj.get('tool_loop_max', 8)} per pulse")
-            print(f"   Memory Compact Trigger Chars: {proj.get('memory_compact_trigger_chars', 200000)}")
-            print(f"   Memory Compact Keep Chars: {proj.get('memory_compact_keep_chars', 50000)}")
+            print(f"   Memory Compact Trigger Tokens: {proj.get('memory_compact_trigger_tokens', 12000)}")
+            print(f"   Memory Compact Strategy: {proj.get('memory_compact_strategy', 'semantic_llm')}")
             print(f"\n🪞 Janus Context:")
             print(f"   Strategy: {proj.get('context_strategy', 'structured_v1')}")
             print(f"   Token Budget Total: {proj.get('context_token_budget_total', 32000)}")
             print(f"   Budget Task State: {proj.get('context_budget_task_state', 4000)}")
             print(f"   Budget Observations: {proj.get('context_budget_observations', 12000)}")
             print(f"   Budget Inbox: {proj.get('context_budget_inbox', 4000)}")
-            print(f"   Budget Recent Messages: {proj.get('context_budget_recent_messages', 12000)}")
-            print(f"   Recent Message Limit: {proj.get('context_recent_message_limit', 50)}")
+            print(f"   Budget State Window: {proj.get('context_budget_state_window', 12000)}")
+            print(f"   State Window Limit: {proj.get('context_state_window_limit', 50)}")
             print(f"   Observation Window: {proj.get('context_observation_window', 30)}")
             print(f"   Include Inbox Status Hints: {proj.get('context_include_inbox_status_hints', True)}")
             print(f"   Write Build Report: {proj.get('context_write_build_report', True)}")
@@ -76,6 +74,7 @@ def cmd_config(args):
             print(f"   Max Events Per Pulse: {proj.get('debug_trace_max_events', 200)}")
             print(f"   Full Content: {proj.get('debug_trace_full_content', True)}")
             print(f"   LLM IO Trace Enabled: {proj.get('debug_llm_trace_enabled', True)}")
+            print(f"   LLM Call Delay: {proj.get('llm_call_delay_sec', 1)}s")
             print(f"\n📡 Hermes Bus:")
             print(f"   Enabled: {proj.get('hermes_enabled', True)}")
             print(f"   Default Timeout: {proj.get('hermes_default_timeout_sec', 30)}s")
@@ -121,29 +120,7 @@ def cmd_config(args):
                 if disabled:
                     print(f"      Disabled Tools: {', '.join(disabled)}")
 
-            # Show scheduler runtime status
-            try:
-                s_res = requests.get(f"{base_url}/agents/status", params={"project_id": pid}, timeout=3)
-                s_data = s_res.json()
-                agents = s_data.get("agents", [])
-                if agents:
-                    from datetime import datetime
-                    print(f"\n🧭 Scheduler Status:")
-                    for item in agents:
-                        status = item.get("status", "unknown")
-                        lp = item.get("last_pulse_at", 0) or 0
-                        ne = item.get("next_eligible_at", 0) or 0
-                        lp_s = datetime.fromtimestamp(lp).strftime("%Y-%m-%d %H:%M:%S") if lp > 0 else "N/A"
-                        ne_s = datetime.fromtimestamp(ne).strftime("%Y-%m-%d %H:%M:%S") if ne > 0 else "N/A"
-                        print(f"   {item.get('agent_id')}: {status}")
-                        print(f"      Last Pulse: {lp_s}")
-                        print(f"      Next Eligible: {ne_s}")
-                        print(f"      Empty Cycles: {item.get('empty_cycles', 0)}")
-                        print(f"      Pending Inbox: {item.get('has_pending_inbox', False)}")
-                else:
-                    print(f"\n🧭 Scheduler Status: No active agents in this project")
-            except Exception as e:
-                print(f"\n🧭 Scheduler Status: unavailable ({e})")
+            print("\n💡 Agent runtime status moved to: temple.sh agent status")
         except Exception as e:
             print(f"❌ Error: {e}")
     
@@ -163,10 +140,8 @@ def cmd_config(args):
             direct_key = args.key.strip()
 
             if direct_key in {
-                "queue_idle_heartbeat_sec",
                 "pulse_event_inject_budget",
                 "pulse_interrupt_mode",
-                "inbox_event_enabled",
                 "pulse_priority_weights",
                 "angelia_enabled",
                 "angelia_worker_per_agent",
@@ -199,14 +174,14 @@ def cmd_config(args):
                 "context_budget_task_state",
                 "context_budget_observations",
                 "context_budget_inbox",
-                "context_budget_recent_messages",
-                "context_recent_message_limit",
+                "context_budget_state_window",
+                "context_state_window_limit",
                 "context_observation_window",
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
+                "llm_call_delay_sec",
             }:
                 if direct_key in {
-                    "queue_idle_heartbeat_sec",
                     "pulse_event_inject_budget",
                     "angelia_worker_per_agent",
                     "angelia_event_max_attempts",
@@ -228,14 +203,15 @@ def cmd_config(args):
                     "context_budget_task_state",
                     "context_budget_observations",
                     "context_budget_inbox",
-                    "context_budget_recent_messages",
-                    "context_recent_message_limit",
+                    "context_budget_state_window",
+                    "context_state_window_limit",
                     "context_observation_window",
+                    "llm_call_delay_sec",
                 }:
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
                     data["projects"][pid][direct_key] = float(args.value)
-                elif direct_key in {"inbox_event_enabled", "angelia_enabled", "angelia_timer_enabled"}:
+                elif direct_key in {"angelia_enabled", "angelia_timer_enabled"}:
                     data["projects"][pid][direct_key] = args.value.lower() == "true"
                 elif direct_key in {
                     "docker_enabled",
@@ -315,9 +291,13 @@ def cmd_config(args):
                 elif parts[1] == "keep":
                     data["projects"][pid]["summarize_keep_count"] = int(args.value)
                 elif parts[1] == "compact_trigger":
-                    data["projects"][pid]["memory_compact_trigger_chars"] = int(args.value)
-                elif parts[1] == "compact_keep":
-                    data["projects"][pid]["memory_compact_keep_chars"] = int(args.value)
+                    data["projects"][pid]["memory_compact_trigger_tokens"] = int(args.value)
+                elif parts[1] == "compact_strategy":
+                    value = str(args.value).strip().lower()
+                    if value not in {"semantic_llm", "rule_based"}:
+                        print("❌ memory.compact_strategy must be semantic_llm | rule_based")
+                        return
+                    data["projects"][pid]["memory_compact_strategy"] = value
                 else:
                     print(f"❌ Unknown memory key: {parts[1]}")
                     return
@@ -329,8 +309,8 @@ def cmd_config(args):
                     data["projects"][pid]["context_strategy"] = args.value
                 elif parts[1] == "token_budget_total":
                     data["projects"][pid]["context_token_budget_total"] = int(args.value)
-                elif parts[1] == "recent_message_limit":
-                    data["projects"][pid]["context_recent_message_limit"] = int(args.value)
+                elif parts[1] == "state_window_limit":
+                    data["projects"][pid]["context_state_window_limit"] = int(args.value)
                 elif parts[1] == "observation_window":
                     data["projects"][pid]["context_observation_window"] = int(args.value)
                 elif parts[1] == "include_inbox_status_hints":
@@ -344,8 +324,8 @@ def cmd_config(args):
                         data["projects"][pid]["context_budget_observations"] = int(args.value)
                     elif parts[2] == "inbox":
                         data["projects"][pid]["context_budget_inbox"] = int(args.value)
-                    elif parts[2] == "recent_messages":
-                        data["projects"][pid]["context_budget_recent_messages"] = int(args.value)
+                    elif parts[2] == "state_window":
+                        data["projects"][pid]["context_budget_state_window"] = int(args.value)
                     else:
                         print(f"❌ Unknown context budget key: {parts[2]}")
                         return
@@ -400,17 +380,13 @@ def cmd_config(args):
                     print(f"❌ Unknown phase key: {parts[1]}")
                     return
             elif parts[0] == "pulse" and len(parts) >= 2:
-                if parts[1] == "idle_heartbeat":
-                    data["projects"][pid]["queue_idle_heartbeat_sec"] = int(args.value)
-                elif parts[1] == "inject_budget":
+                if parts[1] == "inject_budget":
                     data["projects"][pid]["pulse_event_inject_budget"] = int(args.value)
                 elif parts[1] == "interrupt_mode":
                     if args.value != "after_action":
                         print("❌ pulse.interrupt_mode currently only supports: after_action")
                         return
                     data["projects"][pid]["pulse_interrupt_mode"] = args.value
-                elif parts[1] == "inbox_event":
-                    data["projects"][pid]["inbox_event_enabled"] = args.value.lower() == "true"
                 elif parts[1] == "weights":
                     try:
                         payload = json.loads(args.value)
@@ -439,6 +415,12 @@ def cmd_config(args):
                     data["projects"][pid]["debug_llm_trace_enabled"] = args.value.lower() == "true"
                 else:
                     print(f"❌ Unknown debug key: {parts[1]}")
+                    return
+            elif parts[0] == "llm" and len(parts) >= 2:
+                if parts[1] == "call_delay_sec":
+                    data["projects"][pid]["llm_call_delay_sec"] = int(args.value)
+                else:
+                    print(f"❌ Unknown llm key: {parts[1]}")
                     return
             elif parts[0] == "hermes" and len(parts) >= 2:
                 if parts[1] == "enabled":
@@ -603,31 +585,27 @@ def cmd_config(args):
                 print("  simulation.min (seconds)")
                 print("  simulation.max (seconds)")
                 print("  simulation.batch (number)")
-                print("  queue_idle_heartbeat_sec (seconds)")
                 print("  pulse_event_inject_budget (number)")
                 print("  pulse_interrupt_mode (after_action)")
-                print("  inbox_event_enabled (true/false)")
-                print("  pulse_priority_weights ({\"inbox_event\":100,...})")
+                print("  pulse_priority_weights ({\"mail_event\":100,...})")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
-                print("  memory.compact_trigger (chars)")
-                print("  memory.compact_keep (chars)")
+                print("  memory.compact_trigger (tokens)")
+                print("  memory.compact_strategy (semantic_llm|rule_based)")
                 print("  context.strategy (structured_v1)")
                 print("  context.token_budget_total (tokens)")
                 print("  context.budget.task_state (tokens)")
                 print("  context.budget.observations (tokens)")
                 print("  context.budget.inbox (tokens)")
-                print("  context.budget.recent_messages (tokens)")
-                print("  context.recent_message_limit (count)")
+                print("  context.budget.state_window (tokens)")
+                print("  context.state_window_limit (count)")
                 print("  context.observation_window (count)")
                 print("  context.include_inbox_status_hints (true/false)")
                 print("  context.write_build_report (true/false)")
                 print("  tools.loop_max (number)")
-                print("  pulse.idle_heartbeat (seconds)")
                 print("  pulse.inject_budget (number)")
                 print("  pulse.interrupt_mode (after_action)")
-                print("  pulse.inbox_event (true/false)")
-                print("  pulse.weights ({\"inbox_event\":100,...})")
+                print("  pulse.weights ({\"mail_event\":100,...})")
                 print("  phase.enabled (true/false)")
                 print("  phase.strategy (strict_triad|iterative_action|freeform)")
                 print("  phase.interaction_max (number)")
@@ -642,6 +620,7 @@ def cmd_config(args):
                 print("  debug.max_events (number)")
                 print("  debug.full (true/false)")
                 print("  debug.llm_trace (true/false)")
+                print("  llm.call_delay_sec (0-60)")
                 print("  hermes.enabled (true/false)")
                 print("  hermes.timeout (seconds)")
                 print("  hermes.rate (calls/min)")
@@ -670,11 +649,12 @@ def cmd_config(args):
                 print("  context_budget_task_state (tokens)")
                 print("  context_budget_observations (tokens)")
                 print("  context_budget_inbox (tokens)")
-                print("  context_budget_recent_messages (tokens)")
-                print("  context_recent_message_limit (count)")
+                print("  context_budget_state_window (tokens)")
+                print("  context_state_window_limit (count)")
                 print("  context_observation_window (count)")
                 print("  context_include_inbox_status_hints (true/false)")
                 print("  context_write_build_report (true/false)")
+                print("  llm_call_delay_sec (0-60)")
                 print("  executor.command (docker|local)")
                 print("  docker.enabled (true/false)")
                 print("  docker.image (image tag)")

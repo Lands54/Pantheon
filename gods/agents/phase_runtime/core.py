@@ -6,6 +6,7 @@ Reason -> Action (batch tool calls) -> Observe (finalize decision)
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -17,7 +18,7 @@ from gods.prompts import prompt_registry
 from gods.agents.tool_policy import SOCIAL_TOOLS, get_disabled_tools
 from gods.agents.debug_trace import PulseTraceLogger
 from gods.agents.runtime_policy import resolve_phase_strategy
-from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
+from gods.angelia.facade import inject_inbox_after_action_if_any
 from gods.janus import janus_service, ContextBuildRequest
 from gods.agents.phase_runtime.policy import (
     AgentPhase,
@@ -31,6 +32,7 @@ from gods.agents.phase_runtime.strategies import (
     PHASE_STRATEGY_ITERATIVE_ACTION,
     PHASE_STRATEGIES,
 )
+from gods.mnemosyne import MemoryIntent
 
 
 class AgentPhaseRuntime:
@@ -95,12 +97,31 @@ class AgentPhaseRuntime:
         )
 
     def _append_memory(self, text: str, record_type: str = "llm.response", payload: dict | None = None):
-        """Compatibility wrapper for old test doubles using _append_to_memory(text) signature."""
-        fn = getattr(self.agent, "_append_to_memory")
-        try:
-            fn(text, record_type=record_type, payload=payload or {})
-        except TypeError:
-            fn(text)
+        key = str(record_type or "").strip() or "llm.response"
+        source_kind = "agent"
+        if key.startswith("phase.retry."):
+            source_kind = "phase"
+        elif key.startswith("tool."):
+            source_kind = "tool"
+        elif key.startswith("event."):
+            source_kind = "event"
+        elif key.startswith("inbox."):
+            source_kind = "inbox"
+        elif key.startswith("llm."):
+            source_kind = "llm"
+        if key == "llm.response" and hasattr(self.agent, "_is_transient_llm_error_text"):
+            if bool(self.agent._is_transient_llm_error_text(str(text or ""))):
+                return
+        intent = MemoryIntent(
+            intent_key=key,
+            project_id=self.agent.project_id,
+            agent_id=self.agent.agent_id,
+            source_kind=source_kind,  # type: ignore[arg-type]
+            payload=dict(payload or {}),
+            fallback_text=str(text or ""),
+            timestamp=time.time(),
+        )
+        self.agent._record_intent(intent)
 
     def _finish(self, state):
         """
@@ -493,6 +514,15 @@ class AgentPhaseRuntime:
                         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
                         tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
                         obs = self.agent.execute_tool("finalize", args)
+                        try:
+                            _sleep_sec = int(args.get("sleep_sec", 0) or 0)
+                        except Exception:
+                            _sleep_sec = 0
+                        state["__finalize_control"] = {
+                            "mode": str(args.get("mode", "done") or "done").strip().lower(),
+                            "sleep_sec": _sleep_sec,
+                            "reason": str(args.get("reason", "") or ""),
+                        }
                         state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
                         tracer.event(
                             "tool_executed",
@@ -765,6 +795,15 @@ class AgentPhaseRuntime:
                     args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
                     tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
                     obs = self.agent.execute_tool("finalize", args)
+                    try:
+                        _sleep_sec = int(args.get("sleep_sec", 0) or 0)
+                    except Exception:
+                        _sleep_sec = 0
+                    state["__finalize_control"] = {
+                        "mode": str(args.get("mode", "done") or "done").strip().lower(),
+                        "sleep_sec": _sleep_sec,
+                        "reason": str(args.get("reason", "") or ""),
+                    }
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
                     tracer.event(
                         "tool_executed",

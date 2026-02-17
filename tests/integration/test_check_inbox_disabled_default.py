@@ -24,6 +24,7 @@ def test_check_inbox_disabled_by_default_for_new_agent():
         cfg = client.get("/config").json()
         disabled = cfg["projects"][project_id]["agent_settings"]["a"].get("disabled_tools", [])
         assert "check_inbox" in disabled
+        assert "check_outbox" in disabled
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

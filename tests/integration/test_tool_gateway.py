@@ -41,7 +41,8 @@ def test_tool_gateway_send_and_check_inbox_roundtrip():
             },
         )
         assert send_res.status_code == 200
-        assert "Revelation sent" in send_res.json()["result"]
+        assert send_res.json().get("event_type") == "interaction.message.sent"
+        assert send_res.json().get("to_id") == "receiver"
 
         inbox_res = client.post(
             "/tool-gateway/check_inbox",

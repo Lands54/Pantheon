@@ -1,0 +1,7 @@
+{
+  "memory_llm_response": "$content",
+  "memory_tool_ok": "[[ACTION]] $tool_name (ok) -> $result_compact",
+  "memory_tool_error": "[[ACTION]] $tool_name (error) -> $result_compact",
+  "memory_inbox_notice_contract_commit": "[COMMIT_NOTICE] [title=$title][from=$sender]",
+  "memory_inbox_notice_contract_fully_committed": "[COMMIT_FULLY] [title=$title][from=$sender]"
+}

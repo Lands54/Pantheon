@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from gods.config import ProjectConfig, get_available_agents, runtime_config
+from gods.config import (
+    get_available_agents,
+    runtime_config,
+    snapshot_runtime_config_payload,
+    apply_runtime_config_payload,
+)
 from gods.tools import GODS_TOOLS
 
 
@@ -19,10 +24,7 @@ class ConfigService:
 
     def get_config_payload(self) -> dict[str, Any]:
         # Safety net: ensure current project always resolves.
-        proj = runtime_config.projects.get(runtime_config.current_project)
-        if not proj:
-            runtime_config.projects["default"] = ProjectConfig()
-            proj = runtime_config.projects["default"]
+        _ = snapshot_runtime_config_payload()
 
         return {
             "openrouter_api_key": self.mask_api_key(runtime_config.openrouter_api_key),
@@ -34,18 +36,7 @@ class ConfigService:
         }
 
     def save_config_payload(self, data: dict[str, Any]) -> dict[str, str]:
-        if "openrouter_api_key" in data:
-            incoming = str(data["openrouter_api_key"] or "")
-            # Prevent masked values from GET /config being written back as real secrets.
-            if "*" not in incoming:
-                runtime_config.openrouter_api_key = incoming
-        if "current_project" in data:
-            runtime_config.current_project = data["current_project"]
-        if "projects" in data:
-            for pid, pdata in data["projects"].items():
-                runtime_config.projects[pid] = ProjectConfig(**pdata)
-
-        runtime_config.save()
+        apply_runtime_config_payload(data)
         return {"status": "success"}
 
 

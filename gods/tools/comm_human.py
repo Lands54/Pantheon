@@ -1,15 +1,14 @@
 """Human/social communication tools."""
 from __future__ import annotations
 
-import fcntl
 import json
-import time
-from pathlib import Path
 
 from langchain_core.tools import tool
 
-from gods.inbox import enqueue_message
-from gods.pulse import get_priority_weights, is_inbox_event_enabled
+from gods.angelia import facade as angelia_facade
+from gods.interaction import facade as interaction_facade
+from gods.interaction.contracts import EVENT_MESSAGE_SENT
+from gods.paths import mnemosyne_dir, project_dir
 from gods.tools.comm_common import format_comm_error
 
 
@@ -42,26 +41,25 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
                 project_id,
             )
 
-        weights = get_priority_weights(project_id)
-        trigger = is_inbox_event_enabled(project_id)
-        queued = enqueue_message(
+        weights = angelia_facade.get_priority_weights(project_id)
+        trigger = angelia_facade.is_mail_event_wakeup_enabled(project_id)
+        queued = interaction_facade.submit_message_event(
             project_id=project_id,
-            agent_id=to_id,
-            sender=caller_id,
+            to_id=to_id,
+            sender_id=caller_id,
             title=title,
             content=message,
             msg_type="private",
             trigger_pulse=trigger,
-            pulse_priority=int(weights.get("inbox_event", 100)),
+            priority=int(weights.get("mail_event", 100)),
+            event_type=EVENT_MESSAGE_SENT,
         )
         return (
             f"Revelation sent to {to_id}. "
             f"title={title}, "
-            f"event_id={queued.get('inbox_event_id', '')}, "
-            f"outbox_receipt_id={queued.get('outbox_receipt_id', '')}, "
-            f"outbox_status={queued.get('outbox_status', 'pending')}, "
-            f"pulse_triggered={str(bool(trigger)).lower()}, "
-            "initial_state=pending"
+            f"event_id={queued.get('event_id', '')}, "
+            f"wakeup_sent={str(bool(queued.get('wakeup_sent', False))).lower()}, "
+            "initial_state=queued(interaction)"
         )
     except Exception as e:
         return format_comm_error(
@@ -74,45 +72,58 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
 
 
 @tool
-def send_to_human(message: str, caller_id: str, project_id: str = "default") -> str:
-    """Sacred prayer sent to the human overseer."""
+def finalize(
+    mode: str = "done",
+    sleep_sec: int = 0,
+    reason: str = "",
+    caller_id: str = "default",
+    project_id: str = "default",
+) -> str:
+    """Signal pulse finalization. mode=done|quiescent; quiescent requests bounded sleep cooldown."""
     try:
-        if not message.strip():
-            return format_comm_error(
-                "Message Error",
-                "Prayer message is empty.",
-                "Provide what you need to report or request from human.",
-                caller_id,
-                project_id,
-            )
+        from gods.config import runtime_config
 
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        buffer_dir = project_root / "projects" / project_id / "buffers"
-        buffer_dir.mkdir(parents=True, exist_ok=True)
-        target_buffer = buffer_dir / "human.jsonl"
-        msg_data = {"timestamp": time.time(), "from": caller_id, "type": "prayer", "content": message}
+        proj = runtime_config.projects.get(project_id)
+        enabled = bool(getattr(proj, "finalize_quiescent_enabled", True) if proj else True)
+        min_sec = int(getattr(proj, "finalize_sleep_min_sec", 15) if proj else 15)
+        default_sec = int(getattr(proj, "finalize_sleep_default_sec", 120) if proj else 120)
+        max_sec = int(getattr(proj, "finalize_sleep_max_sec", 1800) if proj else 1800)
+        min_sec = max(5, min(min_sec, 3600))
+        max_sec = max(min_sec, min(max_sec, 24 * 3600))
+        default_sec = max(min_sec, min(default_sec, max_sec))
 
-        with open(target_buffer, "a", encoding="utf-8") as f:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(json.dumps(msg_data, ensure_ascii=False) + "\n")
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
-        return "Prayer sent to the High Overseer (Human)."
-    except Exception as e:
-        return format_comm_error(
-            "Communication Error",
-            str(e),
-            "Retry send_to_human and verify project buffers are writable.",
-            caller_id,
-            project_id,
+        md = str(mode or "done").strip().lower()
+        if md not in {"done", "quiescent"}:
+            md = "done"
+        if md == "quiescent" and not enabled:
+            md = "done"
+
+        req = int(sleep_sec or 0)
+        if req <= 0:
+            applied = default_sec
+        else:
+            applied = max(min_sec, min(req, max_sec))
+        if md == "done":
+            applied = 0
+
+        return json.dumps(
+            {
+                "ok": True,
+                "finalize": {
+                    "mode": md,
+                    "requested_sleep_sec": int(req),
+                    "applied_sleep_sec": int(applied),
+                    "min_sleep_sec": int(min_sec),
+                    "default_sleep_sec": int(default_sec),
+                    "max_sleep_sec": int(max_sec),
+                    "quiescent_enabled": bool(enabled),
+                    "reason": str(reason or ""),
+                },
+            },
+            ensure_ascii=False,
         )
-
-
-@tool
-def finalize(caller_id: str, project_id: str = "default") -> str:
-    """Signal explicit task finalization for the current pulse."""
-    return ""
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
 
 @tool
@@ -131,14 +142,14 @@ def abstain_from_synod(reason: str, caller_id: str = "default") -> str:
 def list_agents(caller_id: str, project_id: str = "default") -> str:
     """List all agents in current project with short role summary from Mnemosyne profiles."""
     try:
-        agents_root = Path("projects") / project_id / "agents"
+        agents_root = project_dir(project_id) / "agents"
         if not agents_root.exists():
             return "No agents found in this project."
 
         results = []
         for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
             agent_id = agent_dir.name
-            md_path = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+            md_path = mnemosyne_dir(project_id) / "agent_profiles" / f"{agent_id}.md"
             role = "No role summary."
             if md_path.exists():
                 text = md_path.read_text(encoding="utf-8").strip()

@@ -1,6 +1,5 @@
 from gods.config import ProjectConfig, runtime_config
-from gods.runtime.docker.manager import DockerRuntimeManager
-from gods.runtime.docker.template import create_args
+from gods.runtime.facade import DockerRuntimeManager, create_docker_args
 
 
 def test_docker_manager_spec_and_mount_args():
@@ -22,7 +21,7 @@ def test_docker_manager_spec_and_mount_args():
         assert spec.container_name.startswith("gods-")
         assert spec.image == "gods-agent-base:py311"
 
-        args = create_args(spec)
+        args = create_docker_args(spec)
         joined = " ".join(args)
         assert "--cpus" in args
         assert "--memory" in args

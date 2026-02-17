@@ -24,17 +24,29 @@ def test_detach_submit_and_list(monkeypatch):
         monkeypatch.setattr("gods.runtime.detach.service.start_job", lambda *a, **k: True)
 
         submit_res = client.post(
-            f"/projects/{project_id}/detach/submit",
-            json={"agent_id": "genesis", "command": "echo hello"},
+            "/events/submit",
+            json={
+                "project_id": project_id,
+                "domain": "runtime",
+                "event_type": "detach_submitted_event",
+                "payload": {"agent_id": "genesis", "command": "echo hello"},
+            },
         )
         assert submit_res.status_code == 200
-        job_id = submit_res.json().get("job_id")
-        assert job_id
+        event_id = submit_res.json().get("event_id")
+        assert event_id
 
-        list_res = client.get(f"/projects/{project_id}/detach/jobs", params={"limit": 50})
+        list_res = client.get(
+            "/events",
+            params={
+                "project_id": project_id,
+                "domain": "runtime",
+                "event_type": "detach_submitted_event",
+                "limit": 50,
+            },
+        )
         assert list_res.status_code == 200
         items = list_res.json().get("items", [])
-        assert any(i.get("job_id") == job_id for i in items)
+        assert any(i.get("event_id") == event_id for i in items)
     finally:
         client.delete(f"/projects/{project_id}")
-

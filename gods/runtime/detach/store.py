@@ -8,13 +8,14 @@ import uuid
 from pathlib import Path
 
 from gods.runtime.detach.models import DetachJob, DetachStatus
+from gods.paths import runtime_dir, runtime_locks_dir
 
 
 _FINAL_STATES = {DetachStatus.STOPPED, DetachStatus.FAILED, DetachStatus.LOST}
 
 
 def _runtime_dir(project_id: str) -> Path:
-    p = Path("projects") / project_id / "runtime"
+    p = runtime_dir(project_id)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -30,7 +31,7 @@ def logs_dir(project_id: str) -> Path:
 
 
 def _lock_path(project_id: str) -> Path:
-    d = _runtime_dir(project_id) / "locks"
+    d = runtime_locks_dir(project_id)
     d.mkdir(parents=True, exist_ok=True)
     return d / "detach_jobs.lock"
 

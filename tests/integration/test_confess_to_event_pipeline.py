@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from gods.config import runtime_config
+from gods.identity import HUMAN_AGENT_ID
 
 
 client = TestClient(app)
@@ -21,35 +22,36 @@ def test_confess_to_event_pipeline():
         _switch_project(project_id)
         client.post("/agents/create", json={"agent_id": "receiver", "directives": "# receiver"})
 
-        res = client.post("/confess", json={"agent_id": "receiver", "title": "hello-title", "message": "hello", "silent": False})
+        res = client.post(
+            "/events/submit",
+            json={
+                "project_id": project_id,
+                "domain": "interaction",
+                "event_type": "interaction.message.sent",
+                "payload": {
+                    "to_id": "receiver",
+                    "sender_id": HUMAN_AGENT_ID,
+                    "title": "hello-title",
+                    "content": "hello",
+                    "msg_type": "confession",
+                    "trigger_pulse": True,
+                },
+            },
+        )
         assert res.status_code == 200
         body = res.json()
-        assert "inbox_event_id" in body
-
-        inbox_res = client.get(
-            f"/projects/{project_id}/inbox/events",
-            params={"agent_id": "receiver", "state": "pending", "limit": 50},
-        )
-        inbox = inbox_res.json().get("items", [])
-        assert any(item.get("content") == "hello" for item in inbox)
-        assert any(item.get("title") == "hello-title" for item in inbox)
+        assert "event_id" in body
 
         outbox_res = client.get(
             f"/projects/{project_id}/inbox/outbox",
-            params={"from_agent_id": "High Overseer", "to_agent_id": "receiver", "limit": 50},
+            params={"from_agent_id": HUMAN_AGENT_ID, "to_agent_id": "receiver", "limit": 50},
         )
         outbox_items = outbox_res.json().get("items", [])
         assert any(item.get("title") == "hello-title" for item in outbox_items)
         assert any(item.get("status") in {"pending", "delivered", "handled"} for item in outbox_items)
 
-        pulse_event_id = str(body.get("pulse_event_id", "") or "").strip()
-        if pulse_event_id:
-            evt_res = client.get(
-                "/angelia/events",
-                params={"project_id": project_id, "agent_id": "receiver", "event_type": "inbox_event", "limit": 50},
-            )
-            items = evt_res.json().get("items", [])
-            assert any(item.get("event_id") == pulse_event_id for item in items)
+        event_id = str(body.get("event_id", "") or "").strip()
+        assert event_id
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

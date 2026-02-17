@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from gods.janus.models import ObservationRecord, TaskStateCard
+from gods.paths import mnemosyne_dir
 
 
 def _mn_root(project_id: str) -> Path:
-    p = Path("projects") / project_id / "mnemosyne"
+    p = mnemosyne_dir(project_id)
     p.mkdir(parents=True, exist_ok=True)
     return p
 

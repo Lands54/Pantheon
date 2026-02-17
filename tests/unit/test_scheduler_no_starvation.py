@@ -1,22 +1,53 @@
 from pathlib import Path
 import shutil
+import time
+from gods.angelia import store
 
-from api import scheduler
-from gods.pulse.queue import enqueue_pulse_event, mark_pulse_event_done
 
-
-def test_scheduler_priority_without_permanent_starvation():
+def test_angelia_priority_without_permanent_starvation():
     project_id = "unit_scheduler_no_starvation"
     try:
-        enqueue_pulse_event(project_id, "a", "timer", priority=10, payload={})
-        hi = enqueue_pulse_event(project_id, "a", "inbox_event", priority=100, payload={"k": 1})
+        now = time.time() + 1.0
+        store.enqueue_event(
+            project_id=project_id,
+            agent_id="a",
+            event_type="timer",
+            priority=10,
+            payload={},
+            dedupe_key="",
+            max_attempts=3,
+            dedupe_window_sec=0,
+        )
+        store.enqueue_event(
+            project_id=project_id,
+            agent_id="a",
+            event_type="mail_event",
+            priority=100,
+            payload={"k": 1, "mail_event_id": "x"},
+            dedupe_key="",
+            max_attempts=3,
+            dedupe_window_sec=0,
+        )
 
-        first = scheduler.pick_pulse_batch(project_id, ["a"], batch_size=1)
-        assert first and first[0][1] == "inbox_event"
-        mark_pulse_event_done(project_id, first[0][2], dropped=False)
+        first = store.pick_next_event(
+            project_id=project_id,
+            agent_id="a",
+            now=now,
+            cooldown_until=0.0,
+            preempt_types={"mail_event", "manual"},
+        )
+        assert first is not None
+        assert first.event_type == "mail_event"
+        store.mark_done(project_id, first.event_id)
 
-        second = scheduler.pick_pulse_batch(project_id, ["a"], batch_size=1)
-        assert second
-        assert second[0][1] in {"timer", "idle_heartbeat"}
+        second = store.pick_next_event(
+            project_id=project_id,
+            agent_id="a",
+            now=now,
+            cooldown_until=0.0,
+            preempt_types={"mail_event", "manual"},
+        )
+        assert second is not None
+        assert second.event_type == "timer"
     finally:
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)

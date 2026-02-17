@@ -12,9 +12,10 @@ Detach 是 `run_command` 之外的后台托管能力，目标是给 Agent 提供
 
 ## 存储
 
-- `projects/{project_id}/runtime/detach_jobs.jsonl`
-- `projects/{project_id}/runtime/detach_logs/{job_id}.log`
-- `projects/{project_id}/runtime/locks/detach_jobs.lock`
+- 事件主账本：`projects/{project_id}/runtime/events.jsonl`
+- 任务运行态：`projects/{project_id}/runtime/detach_jobs.jsonl`
+- 任务日志：`projects/{project_id}/runtime/detach_logs/{job_id}.log`
+- 任务锁：`projects/{project_id}/runtime/locks/detach_jobs.lock`
 
 ## 状态机
 
@@ -39,11 +40,10 @@ Detach 是 `run_command` 之外的后台托管能力，目标是给 Agent 提供
 
 API:
 
-- `POST /projects/{project_id}/detach/submit`
-- `GET /projects/{project_id}/detach/jobs`
-- `POST /projects/{project_id}/detach/jobs/{job_id}/stop`
-- `POST /projects/{project_id}/detach/reconcile`
-- `GET /projects/{project_id}/detach/jobs/{job_id}/logs`
+- `POST /events/submit` (`domain=runtime,event_type=detach_submitted_event`)
+- `GET /events` (`domain=runtime`)
+- `POST /events/submit` (`domain=runtime,event_type=detach_stopping_event`)
+- `POST /events/reconcile`
 
 CLI:
 
@@ -51,4 +51,3 @@ CLI:
 - `./temple.sh -p <project> detach list [--agent ...] [--status ...]`
 - `./temple.sh -p <project> detach stop <job_id>`
 - `./temple.sh -p <project> detach logs <job_id>`
-

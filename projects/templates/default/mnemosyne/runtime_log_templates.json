@@ -1,0 +1,21 @@
+{
+  "memory_event_mail_event": "[EVENT] mail_event stage=$stage event_id=$event_id reason=$event_type",
+  "memory_event_timer": "[EVENT] timer stage=$stage reason=$event_type",
+  "memory_event_manual": "[EVENT] manual stage=$stage reason=$event_type",
+  "memory_event_system": "[EVENT] system stage=$stage reason=$event_type",
+  "memory_inbox_read_ack": "[INBOX_READ_ACK] count=$count ids=$event_ids",
+  "memory_inbox_received_unread": "[INBOX_UNREAD] title=$title from=$sender id=$message_id",
+  "memory_outbox_pending": "[OUTBOX] [title=$title][to=$to_agent_id][status=pending] mid=$message_id",
+  "memory_outbox_delivered": "[OUTBOX] [title=$title][to=$to_agent_id][status=delivered] mid=$message_id",
+  "memory_outbox_handled": "[OUTBOX] [title=$title][to=$to_agent_id][status=handled] mid=$message_id",
+  "memory_outbox_failed": "[OUTBOX] [title=$title][to=$to_agent_id][status=failed] mid=$message_id error=$error_message",
+  "memory_agent_mode_freeform": "[MODE] freeform activated for agent=$agent_id in project=$project_id.",
+  "memory_agent_event_injected": "[EVENT_INJECTED] count=$count inbox event(s) appended after action.",
+  "memory_agent_safety_tool_loop_cap": "[SAFETY] tool loop cap reached for agent=$agent_id in project=$project_id. max_rounds=$max_rounds.",
+  "memory_phase_retry_reason": "[PHASE_RETRY] reason -> $message",
+  "memory_phase_retry_act": "[PHASE_RETRY] act -> $message",
+  "memory_phase_retry_observe": "[PHASE_RETRY] observe -> $message",
+  "memory_tool_ok": "[[ACTION]] $tool_name (ok) -> $result_compact",
+  "memory_tool_error": "[[ACTION]] $tool_name (error) -> $result_compact",
+  "memory_tool_blocked": "[[ACTION]] $tool_name (blocked) -> $result_compact"
+}

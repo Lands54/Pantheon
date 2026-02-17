@@ -16,7 +16,11 @@ class AngeliaMetrics:
 
     def snapshot(self) -> dict[str, int]:
         with self._lock:
-            return dict(self._counters)
+            snap = dict(self._counters)
+        snap.setdefault("EVENT_DUAL_WRITE_COUNT", 0)
+        snap.setdefault("MAIL_EVENT_STATE_MISMATCH_COUNT", 0)
+        snap.setdefault("QUEUE_STALL_TIMEOUT_RECOVERED_COUNT", 0)
+        return snap
 
 
 angelia_metrics = AngeliaMetrics()

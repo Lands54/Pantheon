@@ -311,80 +311,62 @@ class HermesContracts:
         Notify existing committers that a new agent has committed.
         Best-effort: notification failures should not break commit path.
         """
-        sent: list[str] = []
         targets = [str(x).strip() for x in (targets or []) if str(x).strip() and str(x).strip() != committer]
         if not targets:
-            return sent
-
+            return []
         try:
-            from gods.inbox import enqueue_message
-            from gods.pulse import get_priority_weights, is_inbox_event_enabled
+            from gods.angelia.facade import get_priority_weights, is_mail_event_wakeup_enabled
+            from gods.interaction import facade as interaction_facade
         except Exception:
-            return sent
-
-        trigger = bool(is_inbox_event_enabled(project_id))
-        weights = get_priority_weights(project_id)
-        priority = int(weights.get("inbox_event", 100))
+            return []
+        trigger = bool(is_mail_event_wakeup_enabled(project_id))
+        priority = int(get_priority_weights(project_id).get("mail_event", 100))
         msg = (
             f"Hermes Notice: agent '{committer}' committed contract "
             f"'{title}@{version}'."
         )
-        for aid in targets:
-            try:
-                enqueue_message(
-                    project_id=project_id,
-                    agent_id=aid,
-                    sender="Hermes",
-                    title="Contract Commit Notice",
-                    content=msg,
-                    msg_type="contract_notice",
-                    trigger_pulse=trigger,
-                    pulse_priority=priority,
-                )
-                sent.append(aid)
-            except Exception:
-                continue
-        return sent
+        return interaction_facade.submit_hermes_notice(
+            project_id=project_id,
+            targets=targets,
+            sender_id="Hermes",
+            title="Contract Commit Notice",
+            content=msg,
+            msg_type="contract_notice",
+            trigger_pulse=trigger,
+            priority=priority,
+            dedupe_prefix=f"hermes_commit:{title}:{version}:{committer}",
+        )
 
     def _notify_fully_committed(self, project_id: str, title: str, version: str, targets: list[str]) -> list[str]:
         """
         Notify all committers when a contract becomes fully committed.
         Best-effort: notification failures should not break commit path.
         """
-        sent: list[str] = []
         targets = [str(x).strip() for x in (targets or []) if str(x).strip()]
         if not targets:
-            return sent
-
+            return []
         try:
-            from gods.inbox import enqueue_message
-            from gods.pulse import get_priority_weights, is_inbox_event_enabled
+            from gods.angelia.facade import get_priority_weights, is_mail_event_wakeup_enabled
+            from gods.interaction import facade as interaction_facade
         except Exception:
-            return sent
-
-        trigger = bool(is_inbox_event_enabled(project_id))
-        weights = get_priority_weights(project_id)
-        priority = int(weights.get("inbox_event", 100))
+            return []
+        trigger = bool(is_mail_event_wakeup_enabled(project_id))
+        priority = int(get_priority_weights(project_id).get("mail_event", 100))
         msg = (
             f"Hermes Notice: contract '{title}@{version}' is now fully committed "
             f"by all required committers."
         )
-        for aid in targets:
-            try:
-                enqueue_message(
-                    project_id=project_id,
-                    agent_id=aid,
-                    sender="Hermes",
-                    title="Contract Fully Committed",
-                    content=msg,
-                    msg_type="contract_fully_committed",
-                    trigger_pulse=trigger,
-                    pulse_priority=priority,
-                )
-                sent.append(aid)
-            except Exception:
-                continue
-        return sent
+        return interaction_facade.submit_hermes_notice(
+            project_id=project_id,
+            targets=targets,
+            sender_id="Hermes",
+            title="Contract Fully Committed",
+            content=msg,
+            msg_type="contract_fully_committed",
+            trigger_pulse=trigger,
+            priority=priority,
+            dedupe_prefix=f"hermes_full:{title}:{version}",
+        )
 
     def commit(self, project_id: str, title: str, version: str, agent_id: str) -> dict[str, Any]:
         """

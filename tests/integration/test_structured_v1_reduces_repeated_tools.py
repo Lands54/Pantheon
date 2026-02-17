@@ -12,9 +12,12 @@ from gods.config import AgentModelConfig, ProjectConfig, runtime_config
 class _CaptureBrain:
     def __init__(self):
         self.last_recent_count = 0
+        self.last_system_text = ""
 
     def think_with_tools(self, messages, tools, trace_meta=None):
         self.last_recent_count = max(0, len(messages) - 1)
+        if messages:
+            self.last_system_text = str(getattr(messages[0], "content", "") or "")
         return AIMessage(content="done", tool_calls=[])
 
 
@@ -31,8 +34,8 @@ def test_structured_v1_recent_messages_not_fixed_eight():
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
         context_strategy="structured_v1",
-        context_recent_message_limit=40,
-        context_budget_recent_messages=30000,
+        context_state_window_limit=40,
+        context_budget_state_window=30000,
         agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
     )
     try:
@@ -47,7 +50,9 @@ def test_structured_v1_recent_messages_not_fixed_eight():
             "next_step": "",
         }
         agent.process(state)
-        assert brain.last_recent_count > 8
+        assert brain.last_recent_count == 0
+        assert "[STATE_WINDOW]" in brain.last_system_text
+        assert "m29-" in brain.last_system_text
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

@@ -81,8 +81,8 @@ Pantheon uses a "Pulse" to wake up agents. A Pulse is a single execution cycle w
 4. **Sleeps** until the next Pulse.
 
 Event behavior:
-- Inbox delivery is event-driven (`inbox_events.jsonl` + `pulse_events.jsonl`).
-- Empty queue gets a configurable idle heartbeat (`queue_idle_heartbeat_sec`, default `60`).
+- Inbox delivery is event-driven (`events.jsonl`).
+- Idle wakeups are controlled by `angelia_timer_enabled` + `angelia_timer_idle_sec`.
 - `check_inbox` is reserved for debug/audit and is disabled by default.
 
 ---
@@ -97,11 +97,13 @@ The `temple.sh` script is your divine scepter for controlling the simulation.
 |---------|-------------|
 | `./temple.sh project list` | Show all available worlds. |
 | `./temple.sh project switch <name>` | Set the active world context. |
-| `./temple.sh list` | List active/latent agents in current world. |
-| `./temple.sh confess <agent> "msg"` | Send a private instruction to an agent. |
-| `./temple.sh pulse queue -p <project>` | Inspect pulse event queue. |
-| `./temple.sh pulse push <agent> --type manual -p <project>` | Manually enqueue one pulse event. |
-| `./temple.sh inbox events --agent <agent> -p <project>` | Inspect inbox event records. |
+| `./temple.sh agent list` | List agents in current world. |
+| `./temple.sh agent status` | Show scheduler/runtime status for agents. |
+| `./temple.sh msg send --to <agent> --title <title> --content <content>` | Human-friendly message send (internally submits interaction event). |
+| `./temple.sh events submit --domain interaction --type interaction.message.sent --payload '...` | Send a private instruction to an agent via interaction events. |
+| `./temple.sh angelia events --project <project>` | Inspect unified event bus queue. |
+| `./temple.sh angelia enqueue <agent> --type manual --project <project>` | Manually enqueue one wake event. |
+| `./temple.sh inbox outbox --agent <agent> -p <project>` | Inspect sender-side outbox receipts. |
 
 ### Runtime Strategies
 
@@ -116,7 +118,7 @@ You can configure how agents think during a Pulse:
 ./temple.sh --project demo_world config set phase.strategy iterative_action
 
 # Event queue controls
-./temple.sh --project demo_world config set queue_idle_heartbeat_sec 60
+./temple.sh --project demo_world config set angelia_timer_idle_sec 60
 ./temple.sh --project demo_world config set pulse_event_inject_budget 3
 ./temple.sh --project demo_world config set pulse_interrupt_mode after_action
 ```

@@ -39,7 +39,7 @@ class ProtocolSpec(BaseModel):
     name: str
     description: str = ""
     mode: ProtocolMode = "both"
-    status: Literal["active", "deprecated", "disabled"] = "active"
+    status: Literal["active", "disabled"] = "active"
     owner_agent: str = ""
     function_id: str = ""
     provider: ProviderSpec

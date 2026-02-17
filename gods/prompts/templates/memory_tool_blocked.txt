@@ -1,1 +1,1 @@
-[[ACTION]] $tool_name (blocked) -> $result
+[[ACTION]] $tool_name (blocked) -> $result_compact

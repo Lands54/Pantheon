@@ -4,10 +4,6 @@ Handles /projects endpoints for multi-project operations.
 """
 from fastapi import APIRouter, HTTPException, Request
 from api.services import project_service
-from api.scheduler import push_manual_pulse
-from gods.angelia.models import AngeliaEventState
-from gods.angelia import store as angelia_store
-from gods.inbox import InboxMessageState, list_events, list_outbox_receipts
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -83,66 +79,12 @@ async def get_context_reports(project_id: str, agent_id: str, limit: int = 20):
     return project_service.context_reports(project_id, str(agent_id).strip(), limit=max(1, min(limit, 500)))
 
 
-@router.get("/{project_id}/pulse/queue")
-async def get_pulse_queue(project_id: str, agent_id: str = "", status: str = "queued", limit: int = 100):
-    """Deprecated: inspect Angelia queue via legacy pulse endpoint."""
-    project_service.ensure_exists(project_id)
-    st = None
-    if status:
-        try:
-            st = AngeliaEventState(status)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"invalid status: {status}") from e
-    rows = angelia_store.list_events(
-        project_id=project_id,
-        agent_id=(agent_id or ""),
-        state=st,
-        event_type="",
-        limit=max(1, min(limit, 500)),
-    )
-    return {
-        "project_id": project_id,
-        "deprecated": True,
-        "message": "Use /angelia/events instead.",
-        "items": [r.to_dict() for r in rows],
-    }
-
-
-@router.post("/{project_id}/pulse/enqueue")
-async def enqueue_pulse(project_id: str, req: Request):
-    """Deprecated: enqueue Angelia event via legacy pulse endpoint."""
-    project_service.ensure_exists(project_id)
-    data = await req.json()
-    agent_id = str(data.get("agent_id", "")).strip()
-    if not agent_id:
+@router.get("/{project_id}/context/llm-latest")
+async def get_context_llm_latest(project_id: str, agent_id: str):
+    """Get latest full LLM request/response trace row for one agent."""
+    if not str(agent_id or "").strip():
         raise HTTPException(status_code=400, detail="agent_id is required")
-    event_type = str(data.get("event_type", "manual")).strip() or "manual"
-    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
-    return push_manual_pulse(project_id, agent_id, event_type=event_type, payload=payload)
-
-
-@router.get("/{project_id}/inbox/events")
-async def get_inbox_events(project_id: str, agent_id: str = "", state: str = "", limit: int = 100):
-    """Deprecated: inspect inbox events (legacy payload source for Angelia inbox_event)."""
-    project_service.ensure_exists(project_id)
-    st = None
-    if state:
-        try:
-            st = InboxMessageState(state)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"invalid state: {state}") from e
-    rows = list_events(
-        project_id=project_id,
-        agent_id=(agent_id or None),
-        state=st,
-        limit=max(1, min(limit, 500)),
-    )
-    return {
-        "project_id": project_id,
-        "deprecated": True,
-        "message": "Use /angelia/events for wake queue facts; inbox events remain payload source.",
-        "items": [r.to_dict() for r in rows],
-    }
+    return project_service.context_llm_latest(project_id, str(agent_id).strip())
 
 
 @router.get("/{project_id}/inbox/outbox")
@@ -154,15 +96,13 @@ async def get_outbox_receipts(
     limit: int = 100,
 ):
     """Inspect outbox receipts for sender-side message status."""
-    project_service.ensure_exists(project_id)
-    rows = list_outbox_receipts(
+    return project_service.outbox_receipts(
         project_id=project_id,
         from_agent_id=from_agent_id,
         to_agent_id=to_agent_id,
         status=status,
         limit=max(1, min(limit, 500)),
     )
-    return {"project_id": project_id, "items": [r.to_dict() for r in rows]}
 
 
 @router.get("/{project_id}/runtime/agents")
@@ -181,38 +121,3 @@ async def runtime_restart_agent(project_id: str, agent_id: str):
 async def runtime_reconcile(project_id: str):
     """Reconcile runtime containers against project's active_agents list."""
     return project_service.runtime_reconcile(project_id)
-
-
-@router.post("/{project_id}/detach/submit")
-async def detach_submit(project_id: str, req: Request):
-    """Submit one detach background command job."""
-    data = await req.json()
-    agent_id = str(data.get("agent_id", "")).strip()
-    command = str(data.get("command", "")).strip()
-    if not agent_id or not command:
-        raise HTTPException(status_code=400, detail="agent_id and command are required")
-    return project_service.detach_submit(project_id, agent_id, command)
-
-
-@router.get("/{project_id}/detach/jobs")
-async def detach_jobs(project_id: str, agent_id: str = "", status: str = "", limit: int = 50):
-    """List detach jobs in one project."""
-    return project_service.detach_list(project_id, agent_id, status, max(1, min(limit, 500)))
-
-
-@router.post("/{project_id}/detach/jobs/{job_id}/stop")
-async def detach_stop(project_id: str, job_id: str):
-    """Stop one detach job."""
-    return project_service.detach_stop(project_id, job_id)
-
-
-@router.post("/{project_id}/detach/reconcile")
-async def detach_reconcile(project_id: str):
-    """Apply ttl and fifo eviction policy once."""
-    return project_service.detach_reconcile(project_id)
-
-
-@router.get("/{project_id}/detach/jobs/{job_id}/logs")
-async def detach_logs(project_id: str, job_id: str):
-    """Read detach log tail."""
-    return project_service.detach_logs(project_id, job_id)

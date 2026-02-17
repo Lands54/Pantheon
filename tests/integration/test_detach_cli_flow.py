@@ -52,10 +52,19 @@ def test_detach_cli_flow(monkeypatch, capsys):
         out2 = capsys.readouterr().out
         assert "items" in out2
 
-        # read current jobs for stop/logs
-        jobs = client.get(f"/projects/{project_id}/detach/jobs").json().get("items", [])
-        assert jobs
-        job_id = jobs[-1]["job_id"]
+        # read current submitted detach event for stop/logs
+        events = client.get(
+            "/events",
+            params={
+                "project_id": project_id,
+                "domain": "runtime",
+                "event_type": "detach_submitted_event",
+                "limit": 20,
+            },
+        ).json().get("items", [])
+        assert events
+        job_id = str((events[-1].get("payload") or {}).get("job_id", ""))
+        assert job_id
 
         cmd_detach(Namespace(project=project_id, subcommand="stop", job_id=job_id))
         out3 = capsys.readouterr().out
@@ -65,4 +74,3 @@ def test_detach_cli_flow(monkeypatch, capsys):
         capsys.readouterr()
     finally:
         client.delete(f"/projects/{project_id}")
-

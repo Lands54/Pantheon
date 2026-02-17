@@ -1,0 +1,1 @@
+[COMMIT_NOTICE] [title=$title][from=$sender]

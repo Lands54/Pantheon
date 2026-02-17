@@ -1,5 +1,5 @@
 from gods.config import ProjectConfig, runtime_config
-from gods.runtime.execution_backend import DockerBackend, LocalSubprocessBackend, resolve_execution_backend
+from gods.runtime.facade import DockerBackend, LocalSubprocessBackend, resolve_execution_backend
 
 
 def test_execution_backend_resolver_docker_and_local():
