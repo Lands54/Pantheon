@@ -1,10 +1,14 @@
 """
 Integration Tests for API Routes
 """
+import importlib
+
 import pytest
 from fastapi.testclient import TestClient
 from api.app import app
 from api.services import project_service
+
+project_service_module = importlib.import_module("api.services.project_service")
 
 client = TestClient(app)
 
@@ -194,7 +198,7 @@ def test_project_start_fails_when_docker_unavailable(monkeypatch):
         cfg["projects"][test_project_id]["docker_enabled"] = True
         client.post("/config/save", json=cfg)
 
-        monkeypatch.setattr(project_service._docker, "docker_available", lambda: (False, "docker daemon down"))
+        monkeypatch.setattr(project_service_module.runtime_facade, "docker_available", lambda: (False, "docker daemon down"))
 
         response = client.post(f"/projects/{test_project_id}/start")
         assert response.status_code == 503
