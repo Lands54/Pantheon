@@ -1,1 +1,0 @@
-[EVENT] system stage=$stage reason=$event_type

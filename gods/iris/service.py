@@ -11,12 +11,14 @@ from gods.iris.store import (
     list_mailbox_events,
     mark_mailbox_events_handled,
 )
-from gods.mnemosyne import load_memory_policy, record_intent
+from gods.mnemosyne import load_memory_policy, record_intent, render_intent_for_llm_context, MemoryIntent
 from gods.mnemosyne.facade import (
     intent_from_inbox_read,
     intent_from_inbox_received,
+    intent_from_inbox_summary,
     intent_from_outbox_status,
 )
+
 
 def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
     mt = str(msg_type or "").strip().lower()
@@ -75,6 +77,8 @@ def enqueue_message(
             sender=sender,
             message_id=event.event_id,
             msg_type=msg_type,
+            content=content,
+            payload=event.payload,
             intent_key=_resolve_inbox_received_intent_key(project_id, msg_type),
         )
     )
@@ -125,6 +129,83 @@ def enqueue_message(
     }
 
 
+def fetch_mailbox_intents(project_id: str, agent_id: str, budget: int) -> list[MemoryIntent]:
+    """
+    Fetches mailbox events (inbox + outbox status) and summaries as structured MemoryIntent objects.
+    """
+    intents: list[MemoryIntent] = []
+    
+    # 1. Fetch and Deliver New Events
+    events = deliver_mailbox_events(project_id, agent_id, budget)
+    delivered_ids = []
+    
+    for item in events:
+        delivered_ids.append(item.event_id)
+        # Update status to DELIVERED
+        updated = update_status_by_message_id(
+            project_id=project_id,
+            message_id=item.event_id,
+            status=OutboxReceiptStatus.DELIVERED,
+        )
+        # Record outbox status updates for sender awareness
+        for rec in updated:
+            record_intent(
+                intent_from_outbox_status(
+                    project_id=project_id,
+                    agent_id=rec.from_agent_id,
+                    to_agent_id=rec.to_agent_id,
+                    title=rec.title,
+                    message_id=rec.message_id,
+                    status=rec.status.value,
+                )
+            )
+
+        # Create Inbox Received Intent
+        intents.append(
+            intent_from_inbox_received(
+                project_id=project_id,
+                agent_id=agent_id,
+                title=item.title,
+                sender=item.sender,
+                message_id=item.event_id,
+                content=item.content,
+                payload=item.payload,
+                msg_type=item.msg_type,
+                intent_key=_resolve_inbox_received_intent_key(project_id, item.msg_type),
+            )
+        )
+
+    # 2. Inbox Statistics & Context
+    read_recent = list_mailbox_events(
+        project_id=project_id,
+        agent_id=agent_id,
+        state=MailEventState.HANDLED,
+        limit=max(1, min(budget, 10)),
+    )
+    receipts = list_receipts(project_id=project_id, from_agent_id=agent_id, limit=max(1, min(budget * 3, 50)))
+    
+    unread_count = len(
+        list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.QUEUED, limit=1000)
+    ) + len(
+        list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.DEFERRED, limit=1000)
+    )
+    
+    status_count = {"pending": 0, "delivered": 0, "handled": 0, "failed": 0}
+    for r in receipts:
+        if r.status.value in status_count:
+            status_count[r.status.value] += 1
+            
+    summary_data = {
+        "unread_count": unread_count,
+        "read_recent_count": len(read_recent),
+        "sent_stats": status_count,
+        "delivered_ids": delivered_ids
+    }
+    intents.insert(0, intent_from_inbox_summary(project_id, agent_id, summary_data))
+    
+    return intents
+
+
 def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[str, list[str]]:
     events = deliver_mailbox_events(project_id, agent_id, budget)
     if not events:
@@ -149,9 +230,25 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
 
     lines = []
     for item in events:
-        lines.append(
-            f"- [title={item.title}][from={item.sender}][status={item.state.value}] at={item.created_at:.3f} id={item.event_id}: {item.content}"
+        intent = intent_from_inbox_received(
+            project_id=project_id,
+            agent_id=agent_id,
+            title=item.title,
+            sender=item.sender,
+            message_id=item.event_id,
+            content=item.content,
+            payload=item.payload,
+            msg_type=item.msg_type,
+            intent_key=_resolve_inbox_received_intent_key(project_id, item.msg_type),
         )
+        rendered = render_intent_for_llm_context(intent)
+        if rendered:
+            lines.append(str(rendered))
+        else:
+            # Fallback if policy says 'to_llm_context=false' or render failed
+            lines.append(
+                f"- [title={item.title}][from={item.sender}][status={item.state.value}] at={item.created_at:.3f} id={item.event_id}: {item.content}"
+            )
     ids = [item.event_id for item in events]
     read_recent = list_mailbox_events(
         project_id=project_id,
@@ -254,39 +351,53 @@ def build_inbox_overview(project_id: str, agent_id: str, budget: int = 20) -> st
         + f"- sent_pending={status_count['pending']} sent_delivered={status_count['delivered']} "
         + f"sent_handled={status_count['handled']} sent_failed={status_count['failed']}\n"
         + "\n[INBOX UNREAD]\n"
-        + (
-            "\n".join(
-                [
-                    f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}: {x.content}"
-                    for x in unread
-                ]
-            )
-            if unread
-            else "- (none)"
-        )
-        + "\n\n[INBOX READ RECENT]\n"
-        + (
-            "\n".join(
-                [
-                    f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}"
-                    for x in read_recent
-                ]
-            )
-            if read_recent
-            else "- (none)"
-        )
-        + "\n\n[SENT RECEIPTS]\n"
-        + (
-            "\n".join(
-                [
-                    f"- [title={r.title}][to={r.to_agent_id}][status={r.status.value}] mid={r.message_id} updated={r.updated_at:.3f}"
-                    for r in receipts[: max(1, budget)]
-                ]
-            )
-            if receipts
-            else "- (none)"
-        )
     )
+
+    unread_lines = []
+    for x in unread:
+        intent = intent_from_inbox_received(
+            project_id=project_id,
+            agent_id=agent_id,
+            title=x.title,
+            sender=x.sender,
+            message_id=x.event_id,
+            content=x.content,
+            payload=x.payload,
+            msg_type=x.msg_type,
+            intent_key=_resolve_inbox_received_intent_key(project_id, x.msg_type),
+        )
+        rendered = render_intent_for_llm_context(intent)
+        if rendered:
+            unread_lines.append(str(rendered))
+        else:
+            unread_lines.append(
+                f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}: {x.content}"
+            )
+
+    text += ("\n".join(unread_lines) if unread_lines else "- (none)")
+    text += "\n\n[INBOX READ RECENT]\n"
+    text += (
+        "\n".join(
+            [
+                f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}"
+                for x in read_recent
+            ]
+        )
+        if read_recent
+        else "- (none)"
+    )
+    text += "\n\n[SENT RECEIPTS]\n"
+    text += (
+        "\n".join(
+            [
+                f"- [title={r.title}][to={r.to_agent_id}][status={r.status.value}] mid={r.message_id} updated={r.updated_at:.3f}"
+                for r in receipts[: max(1, budget)]
+            ]
+        )
+        if receipts
+        else "- (none)"
+    )
+
     return text
 
 

@@ -34,6 +34,14 @@
 2. 禁止 `LLM -> Store` 直写。
 3. 禁止新增 legacy/compat 迁移逻辑。
 
+## 6. Agent Runtime 策略
+1. Agent 执行引擎统一为 LangGraph Runtime。
+2. 策略仅允许：
+   - `react_graph`
+   - `freeform`
+3. 两种策略均遵循 `Module -> Event -> LLM -> Tool -> Event -> Module` 闭环，不允许旁路。
+4. 旧 phase runtime 与旧策略名已移除。
+
 ```mermaid
 flowchart LR
   subgraph Producer["事件生产方"]

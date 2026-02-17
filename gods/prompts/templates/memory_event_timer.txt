@@ -1,1 +1,0 @@
-[EVENT] timer stage=$stage reason=$event_type

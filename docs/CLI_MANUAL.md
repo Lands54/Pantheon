@@ -197,3 +197,16 @@ Agent 管理与运行状态命令。
 2. `events list/retry/ack` 对应前端 `Events` 页的筛选与操作。
 3. `msg send` 对应前端 `Message Center` 的发送面板。
 4. `projects/{id}/context/*` 与 `inbox/outbox` 对应前端 `Agent Detail` 的工作记忆视图。
+
+## 8. Agent Strategy 命令
+
+1. 查看单个 agent 策略：
+`./temple.sh agent strategy get --agent genesis --project default`
+2. 设置单个 agent 策略：
+`./temple.sh agent strategy set --agent genesis --strategy react_graph --project default`
+3. 列出项目内策略覆盖：
+`./temple.sh agent strategy list --project default`
+
+说明：
+1. 允许值仅 `react_graph|freeform`。
+2. 旧策略值 `strict_triad|iterative_action` 已移除。

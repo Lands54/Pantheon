@@ -47,7 +47,6 @@ def _setup_config(project_id: str, agent_id: str):
             "peer": AgentModelConfig(disabled_tools=[]),
         },
         simulation_enabled=False,
-        phase_mode_enabled=True,
         phase_strategy="freeform",
         tool_loop_max=8,
         context_strategy="structured_v1",

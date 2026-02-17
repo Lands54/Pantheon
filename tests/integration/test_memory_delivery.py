@@ -54,8 +54,6 @@ def test_memory_is_delivered_to_next_pulse():
         active_agents=[agent_id],
         agent_settings={agent_id: AgentModelConfig(model="stepfun/step-3.5-flash:free", disabled_tools=[])},
         simulation_enabled=False,
-        phase_mode_enabled=True,
-        phase_single_tool_call=True,
         tool_loop_max=3,
         memory_compact_trigger_tokens=120000,
         memory_compact_strategy="rule_based",
@@ -91,8 +89,8 @@ def test_memory_is_delivered_to_next_pulse():
         second_prompt = fake_brain.system_prompts[-1]
         assert ("inspect marker" in second_prompt) or ("done" in second_prompt)
 
-        # Also verify phase runtime state persistence file exists.
-        assert (agent_dir / "runtime_state.json").exists()
+        # Legacy phase runtime state file has been removed in LangGraph runtime.
+        assert not (agent_dir / "runtime_state.json").exists()
     finally:
         if old_project is None:
             runtime_config.projects.pop(project_id, None)

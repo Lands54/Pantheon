@@ -18,7 +18,14 @@ class MemoryTemplateMissingError(RuntimeError):
     """Raised when a configured template cannot be resolved."""
 
 
-_RULE_KEYS = {"to_chronicle", "to_runtime_log", "chronicle_template_key", "runtime_log_template_key"}
+_RULE_KEYS = {
+    "to_chronicle",
+    "to_runtime_log",
+    "to_llm_context",
+    "chronicle_template_key",
+    "runtime_log_template_key",
+    "llm_context_template_key",
+}
 
 
 def _mn_root(project_id: str) -> Path:
@@ -79,14 +86,18 @@ def default_memory_policy() -> dict[str, dict[str, Any]]:
     def _rule(
         to_chronicle: bool,
         to_runtime_log: bool,
+        to_llm_context: bool = False,
         chronicle_key: str = "",
         runtime_key: str = "",
+        llm_context_key: str = "",
     ) -> dict[str, Any]:
         return {
             "to_chronicle": bool(to_chronicle),
             "to_runtime_log": bool(to_runtime_log),
+            "to_llm_context": bool(to_llm_context),
             "chronicle_template_key": str(chronicle_key or ""),
             "runtime_log_template_key": str(runtime_key or ""),
+            "llm_context_template_key": str(llm_context_key or ""),
         }
 
     policy: dict[str, dict[str, Any]] = {
@@ -112,14 +123,14 @@ def default_memory_policy() -> dict[str, dict[str, Any]]:
         "event.detach_reconciled_event": _rule(False, True),
         "event.detach_lost_event": _rule(False, True),
         "inbox.received.unread": _rule(False, True),
-        "inbox.notice.contract_commit_notice": _rule(True, True, "memory_inbox_notice_contract_commit", ""),
-        "inbox.notice.contract_fully_committed": _rule(True, True, "memory_inbox_notice_contract_fully_committed", ""),
+        "inbox.notice.contract_commit_notice": _rule(True, True, True, "memory_inbox_notice_contract_commit", "", "memory_inbox_notice_contract_commit"),
+        "inbox.notice.contract_fully_committed": _rule(True, True, True, "memory_inbox_notice_contract_fully_committed", "", "memory_inbox_notice_contract_fully_committed"),
         "inbox.read_ack": _rule(False, True),
         "outbox.sent.pending": _rule(False, True),
         "outbox.sent.delivered": _rule(False, True),
         "outbox.sent.handled": _rule(False, True),
         "outbox.sent.failed": _rule(False, True),
-        "llm.response": _rule(True, False, "memory_llm_response", ""),
+        "llm.response": _rule(True, False, False, "memory_llm_response", ""),
         "agent.mode.freeform": _rule(False, True),
         "agent.safety.tool_loop_cap": _rule(False, True),
         "agent.event.injected": _rule(False, True),
@@ -128,9 +139,9 @@ def default_memory_policy() -> dict[str, dict[str, Any]]:
         "phase.retry.observe": _rule(False, True),
     }
     for tool_name in tool_intent_names():
-        policy[f"tool.{tool_name}.ok"] = _rule(True, False, "memory_tool_ok", "")
-        policy[f"tool.{tool_name}.error"] = _rule(True, True, "memory_tool_error", "")
-        policy[f"tool.{tool_name}.blocked"] = _rule(False, True, "", "")
+        policy[f"tool.{tool_name}.ok"] = _rule(True, False, False, "memory_tool_ok", "")
+        policy[f"tool.{tool_name}.error"] = _rule(True, True, True, "memory_tool_error", "")
+        policy[f"tool.{tool_name}.blocked"] = _rule(False, True, True, "", "")
     return policy
 
 
@@ -139,8 +150,10 @@ def default_intent_rule(intent_key: str) -> dict[str, Any]:
     return {
         "to_chronicle": False,
         "to_runtime_log": True,
+        "to_llm_context": False,
         "chronicle_template_key": "",
         "runtime_log_template_key": "",
+        "llm_context_template_key": "",
     }
 
 
@@ -164,8 +177,10 @@ def _normalize_rule(rule: dict[str, Any], *, intent_key: str, project_id: str) -
     return {
         "to_chronicle": bool(rule.get("to_chronicle", False)),
         "to_runtime_log": bool(rule.get("to_runtime_log", False)),
+        "to_llm_context": bool(rule.get("to_llm_context", False)),
         "chronicle_template_key": str(rule.get("chronicle_template_key", "") or "").strip(),
         "runtime_log_template_key": str(rule.get("runtime_log_template_key", "") or "").strip(),
+        "llm_context_template_key": str(rule.get("llm_context_template_key", "") or "").strip(),
     }
 
 
@@ -185,7 +200,10 @@ def ensure_memory_policy(project_id: str) -> Path:
         elif not isinstance(raw.get(k), dict):
             raise MemoryPolicyMissingError(f"memory policy key must be object for '{k}' in project={project_id}")
         else:
-            _normalize_rule(raw[k], intent_key=k, project_id=project_id)
+            normalized = _normalize_rule(raw[k], intent_key=k, project_id=project_id)
+            if normalized != raw[k]:
+                raw[k] = normalized
+                changed = True
     if changed:
         path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     return path

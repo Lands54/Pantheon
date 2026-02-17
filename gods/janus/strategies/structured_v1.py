@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gods.iris.facade import build_inbox_overview
+from gods.mnemosyne import render_intent_for_llm_context
 from gods.janus.journal import list_observations, read_profile, read_task_state
 from gods.janus.models import ContextBuildRequest, ContextBuildResult
 from gods.janus.strategy_base import ContextStrategy
@@ -136,41 +136,27 @@ class StructuredV1ContextStrategy(ContextStrategy):
         obs_rows = list_observations(req.project_id, req.agent_id, limit=max(obs_window * 3, 30))
         selected = _pick_observations(obs_rows, obs_window)
 
-        overview = build_inbox_overview(req.project_id, req.agent_id, budget=max(5, obs_window))
-        inbox_text = (
-            f"{overview}\n\n"
-            "[INBOX ACCESS HINT]\n"
-            + (req.inbox_hint or "")
-        )
-        if include_inbox_hints:
-            inbox_text = (
-                f"{inbox_text}\n"
-                "Inbox State Note:\n"
-                "- Messages delivered in this pulse are already injected into context.\n"
-                "- Delivered message IDs will be marked handled after pulse completion by scheduler.\n"
-                "- Do not repeatedly poll inbox for confirmation."
-            )
+        triggers = req.state.get("triggers", [])
+        trigger_text_lines = []
+        for t in triggers:
+            rendered = render_intent_for_llm_context(t)
+            if rendered:
+                trigger_text_lines.append(f"- {rendered}")
+        trigger_text = "\n".join(trigger_text_lines) if trigger_text_lines else "(no specific trigger events)"
+
+        mailbox_intents = req.state.get("mailbox", [])
+        mailbox_lines = []
+        for intent in mailbox_intents:
+            rendered = render_intent_for_llm_context(intent)
+            if rendered:
+                mailbox_lines.append(str(rendered))
+        mailbox_block = "\n".join(mailbox_lines) if mailbox_lines else "(no mailbox updates in this pulse)"
 
         task_block = _clip_by_tokens(_render_task_state(task_state), b_task)
         obs_block = _clip_by_tokens(_render_observations(selected), b_obs)
-        # Keep four logical sections under separate soft budgets before final clip.
-        parts = inbox_text.split("\n\n")
-        summary_part = parts[0] if len(parts) > 0 else ""
-        unread_part = parts[1] if len(parts) > 1 else ""
-        read_part = parts[2] if len(parts) > 2 else ""
-        receipts_part = parts[3] if len(parts) > 3 else ""
-        tail_parts = "\n\n".join(parts[4:]) if len(parts) > 4 else ""
-        inbox_block = (
-            _clip_by_tokens(summary_part, max(200, b_inbox_unread // 2))
-            + "\n\n"
-            + _clip_by_tokens(unread_part, b_inbox_unread)
-            + "\n\n"
-            + _clip_by_tokens(read_part, b_inbox_read_recent)
-            + "\n\n"
-            + _clip_by_tokens(receipts_part, b_inbox_receipts)
-            + ("\n\n" + _clip_by_tokens(tail_parts, max(200, b_inbox // 4)) if tail_parts else "")
-        )
-        inbox_block = _clip_by_tokens(inbox_block, b_inbox)
+        inbox_hint_block = str(req.inbox_hint or "").strip()
+
+
 
         state_window_block, state_window_count, state_window_tokens = _render_state_window(
             req.state.get("messages", []) or [],
@@ -188,11 +174,15 @@ class StructuredV1ContextStrategy(ContextStrategy):
             f"# COMBINED MEMORY\n{combined_memory_block}",
             f"# IDENTITY\n{_clip_by_tokens(profile, 3000)}\nProject: {req.project_id}",
             f"# TASK STATE\n{task_block}",
-            f"# INBOX\n{inbox_block}",
+            f"# OBSERVATIONS\n{obs_block}",
+            f"# TRIGGER\n{trigger_text}",
+            f"# MAILBOX\n{mailbox_block}",
             f"# DIRECTIVES\n{req.directives}",
             f"# PHASE\nCurrent Phase: {req.phase_name}\n{req.phase_block}",
             f"# TOOLS\n{req.tools_desc}",
         ]
+        if include_inbox_hints and inbox_hint_block:
+            system_blocks.insert(5, f"# INBOX_HINT\n{inbox_hint_block}")
 
         usage = {
             "chronicle_tokens": _tok_len(chronicle),
@@ -200,13 +190,13 @@ class StructuredV1ContextStrategy(ContextStrategy):
             "state_window_tokens": state_window_tokens,
             "state_window_messages": state_window_count,
             "task_tokens": _tok_len(task_block),
-            "obs_tokens_unused": _tok_len(obs_block),
-            "inbox_tokens": _tok_len(inbox_block),
+            "obs_tokens": _tok_len(obs_block),
+            "mailbox_tokens": _tok_len(mailbox_block),
         }
         preview = {
             "mode": self.name,
             "state_window_messages": state_window_count,
-            "selected_observations_unused": len(selected),
+            "selected_observations": len(selected),
             "phase": req.phase_name,
         }
         return ContextBuildResult(

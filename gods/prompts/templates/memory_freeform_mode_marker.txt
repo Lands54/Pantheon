@@ -1,1 +1,0 @@
-[MODE] freeform activated for agent=$agent_id in project=$project_id.

@@ -111,6 +111,8 @@ def intent_from_inbox_received(
     title: str,
     sender: str,
     message_id: str,
+    content: str = "",
+    payload: dict[str, Any] | None = None,
     msg_type: str = "",
     intent_key: str = "inbox.received.unread",
 ) -> MemoryIntent:
@@ -119,8 +121,29 @@ def intent_from_inbox_received(
         project_id=project_id,
         agent_id=agent_id,
         source_kind="inbox",
-        payload={"title": title, "sender": sender, "message_id": message_id, "msg_type": str(msg_type or "")},
-        fallback_text=f"[INBOX_UNREAD] title={title} from={sender} id={message_id}",
+        payload={
+            "title": title,
+            "sender": sender,
+            "message_id": message_id,
+            "msg_type": str(msg_type or ""),
+            "content": str(content or ""),
+            "payload": payload or {},
+        },
+        fallback_text=f"[INBOX_UNREAD] title={title} from={sender} id={message_id}\n{str(content or '')[:200]}",
+        timestamp=time.time(),
+    )
+
+
+def intent_from_inbox_summary(project_id: str, agent_id: str, summary_data: dict[str, Any]) -> MemoryIntent:
+    payload = dict(summary_data or {})
+    unread_count = int(payload.get("unread_count", 0) or 0)
+    return MemoryIntent(
+        intent_key="inbox.summary",
+        project_id=project_id,
+        agent_id=agent_id,
+        source_kind="inbox",
+        payload=payload,
+        fallback_text=f"[INBOX_SUMMARY] unread={unread_count}",
         timestamp=time.time(),
     )
 

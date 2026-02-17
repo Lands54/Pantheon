@@ -37,7 +37,6 @@ def test_inbox_can_appear_in_next_pulse_when_reusing_same_state():
     old = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
-        phase_mode_enabled=True,
         phase_strategy="freeform",
         tool_loop_max=2,
         context_strategy="structured_v1",
@@ -99,7 +98,6 @@ def test_inbox_is_persisted_across_fresh_pulses_with_state_window_store():
     old = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
-        phase_mode_enabled=True,
         phase_strategy="freeform",
         tool_loop_max=2,
         context_strategy="structured_v1",

@@ -36,6 +36,9 @@ PATTERNS = [
     ("removed_confess_route", re.compile(r"@router\.post\(\"/confess\"\)|/confess\b"), {"tests", "docs", "scripts"}),
     ("removed_send_to_human_tool", re.compile(r"\bsend_to_human\b"), {"docs", "tests", "scripts"}),
     ("forbid_hermes_direct_iris_enqueue", re.compile(r"from\s+gods\.iris\.facade\s+import\s+enqueue_message"), {"scripts", "tests"}),
+    ("removed_phase_runtime_module", re.compile(r"gods\.agents\.phase_runtime"), {"docs", "scripts"}),
+    ("removed_legacy_phase_strategy_names", re.compile(r"\b(strict_triad|iterative_action)\b"), {"docs", "scripts"}),
+    ("removed_phase_mode_enabled", re.compile(r"\bphase_mode_enabled\b"), {"docs", "scripts"}),
 ]
 
 

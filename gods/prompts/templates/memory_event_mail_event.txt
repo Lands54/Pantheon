@@ -1,1 +1,0 @@
-[EVENT] mail_event stage=$stage event_id=$event_id reason=$event_type

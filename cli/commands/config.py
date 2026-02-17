@@ -58,17 +58,9 @@ def cmd_config(args):
             print(f"   Observation Window: {proj.get('context_observation_window', 30)}")
             print(f"   Include Inbox Status Hints: {proj.get('context_include_inbox_status_hints', True)}")
             print(f"   Write Build Report: {proj.get('context_write_build_report', True)}")
-            print(f"\n🧠 Phase Runtime:")
-            print(f"   Enabled: {proj.get('phase_mode_enabled', True)}")
-            print(f"   Strategy: {proj.get('phase_strategy', 'strict_triad')}")
-            print(f"   Interaction Max: {proj.get('phase_interaction_max', 3)}")
-            print(f"   Act Require Tool Call: {proj.get('phase_act_require_tool_call', True)}")
-            print(f"   Act Require Productive Tool: {proj.get('phase_act_require_productive_tool', True)}")
-            print(f"   Act Productive From Interaction: {proj.get('phase_act_productive_from_interaction', 2)}")
-            print(f"   Repeat Limit: {proj.get('phase_repeat_limit', 2)}")
-            print(f"   Explore Budget: {proj.get('phase_explore_budget', 3)}")
-            print(f"   No Progress Limit: {proj.get('phase_no_progress_limit', 3)}")
-            print(f"   Single Tool Call: {proj.get('phase_single_tool_call', True)}")
+            print(f"\n🧠 Agent Runtime:")
+            print(f"   Strategy: {proj.get('phase_strategy', 'react_graph')}")
+            print("   Allowed: react_graph, freeform")
             print(f"\n🪵 Debug Trace:")
             print(f"   Enabled: {proj.get('debug_trace_enabled', True)}")
             print(f"   Max Events Per Pulse: {proj.get('debug_trace_max_events', 200)}")
@@ -110,8 +102,6 @@ def cmd_config(args):
                 print(f"      Model: {settings.get('model', 'default')}")
                 if settings.get("phase_strategy") is not None:
                     print(f"      Phase Strategy Override: {settings.get('phase_strategy')}")
-                if settings.get("phase_mode_enabled") is not None:
-                    print(f"      Phase Enabled Override: {settings.get('phase_mode_enabled')}")
                 if settings.get("context_strategy") is not None:
                     print(f"      Context Strategy Override: {settings.get('context_strategy')}")
                 if settings.get("context_token_budget_total") is not None:
@@ -345,37 +335,11 @@ def cmd_config(args):
                     return
 
             elif parts[0] == "phase" and len(parts) >= 2:
-                if parts[1] == "enabled":
-                    data["projects"][pid]["phase_mode_enabled"] = args.value.lower() == "true"
-                elif parts[1] == "strategy":
-                    if args.value not in ("strict_triad", "iterative_action", "freeform"):
-                        print("❌ phase.strategy must be one of: strict_triad, iterative_action, freeform")
+                if parts[1] == "strategy":
+                    if args.value not in ("react_graph", "freeform"):
+                        print("❌ phase.strategy must be one of: react_graph, freeform")
                         return
                     data["projects"][pid]["phase_strategy"] = args.value
-                elif parts[1] == "interaction_max":
-                    value = int(args.value)
-                    if value < 1:
-                        print("❌ phase.interaction_max must be >= 1")
-                        return
-                    data["projects"][pid]["phase_interaction_max"] = value
-                elif parts[1] == "act_require_tool":
-                    data["projects"][pid]["phase_act_require_tool_call"] = args.value.lower() == "true"
-                elif parts[1] == "act_require_productive":
-                    data["projects"][pid]["phase_act_require_productive_tool"] = args.value.lower() == "true"
-                elif parts[1] == "act_productive_from":
-                    value = int(args.value)
-                    if value < 1:
-                        print("❌ phase.act_productive_from must be >= 1")
-                        return
-                    data["projects"][pid]["phase_act_productive_from_interaction"] = value
-                elif parts[1] == "repeat_limit":
-                    data["projects"][pid]["phase_repeat_limit"] = int(args.value)
-                elif parts[1] == "explore_budget":
-                    data["projects"][pid]["phase_explore_budget"] = int(args.value)
-                elif parts[1] == "no_progress_limit":
-                    data["projects"][pid]["phase_no_progress_limit"] = int(args.value)
-                elif parts[1] == "single_tool":
-                    data["projects"][pid]["phase_single_tool_call"] = args.value.lower() == "true"
                 else:
                     print(f"❌ Unknown phase key: {parts[1]}")
                     return
@@ -506,12 +470,10 @@ def cmd_config(args):
                 if setting == "model":
                     data["projects"][pid]["agent_settings"][agent_id]["model"] = args.value
                 elif setting == "phase_strategy":
-                    if args.value not in ("strict_triad", "iterative_action", "freeform"):
-                        print("❌ agent.<id>.phase_strategy must be one of: strict_triad, iterative_action, freeform")
+                    if args.value not in ("react_graph", "freeform"):
+                        print("❌ agent.<id>.phase_strategy must be one of: react_graph, freeform")
                         return
                     data["projects"][pid]["agent_settings"][agent_id]["phase_strategy"] = args.value
-                elif setting == "phase_enabled":
-                    data["projects"][pid]["agent_settings"][agent_id]["phase_mode_enabled"] = args.value.lower() == "true"
                 elif setting == "context_strategy":
                     if args.value not in ("structured_v1",):
                         print("❌ agent.<id>.context_strategy must be: structured_v1")
@@ -606,16 +568,7 @@ def cmd_config(args):
                 print("  pulse.inject_budget (number)")
                 print("  pulse.interrupt_mode (after_action)")
                 print("  pulse.weights ({\"mail_event\":100,...})")
-                print("  phase.enabled (true/false)")
-                print("  phase.strategy (strict_triad|iterative_action|freeform)")
-                print("  phase.interaction_max (number)")
-                print("  phase.act_require_tool (true/false)")
-                print("  phase.act_require_productive (true/false)")
-                print("  phase.act_productive_from (number)")
-                print("  phase.repeat_limit (number)")
-                print("  phase.explore_budget (number)")
-                print("  phase.no_progress_limit (number)")
-                print("  phase.single_tool (true/false)")
+                print("  phase.strategy (react_graph|freeform)")
                 print("  debug.trace (true/false)")
                 print("  debug.max_events (number)")
                 print("  debug.full (true/false)")
@@ -675,8 +628,7 @@ def cmd_config(args):
                 print("  agent.<agent_id>.model (model name)")
                 print("  agent.<agent_id>.context_strategy (structured_v1)")
                 print("  agent.<agent_id>.context_token_budget_total (tokens)")
-                print("  agent.<agent_id>.phase_strategy (strict_triad|iterative_action|freeform)")
-                print("  agent.<agent_id>.phase_enabled (true/false)")
+                print("  agent.<agent_id>.phase_strategy (react_graph|freeform)")
                 print("  agent.<agent_id>.disabled_tools (comma-separated, e.g. check_inbox,send_message)")
                 print("  agent.<agent_id>.disable_tool (single tool name, append)")
                 print("  agent.<agent_id>.enable_tool (single tool name, remove)")

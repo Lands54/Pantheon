@@ -146,6 +146,40 @@ def pick_next_event(
     return AngeliaEvent.from_dict(raw)
 
 
+def pick_batch_events(
+    project_id: str,
+    agent_id: str,
+    now: float,
+    cooldown_until: float,
+    preempt_types: set[str],
+    limit: int = 10,
+) -> list[AngeliaEvent]:
+    rows = events_bus.list_events(
+        project_id=project_id,
+        state=events_bus.EventState.QUEUED,
+        limit=5000,
+        agent_id=agent_id,
+    )
+    picked: list[AngeliaEvent] = []
+    
+    # Simple FIFO within priority buckets is handled by list_events (if it sorts)
+    # Angelia events usually sort by priority DESC, created_at ASC
+    
+    for row in rows:
+        if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
+            continue
+        
+        ok = events_bus.transition_state(project_id, row.event_id, events_bus.EventState.PICKED)
+        if ok:
+            raw = row.to_dict()
+            raw["state"] = events_bus.EventState.PICKED.value
+            raw["agent_id"] = str((row.payload or {}).get("agent_id", ""))
+            picked.append(AngeliaEvent.from_dict(raw))
+            if len(picked) >= limit:
+                break
+                
+    return picked
+
 def mark_processing(project_id: str, event_id: str) -> bool:
     return bool(events_bus.transition_state(project_id, event_id, events_bus.EventState.PROCESSING))
 

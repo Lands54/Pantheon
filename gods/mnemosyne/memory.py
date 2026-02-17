@@ -75,11 +75,14 @@ def _resolve_policy(intent: MemoryIntent) -> MemorySinkPolicy:
         raise MemoryPolicyMissingError(f"no memory policy for intent_key='{key}' in project={intent.project_id}")
     tpl_chronicle = str(rule.get("chronicle_template_key", "") or "").strip()
     tpl_runtime = str(rule.get("runtime_log_template_key", "") or "").strip()
+    tpl_llm = str(rule.get("llm_context_template_key", "") or "").strip()
     sink = MemorySinkPolicy(
         to_chronicle=bool(rule.get("to_chronicle", False)),
         to_runtime_log=bool(rule.get("to_runtime_log", False)),
+        to_llm_context=bool(rule.get("to_llm_context", False)),
         chronicle_template_key=tpl_chronicle,
         runtime_log_template_key=tpl_runtime,
+        llm_context_template_key=tpl_llm,
     )
     if sink.to_chronicle and not sink.chronicle_template_key:
         raise MemoryTemplateMissingError(
@@ -128,6 +131,15 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
         else:
             runtime_text = _render_runtime_fallback(intent)
 
+    llm_context_rendered: str | None = None
+    if sink.to_llm_context:
+        # Default to fallback if no specific template is set but enabled.
+        if sink.llm_context_template_key:
+            llm_context_rendered = _render_template(intent, "llm_context", sink.llm_context_template_key)
+        else:
+            # For context, we often prefer a short fallback if template missing.
+            llm_context_rendered = str(intent.fallback_text or "")
+
     chronicle_written = False
     if sink.to_chronicle and str(chronicle_text or "").strip():
         _append_chronicle(intent.project_id, intent.agent_id, chronicle_text)
@@ -166,6 +178,7 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
         runtime_log_written=runtime_written,
         text=chronicle_text or runtime_text,
         policy=sink,
+        llm_context_rendered=llm_context_rendered,
     )
     return {
         "intent_key": decision.intent_key,
@@ -179,5 +192,21 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
             "to_runtime_log": decision.policy.to_runtime_log,
             "chronicle_template_key": decision.policy.chronicle_template_key,
             "runtime_log_template_key": decision.policy.runtime_log_template_key,
+            "llm_context_template_key": decision.policy.llm_context_template_key,
         },
+        "llm_context_rendered": decision.llm_context_rendered,
     }
+
+def render_intent_for_llm_context(intent: MemoryIntent) -> str | None:
+    """
+    Renders an intent for LLM context purely based on policy, without persisting.
+    """
+    try:
+        sink = _resolve_policy(intent)
+        if not sink.to_llm_context:
+            return None
+        if sink.llm_context_template_key:
+            return _render_template(intent, "llm_context", sink.llm_context_template_key)
+        return str(intent.fallback_text or "")
+    except Exception:
+        return None

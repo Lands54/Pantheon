@@ -1,28 +1,17 @@
-"""
-Gods Platform - Agent Node Definitions.
-"""
-import uuid
+"""Gods Platform - Agent Node Definitions."""
 import re
 import time
-from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from gods.state import GodsState
 from gods.agents.brain import GodBrain
-from gods.prompts import prompt_registry
 from gods.tools import GODS_TOOLS
 from gods.tools.communication import reset_inbox_guard
 from gods.config import runtime_config
 from gods.mnemosyne import MemoryIntent, record_intent
-from gods.mnemosyne.intent_builders import (
-    intent_from_agent_marker,
-    intent_from_llm_response,
-    intent_from_tool_result,
-)
-from gods.agents.phase_runtime import AgentPhaseRuntime
+from gods.mnemosyne.intent_builders import intent_from_tool_result
+from gods.agents.runtime import run_agent_runtime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
-from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
 from gods.paths import agent_dir, mnemosyne_dir
-from gods.angelia.facade import inject_inbox_after_action_if_any
-from gods.janus import janus_service, record_observation, ContextBuildRequest, ObservationRecord
+from gods.janus import record_observation, ObservationRecord
 from gods.janus.journal import profile_path
 from gods.agents.state_window_store import load_state_window, save_state_window
 from pathlib import Path
@@ -111,136 +100,18 @@ class GodAgent:
                 "- Do NOT attempt inbox/social actions.\n"
                 "- Focus only on local implementation, verification, and completion."
             )
-        return prompt_registry.render(
-            "agent_social_protocol",
-            project_id=self.project_id,
-            agent_id=self.agent_id,
-        )
+        # Standard protocol is now implicit or handled by context strategy; 
+        # return empty or specific overrides if needed.
+        # For now, we return a simple placeholder or rely on system prompt.
+        return ""
 
     def process(self, state: GodsState) -> GodsState:
         """
-        Main execution loop for the agent, handling either phase runtime or freeform autonomous pulses.
+        Main execution loop for the agent via unified LangGraph runtime.
         """
         self._merge_state_window_if_needed(state)
-        proj = runtime_config.projects.get(self.project_id)
-        phase_mode_enabled = resolve_phase_mode_enabled(self.project_id, self.agent_id)
-        phase_strategy = resolve_phase_strategy(self.project_id, self.agent_id)
-        # Freeform mode: bypass phase state-machine and use unconstrained agent<->tool loop.
-        if phase_mode_enabled and phase_strategy != "freeform":
-            inbox_msgs = self._build_inbox_context_hint()
-            local_memory = self._load_local_memory()
-            simulation_directives = self._build_behavior_directives()
-            print(f"[{self.agent_id}] Pulsing (Phase Runtime)...")
-            out = AgentPhaseRuntime(self).run(
-                state=state,
-                simulation_directives=simulation_directives,
-                local_memory=local_memory,
-                inbox_msgs=inbox_msgs,
-            )
-            return self._return_with_state_window(out)
-
-        # --- Freeform loop ---
-        max_tool_rounds = int(getattr(proj, "tool_loop_max", 8) if proj else 8)
-        max_tool_rounds = max(1, min(max_tool_rounds, 64))
-        inbox_msgs = self._build_inbox_context_hint()
-        local_memory = self._load_local_memory()
-        simulation_directives = self._build_behavior_directives()
-
-        if phase_mode_enabled and phase_strategy == "freeform":
-            self._record_intent(
-                intent_from_agent_marker(
-                    project_id=self.project_id,
-                    agent_id=self.agent_id,
-                    marker="freeform_mode",
-                    payload={"project_id": self.project_id, "agent_id": self.agent_id},
-                )
-            )
-        print(f"[{self.agent_id}] Pulsing (Self-Aware Thinking)...")
-
-        for _ in range(max_tool_rounds):
-            req = ContextBuildRequest(
-                project_id=self.project_id,
-                agent_id=self.agent_id,
-                state=state,
-                directives=simulation_directives,
-                local_memory=local_memory,
-                inbox_hint=inbox_msgs,
-                phase_name="freeform",
-                phase_block="",
-                tools_desc=self._render_tools_desc(),
-            )
-            llm_messages, _ = janus_service.build_llm_messages(req)
-            response = self.brain.think_with_tools(
-                llm_messages,
-                self.get_tools(),
-                trace_meta=state.get("__pulse_meta", {}) if isinstance(state, dict) else {},
-            )
-
-            state["messages"].append(response)
-            content_text = response.content or "[No textual response]"
-            if not self._is_transient_llm_error_text(content_text):
-                self._record_intent(
-                    intent_from_llm_response(
-                        project_id=self.project_id,
-                        agent_id=self.agent_id,
-                        phase="freeform",
-                        content=content_text,
-                    )
-                )
-
-            tool_calls = getattr(response, "tool_calls", []) or []
-            if not tool_calls:
-                state["next_step"] = "finish"
-                return self._return_with_state_window(state)
-
-            for call in tool_calls:
-                tool_name = call.get("name", "")
-                args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
-                tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
-
-                obs = self.execute_tool(tool_name, args)
-                state["messages"].append(
-                    ToolMessage(content=obs, tool_call_id=tool_call_id, name=tool_name)
-                )
-                if tool_name == "post_to_synod":
-                    state["next_step"] = "escalated"
-                    return self._return_with_state_window(state)
-                if tool_name == "abstain_from_synod":
-                    if "abstained" not in state or state["abstained"] is None:
-                        state["abstained"] = []
-                    if self.agent_id not in state["abstained"]:
-                        state["abstained"].append(self.agent_id)
-                    state["next_step"] = "abstained"
-                    return self._return_with_state_window(state)
-                if tool_name == "finalize":
-                    state["__finalize_control"] = self._finalize_control_from_args(args)
-                    state["next_step"] = "finish"
-                    return self._return_with_state_window(state)
-                injected = inject_inbox_after_action_if_any(state, self.project_id, self.agent_id)
-                if injected > 0:
-                    self._record_intent(
-                        intent_from_agent_marker(
-                            project_id=self.project_id,
-                            agent_id=self.agent_id,
-                            marker="event_injected",
-                            payload={"count": int(injected)},
-                        )
-                    )
-
-            # refresh local memory snapshot for next loop iteration
-            local_memory = self._load_local_memory()
-
-        # Safety guard: if model keeps issuing tools forever, yield and let scheduler pulse later.
-        self._record_intent(
-            intent_from_agent_marker(
-                project_id=self.project_id,
-                agent_id=self.agent_id,
-                marker="tool_loop_cap",
-                payload={"project_id": self.project_id, "agent_id": self.agent_id, "max_rounds": max_tool_rounds},
-            )
-        )
-        state["next_step"] = "continue"
-        return self._return_with_state_window(state)
+        out = run_agent_runtime(self, state)
+        return self._return_with_state_window(out)
 
     def _merge_state_window_if_needed(self, state: GodsState):
         try:

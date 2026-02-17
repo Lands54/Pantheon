@@ -23,8 +23,10 @@ class MemoryIntent:
 class MemorySinkPolicy:
     to_chronicle: bool
     to_runtime_log: bool
+    to_llm_context: bool = False
     chronicle_template_key: str = ""
     runtime_log_template_key: str = ""
+    llm_context_template_key: str = ""
 
 
 @dataclass
@@ -34,3 +36,4 @@ class MemoryDecision:
     runtime_log_written: bool
     text: str
     policy: MemorySinkPolicy
+    llm_context_rendered: str | None = None

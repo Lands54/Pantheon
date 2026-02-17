@@ -1,1 +1,0 @@
-[INBOX_READ_ACK] count=$count ids=$event_ids

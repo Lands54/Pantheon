@@ -17,55 +17,79 @@ class _FakeBrain:
         if self.calls == 0:
             self.calls += 1
             return AIMessage(
-                content="freeform action",
+                content="first action",
                 tool_calls=[
-                    {"id": "ff1", "name": "list_dir", "args": {"path": "."}},
+                    {"id": "t1", "name": "list_dir", "args": {"path": "."}},
                 ],
             )
         self.calls += 1
-        return AIMessage(content="freeform done", tool_calls=[])
+        return AIMessage(content="done", tool_calls=[])
 
 
-def test_agent_level_phase_strategy_override_to_freeform():
-    project_id = "it_agent_strategy_override"
-    agent_id = "solo"
-    agent_dir = Path("projects") / project_id / "agents" / agent_id
-    agent_dir.mkdir(parents=True, exist_ok=True)
+def _setup_profile(project_id: str, agent_id: str):
     profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
     profile.parent.mkdir(parents=True, exist_ok=True)
-    profile.write_text("# solo\noverride test", encoding="utf-8")
+    profile.write_text(f"# {agent_id}\nlanggraph runtime test", encoding="utf-8")
 
+
+def test_langgraph_react_graph_finish_continue_paths():
+    project_id = "unit_langgraph_react"
+    agent_id = "solo"
+    _setup_profile(project_id, agent_id)
     old_project = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
-        name="it agent override",
+        name="unit react",
         active_agents=[agent_id],
-        agent_settings={
-            agent_id: AgentModelConfig(
-                model="stepfun/step-3.5-flash:free",
-                disabled_tools=[],
-                phase_strategy="freeform",
-            )
-        },
+        agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
         simulation_enabled=False,
         phase_strategy="react_graph",
         tool_loop_max=3,
     )
-
     try:
         agent = GodAgent(agent_id=agent_id, project_id=project_id)
         agent.brain = _FakeBrain()
-
         state = {
             "project_id": project_id,
             "messages": [HumanMessage(content="start", name="tester")],
-            "context": "agent override experiment",
+            "context": "react run",
             "next_step": "",
         }
         out = agent.process(state)
         assert out["next_step"] == "finish"
-
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
         assert "[[ACTION]] list_dir" in mem_text
+    finally:
+        if old_project is None:
+            runtime_config.projects.pop(project_id, None)
+        else:
+            runtime_config.projects[project_id] = old_project
+        shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
+
+
+def test_langgraph_freeform_graph_paths():
+    project_id = "unit_langgraph_freeform"
+    agent_id = "solo"
+    _setup_profile(project_id, agent_id)
+    old_project = runtime_config.projects.get(project_id)
+    runtime_config.projects[project_id] = ProjectConfig(
+        name="unit freeform",
+        active_agents=[agent_id],
+        agent_settings={agent_id: AgentModelConfig(disabled_tools=[], phase_strategy="freeform")},
+        simulation_enabled=False,
+        phase_strategy="react_graph",
+        tool_loop_max=3,
+    )
+    try:
+        agent = GodAgent(agent_id=agent_id, project_id=project_id)
+        agent.brain = _FakeBrain()
+        state = {
+            "project_id": project_id,
+            "messages": [HumanMessage(content="start", name="tester")],
+            "context": "freeform run",
+            "next_step": "",
+        }
+        out = agent.process(state)
+        assert out["next_step"] == "finish"
         runtime_text = (Path("projects") / project_id / "mnemosyne" / "runtime_events" / f"{agent_id}.jsonl").read_text(
             encoding="utf-8"
         )

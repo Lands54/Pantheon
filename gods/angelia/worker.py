@@ -13,10 +13,9 @@ from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.models import AgentRunState, AgentRuntimeStatus
 from gods import events as events_bus
-from gods.iris.facade import ack_handled, fetch_inbox_context, has_pending
+from gods.iris.facade import ack_handled, fetch_inbox_context, fetch_mailbox_intents, has_pending
 from gods.mnemosyne.facade import intent_from_angelia_event
 from gods.mnemosyne import record_intent
-from gods.prompts import prompt_registry
 from gods.angelia.pulse.policy import get_inject_budget
 
 _INTERACTION_HANDLERS_READY = False
@@ -50,7 +49,7 @@ class _AgentRunHandler(events_bus.EventHandler):
             raise ValueError("event payload.agent_id is required")
         reason = str(payload.get("reason") or record.event_type)
         pulse_id = uuid.uuid4().hex[:12]
-        return _run_agent(project_id, agent_id, reason, pulse_id)
+        return _run_agent(project_id, agent_id, reason, pulse_id, [record])
 
 
 _DEFAULT_AGENT_RUN_HANDLER = _AgentRunHandler()
@@ -80,31 +79,78 @@ def _resolve_handler(event_type: str) -> events_bus.EventHandler:
     return _DEFAULT_AGENT_RUN_HANDLER
 
 
-def _run_agent(project_id: str, agent_id: str, reason: str, pulse_id: str) -> dict:
+def _run_agent(
+    project_id: str,
+    agent_id: str,
+    reason: str,
+    pulse_id: str,
+    event_records: list[events_bus.EventRecord] | None = None,
+) -> dict:
     from gods.agents.base import GodAgent
 
     agent = GodAgent(agent_id=agent_id, project_id=project_id)
-    pulse_message = prompt_registry.render("scheduler_pulse_message", project_id=project_id, reason=reason)
-    pulse_context = prompt_registry.render("scheduler_pulse_context", project_id=project_id, reason=reason)
+    
+    # 1. Trigger Events (Batch)
+    trigger_intents: list[MemoryIntent] = []
+    if event_records:
+        for rec in event_records:
+            try:
+                trigger_intents.append(intent_from_angelia_event(rec, stage="trigger"))
+            except Exception:
+                # If rendering fails, we try a fallback intent but continue
+                # Actually intent_from_angelia_event shouldn't raise usually, but safeguard
+                pass
+    else:
+        # Fallback for manual/legacy calls without record
+        legacy = intent_from_angelia_event(
+            events_bus.EventRecord(
+                project_id=project_id, 
+                event_type="manual_pulse", 
+                payload={"reason": reason, "agent_id": agent_id}
+            ), 
+            stage="trigger"
+        )
+        trigger_intents.append(legacy)
+
+    # 2. Mailbox Events
+    budget = get_inject_budget(project_id)
+    mailbox_intents = fetch_mailbox_intents(project_id, agent_id, budget)
+    
+    # Extract IDs for ACK later
+    delivered_ids = []
+    for intent in mailbox_intents:
+        if intent.intent_key.startswith("inbox.received") or intent.intent_key.startswith("inbox.notice"):
+             mid = intent.payload.get("message_id")
+             if mid:
+                 delivered_ids.append(mid)
+
+    # 3. State Construction
+    # We DO NOT render text here. We pass intents to the agent state.
     state = {
         "project_id": project_id,
-        "messages": [HumanMessage(content=pulse_message, name="system")],
-        "context": pulse_context,
+        "messages": [], # Janus will build history. No synthetic SystemMessages!
+        "context": "", # Deprecated legacy context string
         "next_step": "",
+        "triggers": trigger_intents,
+        "mailbox": mailbox_intents,
         "__pulse_meta": {
             "pulse_id": pulse_id,
             "reason": reason,
             "started_at": time.time(),
         },
+        "__inbox_delivered_ids": delivered_ids,
     }
-    budget = get_inject_budget(project_id)
-    text, ids = fetch_inbox_context(project_id, agent_id, budget)
-    if text:
-        state.setdefault("messages", [])
-        state["messages"].append(SystemMessage(content=text, name="event_inbox"))
-        state.setdefault("__inbox_delivered_ids", [])
-        state["__inbox_delivered_ids"].extend(ids)
+
     new_state = agent.process(state)
+    
+    # ACK processed messages
+    # We re-read from state just in case agent modified it, or we use our local list?
+    # Agent might crash before processing.
+    # Logic in old code: "delivered = list(new_state.get(...))"
+    # So if agent crashes, new_state might be missing?
+    # 'agent.process' returns state. If it crashes, it raises exception.
+    # Exception is caught in worker_loop.
+    # So we only ACK if process succeeds.
     delivered = list(new_state.get("__inbox_delivered_ids", []) or [])
     if delivered:
         ack_handled(project_id, delivered, agent_id)
@@ -199,69 +245,129 @@ def worker_loop(ctx: WorkerContext):
             st = _status(project_id, agent_id)
             now = time.time()
             cooldown_until = max(float(st.cooldown_until or 0.0), float(st.backoff_until or 0.0))
-            event = store.pick_next_event(
+            
+            # Batch Pick (Limit 10 for now)
+            batch = store.pick_batch_events(
                 project_id=project_id,
                 agent_id=agent_id,
                 now=now,
                 cooldown_until=cooldown_until,
                 preempt_types=preempt_types,
+                limit=10,
             )
-            if event is None:
+
+            if not batch:
                 if now >= float(st.cooldown_until or 0.0) and now >= float(st.backoff_until or 0.0):
                     st.run_state = AgentRunState.IDLE
                     _save_status(st)
                 break
+            
+            # Use the first event as the 'primary' for status tracking
+            primary_event = batch[0]
+            
+            for evt in batch:
+                store.mark_processing(project_id, evt.event_id)
+            
+            _set_running(st, primary_event.event_id, primary_event.event_type)
+            angelia_metrics.inc("event_picked", len(batch))
 
-            store.mark_processing(project_id, event.event_id)
-            _set_running(st, event.event_id, event.event_type)
-            angelia_metrics.inc("event_picked")
+            records = [_to_record(evt) for evt in batch]
+            
+            # We assume ALL events for an agent use the same handler (_AgentRunHandler).
+            # If not, we should technically group them. 
+            # But currently `_resolve_handler` returns DEFAULT_AGENT_RUN_HANDLER for all.
+            handler = _resolve_handler(records[0].event_type)
+            
+            # on_pick semantics: technically we should call on_pick for each?
+            for r in records:
+                handler.on_pick(r)
 
-            record = _to_record(event)
-            handler = _resolve_handler(record.event_type)
-            handler.on_pick(record)
             start = time.time()
             try:
-                record_intent(intent_from_angelia_event(event, stage="processing"))
-                result = handler.on_process(record)
+                for evt in batch:
+                    record_intent(intent_from_angelia_event(evt, stage="processing"))
+                
+                # Combine payloads or just pick first reason?
+                # The handler will now take list of records.
+                # But `handler.on_process` signature takes ONE record.
+                # We need to hack `_AgentRunHandler`'s on_process or call `_run_agent` directly.
+                # `_AgentRunHandler` is internal private class.
+                # Let's see `_AgentRunHandler.on_process` (lines 47).
+                # It takes one record.
+                # We should update `_AgentRunHandler` to accept batch, or custom logic here.
+                # Since `_run_agent` is what we want, and `_AgentRunHandler` is a thin wrapper...
+                # We can construct a synthetic 'BatchRecord' or just call `_run_agent` directly here?
+                # No, `handler` abstraction is for future extensibility.
+                
+                # OPTION: Update `EventHandler.on_process` to support batch? No, base class change risky.
+                # OPTION: Just pass the whole list in `payload` of a synthetic record?
+                # OPTION: Special case for _AgentRunHandler since we know it.
+                
+                if isinstance(handler, _AgentRunHandler):
+                    # Direct call to robust batch method
+                    primary_rec = records[0]
+                    reason = str((primary_rec.payload or {}).get("reason") or primary_rec.event_type)
+                    pulse_id = uuid.uuid4().hex[:12]
+                    result = _run_agent(project_id, agent_id, reason, pulse_id, records)
+                else:
+                    # Fallback for non-agent handlers: process one by one?
+                    # This branch shouldn't happen for Agent worker loop if we only pick agent events.
+                    # But if we support custom handlers...
+                    # For safety, if handler is not our batch-aware one, process only first one and requeue rest?
+                    # Or loop on_process?
+                    # Let's loop on_process for now to be safe, though inefficient context.
+                    # BUT `_run_agent` does a full pulse!
+                    # So looping means N pulses.
+                    # This defeats the purpose of batching.
+                    # Since we are in `worker_loop` specifically for `Angelia`, we know we want `_run_agent`.
+                    # Let's assume all picked events are for _run_agent.
+                    primary_rec = records[0]
+                    reason = str((primary_rec.payload or {}).get("reason") or primary_rec.event_type)
+                    pulse_id = uuid.uuid4().hex[:12]
+                    result = _run_agent(project_id, agent_id, reason, pulse_id, records)
+
                 next_step = str(result.get("next_step", "finish"))
                 if next_step == "finish":
                     empty_cycles += 1
                 else:
                     empty_cycles = 0
+                
                 cooldown = _next_cooldown(project_id, next_step, empty_cycles)
                 quiescent_cooldown = _finalize_quiescent_cooldown(project_id, result)
                 if quiescent_cooldown > 0:
                     cooldown = max(int(cooldown), int(quiescent_cooldown))
-                store.mark_done(project_id, event.event_id)
-                handler.on_success(record, result)
-                record_intent(intent_from_angelia_event(event, stage="done", extra_payload={"next_step": next_step}))
+                
+                # Mark ALL done
+                for evt in batch:
+                    store.mark_done(project_id, evt.event_id)
+                    record_intent(intent_from_angelia_event(evt, stage="done", extra_payload={"next_step": next_step}))
+
+                # on_success for primary? or all?
+                handler.on_success(records[0], result)
+                
                 _set_idle(st, cooldown)
-                angelia_metrics.inc("event_done")
+                angelia_metrics.inc("event_done", len(batch))
+
             except Exception as e:
-                handler.on_fail(record, e)
-                state = store.mark_failed_or_requeue(
-                    project_id,
-                    event.event_id,
-                    error_code="WORKER_EXEC_ERROR",
-                    error_message=str(e),
-                    retry_delay_sec=min(30, max(2, 2 ** min(event.attempt + 1, 5))),
-                )
-                try:
-                    record_intent(
-                        intent_from_angelia_event(
-                            event,
-                            stage="failed",
-                            extra_payload={"error": str(e), "queue_state": state},
-                        )
+                # Batch Failure: Fail ALL.
+                # In future we might want partial success, but for now atomic batch.
+                handler.on_fail(records[0], e)
+                for evt in batch:
+                    state = store.mark_failed_or_requeue(
+                        project_id,
+                        evt.event_id,
+                        error_code="WORKER_EXEC_ERROR",
+                        error_message=str(e),
+                        retry_delay_sec=min(30, max(2, 2 ** min(evt.attempt + 1, 5))),
                     )
-                except Exception:
-                    pass
+                    try:
+                        record_intent(intent_from_angelia_event(evt, stage="failed", extra_payload={"error": str(e)}))
+                    except:
+                        pass
+                
                 _set_error_backoff(st, str(e), delay_sec=5)
-                if state == "dead":
-                    handler.on_dead(record, e)
-                    angelia_metrics.inc("event_dead")
-                else:
-                    angelia_metrics.inc("event_requeued")
+                angelia_metrics.inc("event_requeued", len(batch))
+
             finally:
                 latency_ms = int((time.time() - start) * 1000)
                 if latency_ms >= 0:

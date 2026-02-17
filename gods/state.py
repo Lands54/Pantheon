@@ -3,6 +3,7 @@ LangGraph 状态定义 - Gods Platform
 """
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
+from gods.mnemosyne import MemoryIntent
 
 
 class GodsState(TypedDict):
@@ -18,3 +19,5 @@ class GodsState(TypedDict):
     context: str  # 当前上下文
     next_step: str  # 用于控制 ReAct 循环 (continue | finish | escalated | abstained)
     abstained: list  # list of agent_ids who opted out of this thread
+    triggers: list[MemoryIntent]  # List of primary events that triggered this pulse
+    mailbox: list[MemoryIntent]  # Pre-fetched mailbox content (inbox + outbox status) for this pulse

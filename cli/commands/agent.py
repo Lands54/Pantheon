@@ -125,6 +125,57 @@ def cmd_agent(args):
                 print(f"  Last Error: {err}")
         return
 
+    if args.subcommand == "strategy":
+        try:
+            cfg = requests.get(f"{base}/config", timeout=5).json()
+            proj = cfg.get("projects", {}).get(pid, {})
+            settings = proj.get("agent_settings", {}) or {}
+            allowed = {"react_graph", "freeform"}
+            if args.action == "list":
+                rows = []
+                for aid, row in settings.items():
+                    rows.append(
+                        {
+                            "agent_id": aid,
+                            "phase_strategy": row.get("phase_strategy", proj.get("phase_strategy", "react_graph")),
+                        }
+                    )
+                print(json.dumps({"project_id": pid, "items": rows}, ensure_ascii=False, indent=2))
+                return
+            aid = str(args.agent or "").strip()
+            if not aid:
+                print("❌ --agent is required")
+                return
+            if args.action == "get":
+                row = settings.get(aid, {}) or {}
+                print(
+                    json.dumps(
+                        {
+                            "project_id": pid,
+                            "agent_id": aid,
+                            "phase_strategy": row.get("phase_strategy", proj.get("phase_strategy", "react_graph")),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+                return
+            if args.action == "set":
+                strategy = str(args.strategy or "").strip()
+                if strategy not in allowed:
+                    print("❌ --strategy must be one of: react_graph, freeform")
+                    return
+                cfg.setdefault("projects", {}).setdefault(pid, {}).setdefault("agent_settings", {})
+                cfg["projects"][pid]["agent_settings"].setdefault(aid, {})
+                cfg["projects"][pid]["agent_settings"][aid]["phase_strategy"] = strategy
+                res = requests.post(f"{base}/config/save", json=cfg, timeout=5)
+                print(json.dumps(res.json(), ensure_ascii=False, indent=2))
+                return
+            print("❌ unknown strategy action")
+        except Exception as e:
+            print(f"❌ strategy operation failed: {e}")
+        return
+
     agent_file = Path(f"projects/{pid}/mnemosyne/agent_profiles/{args.id}.md")
 
     if not agent_file.exists():

@@ -8,6 +8,7 @@ from gods.mnemosyne.intent_builders import (
     intent_from_angelia_event,
     intent_from_inbox_read,
     intent_from_inbox_received,
+    intent_from_inbox_summary,
     intent_from_outbox_status,
     intent_from_tool_result,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "intent_from_angelia_event",
     "intent_from_inbox_read",
     "intent_from_inbox_received",
+    "intent_from_inbox_summary",
     "intent_from_outbox_status",
     "load_chronicle_for_context",
     "default_memory_policy",

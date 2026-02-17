@@ -22,7 +22,6 @@ class AgentModelConfig(BaseModel):
     # Event-driven inbox/outbox is default path; polling tools are opt-in for debug/audit.
     disabled_tools: List[str] = Field(default_factory=lambda: ["check_inbox", "check_outbox"])
     # Optional agent-level phase runtime overrides (fallback to project defaults when None).
-    phase_mode_enabled: Optional[bool] = None
     phase_strategy: Optional[str] = None
     # Optional agent-level context strategy overrides (fallback to project defaults when None).
     context_strategy: Optional[str] = None
@@ -83,16 +82,7 @@ class ProjectConfig(BaseModel):
     finalize_sleep_default_sec: int = 120
     finalize_sleep_max_sec: int = 1800
 
-    phase_mode_enabled: bool = True
-    phase_strategy: str = "strict_triad"
-    phase_interaction_max: int = 3
-    phase_act_require_tool_call: bool = True
-    phase_act_require_productive_tool: bool = True
-    phase_act_productive_from_interaction: int = 2
-    phase_repeat_limit: int = 2
-    phase_explore_budget: int = 3
-    phase_no_progress_limit: int = 3
-    phase_single_tool_call: bool = True
+    phase_strategy: str = "react_graph"
 
     debug_trace_enabled: bool = True
     debug_trace_max_events: int = 200

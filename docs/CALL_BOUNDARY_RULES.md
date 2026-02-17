@@ -33,7 +33,14 @@
 ## 自动化检查
 - `scripts/check_import_cycles.py`
 - `scripts/check_call_boundaries.py`
+- `scripts/check_no_legacy_paths.py`（禁止 legacy phase/runtime 路径）
 
 触发失败条件：
 - `CYCLE_COUNT > 0`
 - `CALL_BOUNDARY_VIOLATION_COUNT > 0`
+- `LEGACY_PATH_GUARD != PASS`
+
+## Runtime 收口规则
+1. 禁止新增或引用 `gods.agents.phase_runtime`。
+2. 禁止使用旧策略名 `strict_triad|iterative_action`。
+3. `phase_strategy` 仅允许 `react_graph|freeform`。

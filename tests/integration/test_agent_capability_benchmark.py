@@ -115,7 +115,6 @@ def test_agent_capability_benchmark_inbox_reply_and_tool_accuracy():
             "peer": AgentModelConfig(disabled_tools=[]),
         },
         simulation_enabled=False,
-        phase_mode_enabled=True,
         phase_strategy="freeform",
         tool_loop_max=6,
         context_strategy="structured_v1",

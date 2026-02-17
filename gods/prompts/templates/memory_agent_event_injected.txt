@@ -1,1 +1,0 @@
-[EVENT_INJECTED] count=$count inbox event(s) appended after action.

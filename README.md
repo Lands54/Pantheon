@@ -109,13 +109,15 @@ The `temple.sh` script is your divine scepter for controlling the simulation.
 
 You can configure how agents think during a Pulse:
 
-- **`strict_triad`**: The standard "Reason -> Act -> Stop" loop. Safe and predictable.
-- **`iterative_action`**: Allows agents to chain multiple actions in one thought process.
-- **`freeform`** *(Experimental)*: Unconstrained loop until the agent decides to stop.
+- **`react_graph`**: Default LangGraph ReAct loop.
+- **`freeform`**: Free-style loop on the same LangGraph runtime.
 
 ```bash
 # Set strategy for a project
-./temple.sh --project demo_world config set phase.strategy iterative_action
+./temple.sh --project demo_world config set phase.strategy react_graph
+
+# Set one agent override
+./temple.sh --project demo_world agent strategy set --agent genesis --strategy freeform
 
 # Event queue controls
 ./temple.sh --project demo_world config set angelia_timer_idle_sec 60

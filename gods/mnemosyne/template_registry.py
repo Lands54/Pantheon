@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from gods.paths import mnemosyne_dir
 
-TemplateScope = Literal["runtime_log", "chronicle"]
+TemplateScope = Literal["runtime_log", "chronicle", "llm_context"]
 
 _KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_.-]{1,127}$")
 _MAX_TEMPLATE_LENGTH = 12000
@@ -44,6 +44,16 @@ _DEFAULT_CHRONICLE_TEMPLATES: dict[str, str] = {
     "memory_inbox_notice_contract_fully_committed": "[COMMIT_FULLY] [title=$title][from=$sender]",
 }
 
+_DEFAULT_LLM_CONTEXT_TEMPLATES: dict[str, str] = {
+    "agent_phase_reason": "[PHASE:REASON]\nOrder: $phase_order\nConstraints: Planning only, do not call tools.\nAllowed Tools: $allowed_tools",
+    "agent_phase_act": "[PHASE:ACT]\nOrder: $phase_order\nGoal: Execute concrete actions via tools.\nAllowed Tools: $allowed_tools",
+    "agent_phase_observe": "[PHASE:OBSERVE]\nOrder: $phase_order\nGoal: Evaluate completion and finalize only when done.\nAllowed Tools: $allowed_tools",
+    "memory_inbox_notice_contract_commit": "[SYSTEM NOTICE]\nEvent: Contract Committed\nContract ID: $title\nStatus: LIVE\nAction Required: Acknowledge and execute terms immediately.",
+    "memory_inbox_notice_contract_fully_committed": "[SYSTEM NOTICE]\nEvent: Contract Fully Committed\nContract ID: $title\nStatus: FULLY COMMITTED\nInfo: All parties have agreed. Execution is mandatory.",
+    "memory_tool_error": "[TOOL ERROR]\nTool: $tool_name\nStatus: Error\nDetails: $result_compact\nSuggestion: Check arguments and retry.",
+    "memory_tool_blocked": "[TOOL BLOCKED]\nTool: $tool_name\nReason: Policy Restriction\nDetails: $result_compact",
+}
+
 
 def _mn_root(project_id: str) -> Path:
     p = mnemosyne_dir(project_id)
@@ -64,11 +74,19 @@ def _scope_path(project_id: str, scope: TemplateScope) -> Path:
         return runtime_log_templates_path(project_id)
     if scope == "chronicle":
         return chronicle_templates_path(project_id)
+    if scope == "llm_context":
+        return _mn_root(project_id) / "llm_context_templates.json"
     raise ValueError(f"invalid template scope: {scope}")
 
 
 def _scope_defaults(scope: TemplateScope) -> dict[str, str]:
-    return dict(_DEFAULT_RUNTIME_LOG_TEMPLATES if scope == "runtime_log" else _DEFAULT_CHRONICLE_TEMPLATES)
+    if scope == "runtime_log":
+        return _DEFAULT_RUNTIME_LOG_TEMPLATES
+    if scope == "chronicle":
+        return _DEFAULT_CHRONICLE_TEMPLATES
+    if scope == "llm_context":
+        return _DEFAULT_LLM_CONTEXT_TEMPLATES
+    return {}
 
 
 def _read_json_obj(path: Path) -> dict[str, Any]:
@@ -100,7 +118,7 @@ def _validate_body(text: str) -> str:
 
 
 def ensure_memory_templates(project_id: str) -> None:
-    for scope in ("runtime_log", "chronicle"):
+    for scope in ("runtime_log", "chronicle", "llm_context"):
         path = _scope_path(project_id, scope)
         if not path.exists():
             path.write_text(json.dumps(_scope_defaults(scope), ensure_ascii=False, indent=2), encoding="utf-8")

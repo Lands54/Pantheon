@@ -25,7 +25,7 @@ def test_project_config_defaults():
     assert config.simulation_interval_max == 40
     assert config.pulse_event_inject_budget == 3
     assert config.pulse_interrupt_mode == "after_action"
-    assert config.phase_act_productive_from_interaction == 2
+    assert config.phase_strategy == "react_graph"
     assert config.context_strategy == "structured_v1"
     assert config.context_token_budget_total == 32000
     assert config.llm_call_delay_sec == 1

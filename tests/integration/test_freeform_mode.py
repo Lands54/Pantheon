@@ -47,7 +47,6 @@ def test_freeform_strategy_uses_legacy_loop():
         active_agents=[agent_id],
         agent_settings={agent_id: AgentModelConfig(model="stepfun/step-3.5-flash:free", disabled_tools=[])},
         simulation_enabled=False,
-        phase_mode_enabled=True,
         phase_strategy="freeform",
         tool_loop_max=3,
     )

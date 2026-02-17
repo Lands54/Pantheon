@@ -1,6 +1,0 @@
-Summarize the following theological history for project '$project_id':
-Existing:
-$existing_summary
-New:
-$history_str
-Summary:

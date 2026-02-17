@@ -176,3 +176,10 @@ projects/{project_id}/
 3. worker 从统一事件总线执行 pick/process/done/requeue/dead。  
 4. pulse 期间批量注入可投递 mail event，并将其推进到 `delivered/handled`。  
 5. 失败事件按重试策略回退或进入 dead-letter；Agent 记忆持续写入 `mnemosyne/chronicles/{agent_id}.md`。  
+
+## 7. Agent Runtime（LangGraph）
+
+1. 统一运行时入口：`gods/agents/runtime/engine.py:run_agent_runtime`。
+2. 策略枚举仅允许：`react_graph`、`freeform`。
+3. 两种策略均基于 LangGraph 编排，差异由策略构建器控制，不再保留 `phase_runtime` 代码路径。
+4. 配置零兼容：出现旧 phase 字段（如 `phase_mode_enabled`）即视为非法配置并阻断启动。

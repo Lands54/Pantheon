@@ -7,7 +7,7 @@ from gods.config.models import ProjectConfig, SystemConfig
 
 logger = logging.getLogger("GodsConfig")
 
-_ALLOWED_PHASE_STRATEGIES = {"strict_triad", "iterative_action", "freeform"}
+_ALLOWED_PHASE_STRATEGIES = {"react_graph", "freeform"}
 _ALLOWED_CONTEXT_STRATEGIES = {"structured_v1"}
 _ALLOWED_COMPACT_STRATEGIES = {"semantic_llm", "rule_based"}
 _ALLOWED_EXECUTORS = {"docker", "local"}
@@ -32,8 +32,17 @@ def _fallback_str(raw: str, allowed: set[str], default: str, field: str, project
     return default
 
 
+def _require_allowed_str(raw: str, allowed: set[str], field: str, project_id: str) -> str:
+    v = str(raw or "").strip().lower()
+    if v in allowed:
+        return v
+    raise ValueError(
+        f"invalid {field}='{raw}' in project '{project_id}', allowed: {', '.join(sorted(allowed))}"
+    )
+
+
 def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectConfig:
-    proj.phase_strategy = _fallback_str(proj.phase_strategy, _ALLOWED_PHASE_STRATEGIES, "strict_triad", "phase_strategy", project_id)
+    proj.phase_strategy = _require_allowed_str(proj.phase_strategy, _ALLOWED_PHASE_STRATEGIES, "phase_strategy", project_id)
     proj.context_strategy = _fallback_str(
         proj.context_strategy,
         _ALLOWED_CONTEXT_STRATEGIES,
@@ -101,12 +110,6 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
         proj.finalize_sleep_max_sec,
     )
 
-    proj.phase_interaction_max = _clamp_int(proj.phase_interaction_max, 1, 16)
-    proj.phase_act_productive_from_interaction = _clamp_int(proj.phase_act_productive_from_interaction, 1, 16)
-    proj.phase_repeat_limit = _clamp_int(proj.phase_repeat_limit, 1, 16)
-    proj.phase_explore_budget = _clamp_int(proj.phase_explore_budget, 1, 64)
-    proj.phase_no_progress_limit = _clamp_int(proj.phase_no_progress_limit, 1, 64)
-
     proj.debug_trace_max_events = _clamp_int(proj.debug_trace_max_events, 10, 2000)
     proj.llm_call_delay_sec = _clamp_int(proj.llm_call_delay_sec, 0, 60)
 
@@ -155,10 +158,9 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
                 project_id,
             )
         if settings.phase_strategy:
-            settings.phase_strategy = _fallback_str(
+            settings.phase_strategy = _require_allowed_str(
                 settings.phase_strategy,
                 _ALLOWED_PHASE_STRATEGIES,
-                "strict_triad",
                 f"agent.{aid}.phase_strategy",
                 project_id,
             )

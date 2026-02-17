@@ -1,7 +1,7 @@
 """Mnemosyne archival layer."""
 from gods.mnemosyne.store import write_entry, list_entries, read_entry, VALID_VAULTS
 from gods.mnemosyne.contracts import MemoryIntent, MemorySinkPolicy, MemoryDecision
-from gods.mnemosyne.memory import load_memory_policy, record_intent
+from gods.mnemosyne.memory import load_memory_policy, record_intent, render_intent_for_llm_context
 from gods.mnemosyne.policy_registry import (
     MemoryPolicyMissingError,
     MemoryTemplateMissingError,
@@ -28,6 +28,7 @@ __all__ = [
     "MemoryDecision",
     "load_memory_policy",
     "record_intent",
+    "render_intent_for_llm_context",
     "MemoryPolicyMissingError",
     "MemoryTemplateMissingError",
     "ensure_memory_policy",
