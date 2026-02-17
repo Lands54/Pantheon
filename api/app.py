@@ -12,7 +12,6 @@ from fastapi.staticfiles import StaticFiles
 
 from api.routes import agents, angelia, communication, config, events, hermes, mnemosyne, projects, tool_gateway
 from api.services import simulation_service
-from gods.angelia.migrate import migrate_to_angelia
 from gods.config import runtime_config
 from gods.events.migrate import migrate_all_projects
 from gods.mnemosyne import ensure_memory_policy, validate_memory_policy
@@ -42,7 +41,6 @@ async def startup_event():
     lost = startup_mark_lost_all_projects()
     for pid in runtime_config.projects.keys():
         try:
-            migrate_to_angelia(pid)
             ensure_memory_policy(pid)
             validate_memory_policy(pid, ensure_exists=True)
         except Exception as e:

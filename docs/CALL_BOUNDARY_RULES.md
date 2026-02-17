@@ -23,7 +23,7 @@
 
 ## API 边界（Breaking）
 1. 新统一入口：`/events/*`。
-2. 旧 ` /angelia/events* ` 与 ` /projects/{project_id}/detach/* ` 已下线（`410 Gone`）。
+2. 旧 ` /angelia/events* ` 与 ` /projects/{project_id}/detach/* ` 已移除。
 
 ## 自动化检查
 - `scripts/check_import_cycles.py`

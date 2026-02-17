@@ -1,7 +1,7 @@
 # MailEvent 生命周期（Iris 单一事件源）
 
 ## 目标
-将消息与调度状态收敛到一个权威账本：`projects/{project_id}/runtime/mail_events.jsonl`。
+将消息与调度状态收敛到一个权威账本：`projects/{project_id}/runtime/events.jsonl`。
 
 ## 角色分工
 1. Iris：事件主账本与状态迁移规则。
@@ -49,4 +49,4 @@
 ## 兼容性
 本次为 Breaking 变更：
 1. API 与工具返回字段改为 `mail_event_id`、`wakeup_sent`。
-2. 不再保证旧 `inbox_event_id/pulse_event_id` 字段。
+2. 不再保证旧 `inbox_event_id` 字段。

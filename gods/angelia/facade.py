@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 from gods.angelia import store
-from gods.angelia.migrate import migrate_to_angelia
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.models import AngeliaEventState
 from gods.angelia.scheduler import angelia_supervisor
@@ -12,14 +11,7 @@ from gods.angelia.pulse.policy import (
     get_inject_budget,
     get_interrupt_mode,
     get_priority_weights,
-    is_inbox_event_enabled,
-)
-from gods.angelia.pulse.queue import (
-    count_queued_events,
-    enqueue_pulse_event,
-    list_pulse_events,
-    mark_pulse_event_done,
-    pick_pulse_events,
+    is_mail_event_wakeup_enabled,
 )
 from gods.angelia.pulse.scheduler_hooks import (
     inject_inbox_after_action_if_any,
@@ -83,10 +75,6 @@ def metrics_snapshot() -> dict[str, Any]:
     return angelia_metrics.snapshot()
 
 
-def migrate(project_id: str) -> dict[str, Any]:
-    return migrate_to_angelia(project_id)
-
-
 def start_supervisor():
     angelia_supervisor.start()
 
@@ -107,20 +95,14 @@ __all__ = [
     "wake_agent",
     "tick_timer_once",
     "metrics_snapshot",
-    "migrate",
     "start_supervisor",
     "stop_supervisor",
     "stop_project_workers",
     "get_priority_weights",
-    "is_inbox_event_enabled",
+    "is_mail_event_wakeup_enabled",
     "get_inject_budget",
     "get_interrupt_mode",
     "inject_inbox_before_pulse",
     "inject_inbox_after_action_if_any",
-    "enqueue_pulse_event",
-    "pick_pulse_events",
-    "list_pulse_events",
-    "mark_pulse_event_done",
-    "count_queued_events",
     "angelia_supervisor",
 ]

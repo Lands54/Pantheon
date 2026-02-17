@@ -73,7 +73,6 @@ Gods Platform 采用三层结构：
 - `projects/{project_id}/mnemosyne/chronicles/{agent_id}.md`：可读记忆日志。
 - `projects/{project_id}/runtime/events.jsonl`：统一事件总线单一事实源（Iris/Angelia/Hermes/Detach）。
 - `projects/{project_id}/runtime/events.lock`：统一事件总线文件锁。
-- `projects/{project_id}/runtime/pulse_events.jsonl`：兼容/诊断队列（非主执行链路）。
 - `projects/{project_id}/runtime/detach_jobs.jsonl`：Detach 后台任务存储。
 - `projects/{project_id}/runtime/detach_logs/{job_id}.log`：Detach 任务日志。
 - `projects/{project_id}/runtime/locks/*.lock`：Inbox/Pulse 文件锁。
@@ -100,8 +99,8 @@ Gods Platform 采用三层结构：
   - `POST /events/{event_id}/ack`
   - `POST /events/reconcile`
   - `GET /events/metrics`
-- `api/routes/angelia.py`：仅保留 agent/supervisor 相关接口；旧 `/angelia/events*` 已下线（410）。
-- `api/routes/projects.py`：旧 `/projects/{project_id}/detach/*` 任务接口已下线（410），统一走 `/events/*`。
+- `api/routes/angelia.py`：仅保留 agent/supervisor 相关接口。
+- `api/routes/projects.py`：不再提供 `/projects/{project_id}/detach/*` 任务接口，统一走 `/events/*`。
 - `api/routes/agents.py`：Agent 增删。
 - `api/routes/hermes.py`：协议注册、调用、任务查询、审计查询。
   - 额外支持：`/hermes/route`（按 `target_agent + function_id` 路由调用）
@@ -145,8 +144,7 @@ projects/{project_id}/
 │   ├── chronicles/{agent_id}.md
 │   └── {agent|human|system}/
 ├── runtime/
-│   ├── mail_events.jsonl
-│   ├── pulse_events.jsonl
+│   ├── events.jsonl
 │   ├── detach_jobs.jsonl
 │   ├── detach_logs/{job_id}.log
 │   └── locks/*.lock

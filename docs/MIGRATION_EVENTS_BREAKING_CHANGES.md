@@ -5,8 +5,8 @@
 
 ## 1. API Breaking
 - 新：`/events/submit` `/events` `/events/{event_id}/retry` `/events/{event_id}/ack` `/events/reconcile` `/events/metrics`
-- 旧：`/angelia/events*` -> `410 Gone`
-- 旧：`/projects/{project_id}/detach/*` -> `410 Gone`
+- 旧：`/angelia/events*` 已移除
+- 旧：`/projects/{project_id}/detach/*` 已移除
 
 ## 2. 存储 Breaking
 - 新 SSOT：`projects/{project_id}/runtime/events.jsonl`

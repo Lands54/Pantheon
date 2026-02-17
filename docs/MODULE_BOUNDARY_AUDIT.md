@@ -13,11 +13,10 @@
 - 旧 `api/routes/tool_gateway.py` 直接调用 tools：已改为 `api/services/tool_gateway_service.py`。
 
 ## 4. 不可调用/可疑孤儿能力
-- `gods/angelia/pulse/queue.py`：当前非运行主链必需。
-  - 状态：保留。
-  - 标记：源码包含 `@orphaned` 注释。
-  - 原因：作为诊断/兼容能力仍被测试覆盖。
-  - 后续：在下一轮评估是否删除或彻底并入 Angelia 事件主链。
+- `gods/angelia/pulse/queue.py`（独立 Pulse 队列）：
+  - 状态：已删除。
+  - 原因：与统一 `events.jsonl` 主链重复，且不再被运行态依赖。
+  - 后续：新增守门规则，禁止回流独立 Pulse 事件存储。
 
 ## 5. 本轮合规结果目标
 - API 路由不再直接依赖 `gods.*`。

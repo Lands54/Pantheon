@@ -90,7 +90,7 @@ def setup_project(reset: bool = True):
 def seed_kickoff_messages():
     """
     Put one kickoff message into each agent inbox.
-    Scheduler prioritizes inbox_event and will pick these up automatically.
+    Scheduler prioritizes mail_event and will pick these up automatically.
     """
     buffer_dir = Path("projects") / PROJECT_ID / "buffers"
     buffer_dir.mkdir(parents=True, exist_ok=True)

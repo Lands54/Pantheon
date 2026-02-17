@@ -28,7 +28,7 @@
 
 ## 3. 查看调度事件
 ```bash
-./temple.sh angelia events --agent genesis --type inbox_event --state queued --limit 50
+./temple.sh angelia events --agent genesis --type mail_event --state queued --limit 50
 ./temple.sh angelia agents
 ```
 

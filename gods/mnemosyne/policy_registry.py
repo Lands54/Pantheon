@@ -30,7 +30,7 @@ def policy_path(project_id: str) -> Path:
 
 def required_intent_keys() -> list[str]:
     keys = [
-        "event.inbox_event",
+        "event.mail_event",
         "event.timer",
         "event.manual",
         "event.system",
@@ -57,7 +57,7 @@ def required_intent_keys() -> list[str]:
 
 def default_memory_policy() -> dict[str, dict[str, Any]]:
     policy: dict[str, dict[str, Any]] = {
-        "event.inbox_event": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_inbox_event"},
+        "event.mail_event": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_mail_event"},
         "event.timer": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_timer"},
         "event.manual": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_manual"},
         "event.system": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_system"},

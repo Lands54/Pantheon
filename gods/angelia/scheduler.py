@@ -111,7 +111,7 @@ class AngeliaSupervisor:
         if et == "mail_event":
             if not isinstance(payload, dict):
                 raise ValueError("mail_event payload must be object")
-            if not str(payload.get("mail_event_id", payload.get("inbox_event_id", ""))).strip():
+            if not str(payload.get("mail_event_id", "")).strip():
                 raise ValueError("mail_event payload.mail_event_id is required")
             return
         if et in {"manual", "system"}:

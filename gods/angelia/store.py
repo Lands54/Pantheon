@@ -1,4 +1,4 @@
-"""Angelia store shim: scheduler status local + Iris-backed unified events."""
+"""Angelia store: scheduler runtime status + Iris-backed event access."""
 from __future__ import annotations
 
 import json
@@ -12,11 +12,6 @@ def runtime_dir(project_id: str) -> Path:
     path = Path("projects") / project_id / "runtime"
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def events_path(project_id: str) -> Path:
-    # Single-source migration: keep path for legacy readers, but event writes are delegated to Iris.
-    return runtime_dir(project_id) / "angelia_events.jsonl"
 
 
 def agents_path(project_id: str) -> Path:

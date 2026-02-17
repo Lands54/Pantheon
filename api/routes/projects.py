@@ -113,28 +113,3 @@ async def runtime_restart_agent(project_id: str, agent_id: str):
 async def runtime_reconcile(project_id: str):
     """Reconcile runtime containers against project's active_agents list."""
     return project_service.runtime_reconcile(project_id)
-
-
-@router.post("/{project_id}/detach/submit")
-async def detach_submit(project_id: str, req: Request):
-    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/submit with runtime detach event")
-
-
-@router.get("/{project_id}/detach/jobs")
-async def detach_jobs(project_id: str, agent_id: str = "", status: str = "", limit: int = 50):
-    raise HTTPException(status_code=410, detail="Deprecated. Use GET /events?domain=runtime")
-
-
-@router.post("/{project_id}/detach/jobs/{job_id}/stop")
-async def detach_stop(project_id: str, job_id: str):
-    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/submit detach_stopping_event")
-
-
-@router.post("/{project_id}/detach/reconcile")
-async def detach_reconcile(project_id: str):
-    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/reconcile")
-
-
-@router.get("/{project_id}/detach/jobs/{job_id}/logs")
-async def detach_logs(project_id: str, job_id: str):
-    raise HTTPException(status_code=410, detail="Deprecated. Use runtime logs via events domain tools")

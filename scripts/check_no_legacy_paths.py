@@ -25,6 +25,9 @@ PATTERNS = [
     ("old_record_memory_event", re.compile(r"\brecord_memory_event\s*\("), set()),
     ("removed_cli_cmd", re.compile(r"subparsers\.add_parser\(\"(broadcast|prayers|pulse)\"\)"), set()),
     ("removed_inbox_events", re.compile(r"inbox_sub\.add_parser\(\"events\"\)"), set()),
+    ("removed_angelia_events_routes", re.compile(r"/angelia/events"), {"docs", "scripts"}),
+    ("removed_detach_project_routes", re.compile(r"/projects/\{project_id\}/detach/"), {"docs", "scripts"}),
+    ("removed_pulse_queue_store", re.compile(r"pulse_events\.jsonl"), {"docs", "scripts", "gods/events"}),
 ]
 
 

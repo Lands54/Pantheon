@@ -23,6 +23,6 @@
 - Runtime(Detach): `detach_submitted_event/detach_started_event/detach_stopping_event/detach_stopped_event/detach_failed_event/detach_reconciled_event/detach_lost_event`
 
 ## 5. 兼容与约束
-- 旧 `/angelia/events*` 与 `/projects/{project_id}/detach/*` 下线（410）。
+- 旧 `/angelia/events*` 与 `/projects/{project_id}/detach/*` 已移除。
 - 新事件必须通过 `EventRecord + EventHandler`。
 - 事件状态变更不得绕过 `gods/events/store.py`。

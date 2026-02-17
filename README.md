@@ -81,7 +81,7 @@ Pantheon uses a "Pulse" to wake up agents. A Pulse is a single execution cycle w
 4. **Sleeps** until the next Pulse.
 
 Event behavior:
-- Inbox delivery is event-driven (`inbox_events.jsonl` + `pulse_events.jsonl`).
+- Inbox delivery is event-driven (`events.jsonl`).
 - Empty queue gets a configurable idle heartbeat (`queue_idle_heartbeat_sec`, default `60`).
 - `check_inbox` is reserved for debug/audit and is disabled by default.
 

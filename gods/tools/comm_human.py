@@ -43,7 +43,7 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
             )
 
         weights = angelia_facade.get_priority_weights(project_id)
-        trigger = angelia_facade.is_inbox_event_enabled(project_id)
+        trigger = angelia_facade.is_mail_event_wakeup_enabled(project_id)
         queued = enqueue_message(
             project_id=project_id,
             agent_id=to_id,
@@ -52,7 +52,7 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
             content=message,
             msg_type="private",
             trigger_pulse=trigger,
-            pulse_priority=int(weights.get("mail_event", weights.get("inbox_event", 100))),
+            pulse_priority=int(weights.get("mail_event", 100)),
         )
         return (
             f"Revelation sent to {to_id}. "

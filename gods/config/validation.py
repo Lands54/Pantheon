@@ -13,7 +13,7 @@ _ALLOWED_COMPACT_STRATEGIES = {"semantic_llm", "rule_based"}
 _ALLOWED_EXECUTORS = {"docker", "local"}
 _ALLOWED_DOCKER_NET = {"bridge_local_only", "none"}
 _ALLOWED_PULSE_INTERRUPT = {"after_action"}
-_ALLOWED_TOOL_HINTS = {"mail_event", "manual", "system", "timer", "inbox_event"}
+_ALLOWED_TOOL_HINTS = {"mail_event", "manual", "system", "timer"}
 
 
 def _clamp_int(value: int, low: int, high: int) -> int:
@@ -144,7 +144,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
             except Exception:
                 continue
     proj.pulse_priority_weights = {
-        "mail_event": weights.get("mail_event", weights.get("inbox_event", 100)),
+        "mail_event": weights.get("mail_event", 100),
         "manual": weights.get("manual", 80),
         "system": weights.get("system", 60),
         "timer": weights.get("timer", 10),

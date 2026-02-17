@@ -275,4 +275,4 @@ flowchart LR
 - Do not add legacy context shim module under `gods.agents.context_policy`.
 - Do not add legacy memory adapter API (`record_memory_event`).
 - Do not bypass `gods.config` for config load/save/migration.
-- Do not create parallel event stores outside Iris `mail_events.jsonl`.
+- Do not create parallel event stores outside EventBus `events.jsonl`.

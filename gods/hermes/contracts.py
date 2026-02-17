@@ -318,13 +318,13 @@ class HermesContracts:
 
         try:
             from gods.iris.facade import enqueue_message
-            from gods.angelia.facade import get_priority_weights, is_inbox_event_enabled
+            from gods.angelia.facade import get_priority_weights, is_mail_event_wakeup_enabled
         except Exception:
             return sent
 
-        trigger = bool(is_inbox_event_enabled(project_id))
+        trigger = bool(is_mail_event_wakeup_enabled(project_id))
         weights = get_priority_weights(project_id)
-        priority = int(weights.get("mail_event", weights.get("inbox_event", 100)))
+        priority = int(weights.get("mail_event", 100))
         msg = (
             f"Hermes Notice: agent '{committer}' committed contract "
             f"'{title}@{version}'."
@@ -358,13 +358,13 @@ class HermesContracts:
 
         try:
             from gods.iris.facade import enqueue_message
-            from gods.angelia.facade import get_priority_weights, is_inbox_event_enabled
+            from gods.angelia.facade import get_priority_weights, is_mail_event_wakeup_enabled
         except Exception:
             return sent
 
-        trigger = bool(is_inbox_event_enabled(project_id))
+        trigger = bool(is_mail_event_wakeup_enabled(project_id))
         weights = get_priority_weights(project_id)
-        priority = int(weights.get("mail_event", weights.get("inbox_event", 100)))
+        priority = int(weights.get("mail_event", 100))
         msg = (
             f"Hermes Notice: contract '{title}@{version}' is now fully committed "
             f"by all required committers."

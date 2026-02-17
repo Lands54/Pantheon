@@ -15,7 +15,7 @@ class CommunicationService:
     def confess(self, agent_id: str, title: str, message: str, silent: bool = False) -> dict[str, Any]:
         project_id = runtime_config.current_project
         weights = angelia_facade.get_priority_weights(project_id)
-        trigger_pulse = (not bool(silent)) and angelia_facade.is_inbox_event_enabled(project_id)
+        trigger_pulse = (not bool(silent)) and angelia_facade.is_mail_event_wakeup_enabled(project_id)
         res = iris_facade.enqueue_message(
             project_id=project_id,
             agent_id=agent_id,
@@ -24,7 +24,7 @@ class CommunicationService:
             content=message,
             msg_type="confession",
             trigger_pulse=trigger_pulse,
-            pulse_priority=int(weights.get("mail_event", weights.get("inbox_event", 100))),
+            pulse_priority=int(weights.get("mail_event", 100)),
         )
         if trigger_pulse:
             logger.info(f"⚡ Mail event queued for {agent_id} in {project_id}")

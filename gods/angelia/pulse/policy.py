@@ -45,6 +45,6 @@ def get_priority_weights(project_id: str) -> dict[str, int]:
     return out
 
 
-def is_inbox_event_enabled(project_id: str) -> bool:
+def is_mail_event_wakeup_enabled(project_id: str) -> bool:
     proj = runtime_config.projects.get(project_id)
     return bool(getattr(proj, "inbox_event_enabled", True) if proj else True)

@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from api.services.common.project_context import resolve_project
+from gods.iris import facade as iris_facade
 from gods.tools import facade as tools_facade
 
 
@@ -28,6 +29,23 @@ class ToolGatewayService:
             parsed = json.loads(text)
         except Exception:
             parsed = None
+        if not isinstance(parsed, list):
+            # Fallback: gateway should still expose inspectable inbox messages even when
+            # check_inbox returns warning text due anti-spam guard or empty queue.
+            rows = iris_facade.list_inbox_events(project_id=pid, agent_id=agent_id, state=None, limit=50)
+            parsed = [
+                {
+                    "id": item.event_id,
+                    "title": item.title,
+                    "from": item.sender,
+                    "to": item.agent_id,
+                    "status": item.state.value,
+                    "type": item.msg_type,
+                    "content": item.content,
+                    "created_at": item.created_at,
+                }
+                for item in rows
+            ]
         return {"project_id": pid, "agent_id": agent_id, "result": text, "messages": parsed}
 
     def check_outbox(

@@ -553,7 +553,7 @@ sequenceDiagram
     SVC->>AST: 迁移/恢复 Angelia 事件存储（若需要）
 
     Note over CLI,API: 事件入口（confess/send_message/manual/timer）
-    CLI->>API: /confess 或 /angelia/events/enqueue
+    CLI->>API: /confess 或 /events/submit
     API->>IBS: 写 inbox message (pending)（若是消息类）
     API->>ANG: enqueue_event(project_id,agent_id,event_type,payload)
 
@@ -595,7 +595,7 @@ sequenceDiagram
     end
 
     Note over API,CLI: 观测与调试
-    CLI->>API: /agents/status /angelia/events /project report
+    CLI->>API: /agents/status /events /project report
     API->>AST: 读取事件/状态
     API->>MNE: 读取归档/报告
     API-->>CLI: JSON/摘要输出
