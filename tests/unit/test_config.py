@@ -18,8 +18,8 @@ def test_project_config_defaults():
     """Test ProjectConfig default values."""
     config = ProjectConfig()
     assert config.name is None
-    assert config.active_agents == ["genesis"]
-    assert "genesis" in config.agent_settings
+    assert config.active_agents == []
+    assert config.agent_settings == {}
     assert config.simulation_enabled is False
     assert config.simulation_interval_min == 10
     assert config.simulation_interval_max == 40

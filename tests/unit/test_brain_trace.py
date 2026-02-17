@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from gods.agents.brain import GodBrain
 from gods.config import runtime_config, ProjectConfig, AgentModelConfig
+from gods.paths import runtime_debug_dir
 
 
 def test_llm_trace_writer_persists_request_and_response():
@@ -34,7 +35,7 @@ def test_llm_trace_writer_persists_request_and_response():
             response_message=resp,
             trace_meta={"pulse_id": "p1", "reason": "test"},
         )
-        trace_path = agent_dir / "debug" / "llm_io.jsonl"
+        trace_path = runtime_debug_dir(project_id, agent_id) / "llm_io.jsonl"
         assert trace_path.exists()
         row = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[-1])
         assert row["pulse_id"] == "p1"
@@ -45,4 +46,3 @@ def test_llm_trace_writer_persists_request_and_response():
     finally:
         runtime_config.projects = old_projects
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
-

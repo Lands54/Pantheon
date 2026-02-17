@@ -216,7 +216,16 @@ msg = (
     "协议条款先 contract-register/commit/resolve。实现必须是 Python 可运行代码。"
 )
 for aid in agents.keys():
-    req("POST", "/confess", json={"agent_id": aid, "message": msg, "silent": False}).raise_for_status()
+    req(
+        "POST",
+        "/confess",
+        json={
+            "agent_id": aid,
+            "title": "animal_world.bootstrap",
+            "message": msg,
+            "silent": False,
+        },
+    ).raise_for_status()
 
 status = req("GET", f"/agents/status?project_id={project_id}").json()
 print(json.dumps({"project_id": project_id, "agents_status": status.get("agents", [])}, ensure_ascii=False, indent=2))

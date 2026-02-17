@@ -99,9 +99,9 @@ The `temple.sh` script is your divine scepter for controlling the simulation.
 | `./temple.sh project switch <name>` | Set the active world context. |
 | `./temple.sh list` | List active/latent agents in current world. |
 | `./temple.sh confess <agent> "msg"` | Send a private instruction to an agent. |
-| `./temple.sh pulse queue -p <project>` | Inspect pulse event queue. |
-| `./temple.sh pulse push <agent> --type manual -p <project>` | Manually enqueue one pulse event. |
-| `./temple.sh inbox events --agent <agent> -p <project>` | Inspect inbox event records. |
+| `./temple.sh angelia events --project <project>` | Inspect Angelia wake event queue. |
+| `./temple.sh angelia enqueue <agent> --type manual --project <project>` | Manually enqueue one wake event. |
+| `./temple.sh inbox outbox --agent <agent> -p <project>` | Inspect sender-side outbox receipts. |
 
 ### Runtime Strategies
 

@@ -52,23 +52,35 @@ def cmd_check(args):
     except Exception:
         pass
     
-    # Show inbox event status
+    # Show wake queue status (Angelia inbox_event)
     try:
-        pending_res = requests.get(
-            f"{base_url}/projects/{pid}/inbox/events",
-            params={"agent_id": agent_id, "state": "pending", "limit": 500},
+        queued_res = requests.get(
+            f"{base_url}/angelia/events",
+            params={
+                "project_id": pid,
+                "agent_id": agent_id,
+                "event_type": "inbox_event",
+                "state": "queued",
+                "limit": 500,
+            },
             timeout=4,
         )
-        deferred_res = requests.get(
-            f"{base_url}/projects/{pid}/inbox/events",
-            params={"agent_id": agent_id, "state": "deferred", "limit": 500},
+        processing_res = requests.get(
+            f"{base_url}/angelia/events",
+            params={
+                "project_id": pid,
+                "agent_id": agent_id,
+                "event_type": "inbox_event",
+                "state": "processing",
+                "limit": 500,
+            },
             timeout=4,
         )
-        pending_n = len((pending_res.json() or {}).get("items", []))
-        deferred_n = len((deferred_res.json() or {}).get("items", []))
-        print(f"📥 Inbox Events: pending={pending_n}, deferred={deferred_n}")
+        queued_n = len((queued_res.json() or {}).get("items", []))
+        processing_n = len((processing_res.json() or {}).get("items", []))
+        print(f"📥 Wake Queue(inbox_event): queued={queued_n}, processing={processing_n}")
     except Exception:
-        print("📥 Inbox Events: unavailable")
+        print("📥 Wake Queue: unavailable")
     
     # Show read receipts
     read_path = Path(f"projects/{pid}/buffers/{agent_id}_read.jsonl")
@@ -149,21 +161,6 @@ def cmd_check(args):
                 print(f"   pulse={pulse_id} mode={mode} model={model} response={has_resp} error={bool(err)}")
         except Exception as e:
             print(f"   (llm trace parse failed: {e})")
-    
-    # Check for prayers (messages to human)
-    try:
-        res = requests.get(f"{base_url}/prayers/check")
-        prayers = res.json().get("prayers", [])
-        
-        if prayers:
-            print(f"\n🙏 Messages to You:\n")
-            for p in prayers:
-                if p.get('from') == agent_id:
-                    print(f"   [{p.get('from')}]: {p.get('content')}")
-        else:
-            print(f"\n🙏 No messages to you yet")
-    except:
-        pass
     
     print(f"\n💡 Tip: Use './temple.sh confess {agent_id} \"your message\"' to send a message")
     print(f"💡 Tip: View full memory with 'cat projects/{pid}/mnemosyne/chronicles/{agent_id}.md'")

@@ -20,9 +20,11 @@ from gods.mnemosyne.intent_builders import (
 from gods.agents.phase_runtime import AgentPhaseRuntime
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.agents.runtime_policy import resolve_phase_mode_enabled, resolve_phase_strategy
+from gods.paths import agent_dir, mnemosyne_dir
 from gods.pulse.scheduler_hooks import inject_inbox_after_action_if_any
 from gods.janus import janus_service, record_observation, ContextBuildRequest, ObservationRecord
 from gods.janus.journal import profile_path
+from gods.agents.state_window_store import load_state_window, save_state_window
 from pathlib import Path
 
 
@@ -37,7 +39,7 @@ class GodAgent:
         """
         self.agent_id = agent_id
         self.project_id = project_id
-        self.agent_dir = Path(f"projects/{project_id}/agents/{agent_id}")
+        self.agent_dir = agent_dir(project_id, agent_id)
 
         # Load behavior description from Mnemosyne profile only.
         self.directives = self._load_directives()
@@ -65,7 +67,7 @@ class GodAgent:
         )
 
     def _chronicle_path(self) -> Path:
-        return Path("projects") / self.project_id / "mnemosyne" / "chronicles" / f"{self.agent_id}.md"
+        return mnemosyne_dir(self.project_id) / "chronicles" / f"{self.agent_id}.md"
 
     def _ensure_memory_seeded(self):
         """
@@ -104,7 +106,6 @@ class GodAgent:
         """
         if is_social_disabled(self.project_id, self.agent_id):
             return (
-                f"{self.directives}\n\n"
                 "# LOCAL EXECUTION PROTOCOL\n"
                 "- Social tools are disabled for this agent.\n"
                 "- Do NOT attempt inbox/social actions.\n"
@@ -113,7 +114,6 @@ class GodAgent:
         return prompt_registry.render(
             "agent_social_protocol",
             project_id=self.project_id,
-            directives=self.directives,
             agent_id=self.agent_id,
         )
 
@@ -121,6 +121,7 @@ class GodAgent:
         """
         Main execution loop for the agent, handling either phase runtime or freeform autonomous pulses.
         """
+        self._merge_state_window_if_needed(state)
         proj = runtime_config.projects.get(self.project_id)
         phase_mode_enabled = resolve_phase_mode_enabled(self.project_id, self.agent_id)
         phase_strategy = resolve_phase_strategy(self.project_id, self.agent_id)
@@ -130,12 +131,13 @@ class GodAgent:
             local_memory = self._load_local_memory()
             simulation_directives = self._build_behavior_directives()
             print(f"[{self.agent_id}] Pulsing (Phase Runtime)...")
-            return AgentPhaseRuntime(self).run(
+            out = AgentPhaseRuntime(self).run(
                 state=state,
                 simulation_directives=simulation_directives,
                 local_memory=local_memory,
                 inbox_msgs=inbox_msgs,
             )
+            return self._return_with_state_window(out)
 
         # --- Freeform loop ---
         max_tool_rounds = int(getattr(proj, "tool_loop_max", 8) if proj else 8)
@@ -175,19 +177,21 @@ class GodAgent:
             )
 
             state["messages"].append(response)
-            self._record_intent(
-                intent_from_llm_response(
-                    project_id=self.project_id,
-                    agent_id=self.agent_id,
-                    phase="freeform",
-                    content=response.content or "[No textual response]",
+            content_text = response.content or "[No textual response]"
+            if not self._is_transient_llm_error_text(content_text):
+                self._record_intent(
+                    intent_from_llm_response(
+                        project_id=self.project_id,
+                        agent_id=self.agent_id,
+                        phase="freeform",
+                        content=content_text,
+                    )
                 )
-            )
 
             tool_calls = getattr(response, "tool_calls", []) or []
             if not tool_calls:
                 state["next_step"] = "finish"
-                return state
+                return self._return_with_state_window(state)
 
             for call in tool_calls:
                 tool_name = call.get("name", "")
@@ -200,14 +204,18 @@ class GodAgent:
                 )
                 if tool_name == "post_to_synod":
                     state["next_step"] = "escalated"
-                    return state
+                    return self._return_with_state_window(state)
                 if tool_name == "abstain_from_synod":
                     if "abstained" not in state or state["abstained"] is None:
                         state["abstained"] = []
                     if self.agent_id not in state["abstained"]:
                         state["abstained"].append(self.agent_id)
                     state["next_step"] = "abstained"
-                    return state
+                    return self._return_with_state_window(state)
+                if tool_name == "finalize":
+                    state["__finalize_control"] = self._finalize_control_from_args(args)
+                    state["next_step"] = "finish"
+                    return self._return_with_state_window(state)
                 injected = inject_inbox_after_action_if_any(state, self.project_id, self.agent_id)
                 if injected > 0:
                     self._record_intent(
@@ -232,24 +240,106 @@ class GodAgent:
             )
         )
         state["next_step"] = "continue"
+        return self._return_with_state_window(state)
+
+    def _merge_state_window_if_needed(self, state: GodsState):
+        try:
+            if not isinstance(state, dict):
+                return
+            if bool(state.get("__state_window_loaded", False)):
+                return
+            loaded = load_state_window(self.project_id, self.agent_id)
+            current = list(state.get("messages", []) or [])
+            if loaded:
+                state["messages"] = loaded + current
+            else:
+                state.setdefault("messages", current)
+            state["__state_window_loaded"] = True
+        except Exception:
+            pass
+
+    def _persist_state_window(self, state: GodsState):
+        try:
+            if not isinstance(state, dict):
+                return
+            msgs = list(state.get("messages", []) or [])
+            if not msgs:
+                return
+            save_state_window(self.project_id, self.agent_id, msgs)
+        except Exception:
+            pass
+
+    def _return_with_state_window(self, state: GodsState) -> GodsState:
+        self._persist_state_window(state)
         return state
 
     def _load_local_memory(self) -> str:
         """
-        Loads local memory chronicle from Mnemosyne, applying compaction if necessary.
+        Loads local memory chronicle from Mnemosyne.
         """
         mem_path = self._chronicle_path()
-        self._maybe_compact_memory(mem_path)
         if mem_path.exists():
             return mem_path.read_text(encoding="utf-8")
         return "No personal chronicles yet."
 
     def _record_intent(self, intent: MemoryIntent):
-        result = record_intent(intent)
-        # Keep existing compaction semantics for chronicle when policy writes are enabled.
-        if bool(result.get("chronicle_written")):
-            self._maybe_compact_memory(self._chronicle_path())
-        return result
+        return record_intent(intent)
+
+    @staticmethod
+    def _is_transient_llm_error_text(text: str) -> bool:
+        raw = str(text or "").strip().lower()
+        return raw.startswith("error in reasoning:") or raw.startswith("❌ error:")
+
+    @staticmethod
+    def _classify_tool_status(result: str) -> str:
+        text = str(result or "").strip()
+        # Strip common CWD wrappers before classification.
+        norm = re.sub(r"^\[Current CWD:[^\]]+\]\s*", "", text, flags=re.I).strip()
+        if norm.lower().startswith("content:"):
+            norm = norm[len("content:") :].strip()
+        low = norm.lower()
+
+        if "divine restriction" in low or "policy block" in low:
+            return "blocked"
+
+        error_prefixes = (
+            "tool execution error:",
+            "tool error:",
+            "path error:",
+            "execution failed:",
+            "execution timeout:",
+            "execution backend error:",
+            "territory error:",
+            "command error:",
+            "concurrency limit:",
+        )
+        if low.startswith(error_prefixes):
+            return "error"
+
+        m = re.search(r"manifestation result \(exit=(-?\d+)\):", low)
+        if m:
+            try:
+                return "ok" if int(m.group(1)) == 0 else "error"
+            except Exception:
+                return "error"
+
+        return "ok"
+
+    @staticmethod
+    def _finalize_control_from_args(args: dict) -> dict:
+        raw = dict(args or {})
+        mode = str(raw.get("mode", "done") or "done").strip().lower()
+        if mode not in {"done", "quiescent"}:
+            mode = "done"
+        try:
+            sleep_sec = int(raw.get("sleep_sec", 0) or 0)
+        except Exception:
+            sleep_sec = 0
+        return {
+            "mode": mode,
+            "sleep_sec": sleep_sec,
+            "reason": str(raw.get("reason", "") or ""),
+        }
 
     def _append_to_memory(self, text: str, record_type: str = "default", payload: dict | None = None):
         """
@@ -316,68 +406,15 @@ class GodAgent:
             fallback_text=raw,
             timestamp=time.time(),
         )
+        if key == "llm.response" and self._is_transient_llm_error_text(raw):
+            return {
+                "intent_key": key,
+                "skipped": True,
+                "reason": "transient_llm_error",
+                "chronicle_written": False,
+                "runtime_log_written": False,
+            }
         return self._record_intent(intent)
-
-    def _maybe_compact_memory(self, mem_path: Path):
-        """
-        Checks if the memory file exceeds the trigger size and performs compaction if so.
-        """
-        if not mem_path.exists():
-            return
-
-        proj = runtime_config.projects.get(self.project_id)
-        trigger = int(getattr(proj, "memory_compact_trigger_chars", 200000) if proj else 200000)
-        keep = int(getattr(proj, "memory_compact_keep_chars", 50000) if proj else 50000)
-        trigger = max(20000, trigger)
-        keep = max(5000, min(keep, trigger - 1000))
-
-        content = mem_path.read_text(encoding="utf-8")
-        if len(content) <= trigger:
-            return
-        seed_block, body = self._split_seed_block(content)
-        if len(body) <= trigger:
-            return
-
-        old = body[:-keep]
-        recent = body[-keep:]
-        action_names = re.findall(r"\[\[ACTION\]\]\s+([a-z_]+)\s+->", old)
-        action_count = {}
-        for name in action_names:
-            action_count[name] = action_count.get(name, 0) + 1
-        top_actions = sorted(action_count.items(), key=lambda x: x[1], reverse=True)[:8]
-        top_text = ", ".join([f"{k}:{v}" for k, v in top_actions]) if top_actions else "none"
-
-        archived_entries = old.count("### 📖 Entry")
-        compact_note = (
-            "# MEMORY_COMPACTED\n"
-            f"Archived entries: {archived_entries}\n"
-            f"Archived chars: {len(old)}\n"
-            f"Top actions: {top_text}\n"
-            "Old content moved to memory_archive.md\n\n"
-            "---\n"
-        )
-
-        archive_path = mem_path.parent / f"{self.agent_id}_archive.md"
-        with open(archive_path, "a", encoding="utf-8") as af:
-            af.write(old)
-            if not old.endswith("\n"):
-                af.write("\n")
-            af.write("\n---\n")
-
-        mem_path.write_text(seed_block + compact_note + recent, encoding="utf-8")
-
-    def _split_seed_block(self, content: str):
-        """
-        Splits the system seed block from the rest of the memory content.
-        """
-        marker = "### SYSTEM_SEED"
-        if not content.startswith(marker):
-            return "", content
-        end = content.find("\n---\n")
-        if end == -1:
-            return "", content
-        end += len("\n---\n")
-        return content[:end], content[end:]
 
     def execute_tool(self, name: str, args: dict) -> str:
         """
@@ -423,12 +460,7 @@ class GodAgent:
                         result = ensure_cwd_prefix(result)
                     if name != "check_inbox":
                         reset_inbox_guard(self.agent_id, self.project_id)
-                    status = "ok"
-                    low = str(result).lower()
-                    if "tool execution error" in low or "error" in low:
-                        status = "error"
-                    if "divine restriction" in low or "policy block" in low:
-                        status = "blocked"
+                    status = self._classify_tool_status(str(result))
                     self._record_observation(name, args, result, status=status)
                     self._record_intent(intent_from_tool_result(self.project_id, self.agent_id, name, status, args, str(result)))
                     return result
@@ -478,42 +510,6 @@ class GodAgent:
             if settings:
                 disabled = set(settings.disabled_tools or [])
         return [t for t in GODS_TOOLS if t.name not in disabled]
-
-    def build_context(
-        self,
-        state: GodsState,
-        directives: str,
-        local_memory: str,
-        inbox_content: str = "[]",
-        phase_block: str = "",
-        phase_name: str = "",
-    ) -> str:
-        """
-        Constructs the full system prompt and context for the agent's current thought process.
-        """
-        sacred_record = state.get("summary", "No ancient records.")
-        recent_messages = state.get("messages", [])[-8:]
-        history = "\n".join([
-            f"[{getattr(msg, 'name', 'system')}]: {str(getattr(msg, 'content', ''))}"
-            for msg in recent_messages
-        ])
-        
-        tools_desc = self._render_tools_desc()
-        
-        return prompt_registry.render(
-            "agent_context",
-            project_id=self.project_id,
-            directives=directives,
-            inbox_content=inbox_content,
-            local_memory=local_memory,
-            sacred_record=sacred_record,
-            history=history,
-            task=state.get("context", "Exist and evolve."),
-            tools_desc=tools_desc,
-            agent_id=self.agent_id,
-            phase_block=phase_block,
-            phase_name=phase_name,
-        )
 
     def _render_tools_desc(self) -> str:
         items = []

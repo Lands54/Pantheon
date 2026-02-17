@@ -1,5 +1,7 @@
 # Gods Platform 架构概览（当前实现）
 
+> 最新模块职责、依赖关系与模块内部运行图请以 `docs/BACKEND_MODULES_RUNTIME_MAP.md` 为唯一事实源。
+
 ## 1. 总体结构
 
 Gods Platform 采用三层结构：
@@ -67,7 +69,7 @@ Gods Platform 采用三层结构：
 
 ### 2.5 配置与持久化
 
-- `gods/config.py`：`config.json` 的加载、迁移、保存。
+- `gods/config/*`：`config.json` 的模型、加载迁移、规范化与保存。
 - `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
 - `projects/{project_id}/mnemosyne/chronicles/{agent_id}.md`：可读记忆日志。
 - `projects/{project_id}/runtime/inbox_events.jsonl`：Inbox 事件存储。
@@ -97,10 +99,10 @@ Gods Platform 采用三层结构：
   - `POST /projects/{project_id}/detach/jobs/{job_id}/stop`
   - `POST /projects/{project_id}/detach/reconcile`
   - `GET /projects/{project_id}/detach/jobs/{job_id}/logs`
-- `api/routes/projects.py`：Pulse/Inbox 调试接口：
-  - `GET /projects/{project_id}/pulse/queue`
-  - `POST /projects/{project_id}/pulse/enqueue`
-  - `GET /projects/{project_id}/inbox/events`
+- `api/routes/angelia.py`：Angelia 单轨调度接口：
+  - `GET /angelia/events`
+  - `POST /angelia/events/enqueue`
+  - `GET /angelia/agents/status`
 - `api/routes/agents.py`：Agent 增删。
 - `api/routes/hermes.py`：协议注册、调用、任务查询、审计查询。
   - 额外支持：`/hermes/route`（按 `target_agent + function_id` 路由调用）
@@ -108,9 +110,7 @@ Gods Platform 采用三层结构：
   - 额外支持：`/hermes/ports/*`（项目级端口租约 reserve/release/list）
 - `api/routes/mnemosyne.py`：Mnemosyne 档案写入/查询/读取。
 - `api/routes/communication.py`：
-  - `/broadcast`：SSE 输出多 Agent 讨论流。
-  - `/confess`：向指定 Agent 私聊并写入 Inbox Event；默认同时入队 `inbox_event` pulse（`silent=false`）。
-  - `/prayers/check`：读取 Agent 发给人类的消息。
+  - `/confess`：向指定 Agent 私聊并写入 Inbox Event；默认同时入队 `inbox_event` wake（`silent=false`）。
 
 ## 3.5 服务层（`api/services/`）
 
@@ -127,9 +127,9 @@ Gods Platform 采用三层结构：
 - 子命令：
   - 项目管理：`project list/create/switch/delete`
   - Agent 管理：`list/activate/deactivate/agent view|edit`
-  - 通信：`broadcast/confess/prayers/check`
+  - 通信：`confess`
   - 配置：`config show/set/models`
-  - 事件调试：`pulse queue/push`、`inbox events`
+  - 事件调试：`angelia events/enqueue`、`inbox outbox`
   - 后台任务：`detach submit/list/stop/logs`
 
 ## 5. 多项目隔离模型

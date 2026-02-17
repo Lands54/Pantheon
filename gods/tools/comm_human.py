@@ -4,11 +4,11 @@ from __future__ import annotations
 import fcntl
 import json
 import time
-from pathlib import Path
 
 from langchain_core.tools import tool
 
 from gods.inbox import enqueue_message
+from gods.paths import mnemosyne_dir, project_buffers_dir, project_dir
 from gods.pulse import get_priority_weights, is_inbox_event_enabled
 from gods.tools.comm_common import format_comm_error
 
@@ -86,8 +86,7 @@ def send_to_human(message: str, caller_id: str, project_id: str = "default") -> 
                 project_id,
             )
 
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        buffer_dir = project_root / "projects" / project_id / "buffers"
+        buffer_dir = project_buffers_dir(project_id)
         buffer_dir.mkdir(parents=True, exist_ok=True)
         target_buffer = buffer_dir / "human.jsonl"
         msg_data = {"timestamp": time.time(), "from": caller_id, "type": "prayer", "content": message}
@@ -110,9 +109,58 @@ def send_to_human(message: str, caller_id: str, project_id: str = "default") -> 
 
 
 @tool
-def finalize(caller_id: str, project_id: str = "default") -> str:
-    """Signal explicit task finalization for the current pulse."""
-    return ""
+def finalize(
+    mode: str = "done",
+    sleep_sec: int = 0,
+    reason: str = "",
+    caller_id: str = "default",
+    project_id: str = "default",
+) -> str:
+    """Signal pulse finalization. mode=done|quiescent; quiescent requests bounded sleep cooldown."""
+    try:
+        from gods.config import runtime_config
+
+        proj = runtime_config.projects.get(project_id)
+        enabled = bool(getattr(proj, "finalize_quiescent_enabled", True) if proj else True)
+        min_sec = int(getattr(proj, "finalize_sleep_min_sec", 15) if proj else 15)
+        default_sec = int(getattr(proj, "finalize_sleep_default_sec", 120) if proj else 120)
+        max_sec = int(getattr(proj, "finalize_sleep_max_sec", 1800) if proj else 1800)
+        min_sec = max(5, min(min_sec, 3600))
+        max_sec = max(min_sec, min(max_sec, 24 * 3600))
+        default_sec = max(min_sec, min(default_sec, max_sec))
+
+        md = str(mode or "done").strip().lower()
+        if md not in {"done", "quiescent"}:
+            md = "done"
+        if md == "quiescent" and not enabled:
+            md = "done"
+
+        req = int(sleep_sec or 0)
+        if req <= 0:
+            applied = default_sec
+        else:
+            applied = max(min_sec, min(req, max_sec))
+        if md == "done":
+            applied = 0
+
+        return json.dumps(
+            {
+                "ok": True,
+                "finalize": {
+                    "mode": md,
+                    "requested_sleep_sec": int(req),
+                    "applied_sleep_sec": int(applied),
+                    "min_sleep_sec": int(min_sec),
+                    "default_sleep_sec": int(default_sec),
+                    "max_sleep_sec": int(max_sec),
+                    "quiescent_enabled": bool(enabled),
+                    "reason": str(reason or ""),
+                },
+            },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
 
 @tool
@@ -131,14 +179,14 @@ def abstain_from_synod(reason: str, caller_id: str = "default") -> str:
 def list_agents(caller_id: str, project_id: str = "default") -> str:
     """List all agents in current project with short role summary from Mnemosyne profiles."""
     try:
-        agents_root = Path("projects") / project_id / "agents"
+        agents_root = project_dir(project_id) / "agents"
         if not agents_root.exists():
             return "No agents found in this project."
 
         results = []
         for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
             agent_id = agent_dir.name
-            md_path = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+            md_path = mnemosyne_dir(project_id) / "agent_profiles" / f"{agent_id}.md"
             role = "No role summary."
             if md_path.exists():
                 text = md_path.read_text(encoding="utf-8").strip()

@@ -19,8 +19,8 @@ def test_agent_memory_compaction_rolls_old_content():
         name="unit compact",
         active_agents=[agent_id],
         simulation_enabled=False,
-        memory_compact_trigger_chars=1500,
-        memory_compact_keep_chars=500,
+        memory_compact_trigger_tokens=700,
+        memory_compact_strategy="rule_based",
     )
 
     try:
@@ -34,7 +34,7 @@ def test_agent_memory_compaction_rolls_old_content():
         archive_path = Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}_archive.md"
         mem_text = mem_path.read_text(encoding="utf-8")
 
-        assert "MEMORY_COMPACTED" in mem_text
+        assert "MEMORY_COMPACTED_V2" in mem_text
         assert mem_text.startswith("### SYSTEM_SEED")
         assert archive_path.exists()
         assert archive_path.stat().st_size > 0

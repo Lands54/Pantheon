@@ -34,16 +34,8 @@ class ProjectService:
 
         runtime_config.projects[pid] = ProjectConfig()
         runtime_config.save()
-
-        agent_dir = Path("projects") / pid / "agents" / "genesis"
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        profile = Path("projects") / pid / "mnemosyne" / "agent_profiles" / "genesis.md"
-        if not profile.exists():
-            profile.parent.mkdir(parents=True, exist_ok=True)
-            profile.write_text(
-                "# GENESIS\nYou are the first Being of this new world. Observe, evolve, and manifest.",
-                encoding="utf-8",
-            )
+        # Create minimal project root; no default agent is auto-created.
+        Path("projects").joinpath(pid).mkdir(parents=True, exist_ok=True)
         return {"status": "success"}
 
     def delete_project(self, project_id: str) -> dict[str, str]:
@@ -52,6 +44,14 @@ class ProjectService:
         if project_id not in runtime_config.projects:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        # Stop project workers first to avoid runtime-dir deletion race.
+        try:
+            angelia_supervisor.stop_project_workers(project_id)
+        except Exception:
+            pass
+
+        proj = runtime_config.projects[project_id]
+        proj.simulation_enabled = False
         del runtime_config.projects[project_id]
         if runtime_config.current_project == project_id:
             runtime_config.current_project = "default"

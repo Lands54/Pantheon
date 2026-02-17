@@ -6,7 +6,8 @@ import shutil
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from gods.config import runtime_config, AgentModelConfig
-from api.scheduler import get_project_status
+from gods.angelia.scheduler import angelia_supervisor
+from gods.inbox import has_pending
 from api.models import CreateAgentRequest
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -18,7 +19,29 @@ async def get_agents_status(project_id: str = None):
     project_id = project_id or runtime_config.current_project
     proj = runtime_config.projects.get(project_id)
     active = list(proj.active_agents) if proj else []
-    return {"project_id": project_id, "agents": get_project_status(project_id, active)}
+    rows = angelia_supervisor.list_agent_status(project_id, active)
+    items = []
+    for row in rows:
+        aid = row.get("agent_id", "")
+        items.append(
+            {
+                "project_id": project_id,
+                "agent_id": aid,
+                "status": row.get("run_state", "idle"),
+                "last_reason": row.get("current_event_type", ""),
+                "last_pulse_at": float(row.get("last_wake_at", 0.0) or 0.0),
+                "next_eligible_at": max(
+                    float(row.get("cooldown_until", 0.0) or 0.0),
+                    float(row.get("backoff_until", 0.0) or 0.0),
+                ),
+                "empty_cycles": 0,
+                "last_next_step": "",
+                "last_error": row.get("last_error", ""),
+                "queued_pulse_events": int(row.get("queued_events", 0)),
+                "has_pending_inbox": has_pending(project_id, aid),
+            }
+        )
+    return {"project_id": project_id, "agents": items}
 
 
 @router.post("/create")

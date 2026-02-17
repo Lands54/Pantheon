@@ -1,4 +1,4 @@
-from gods.agents.context_policy import resolve_context_cfg
+from gods.janus.context_policy import resolve_context_cfg
 from gods.config import AgentModelConfig, ProjectConfig, runtime_config
 
 

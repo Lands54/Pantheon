@@ -24,12 +24,6 @@ class CreateAgentRequest(BaseModel):
     directives: str
 
 
-class BroadcastRequest(BaseModel):
-    """Request model for broadcasting to all agents."""
-    message: str
-    thread_id: str = "sacred_decree"
-
-
 class HumanMessageRequest(BaseModel):
     """Request model for sending a private message to an agent (confession)."""
     agent_id: str

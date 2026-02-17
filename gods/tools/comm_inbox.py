@@ -8,12 +8,12 @@ from langchain_core.tools import tool
 
 from gods.inbox import ack_handled, list_outbox_receipts
 from gods.inbox.store import take_deliverable_inbox_events
+from gods.paths import runtime_dir
 from gods.tools.comm_common import format_comm_error
 
 
 def _inbox_guard_path(caller_id: str, project_id: str) -> Path:
-    project_root = Path(__file__).parent.parent.parent.absolute()
-    guard_dir = project_root / "projects" / project_id / "runtime"
+    guard_dir = runtime_dir(project_id)
     guard_dir.mkdir(parents=True, exist_ok=True)
     return guard_dir / f"{caller_id}_inbox_guard.json"
 

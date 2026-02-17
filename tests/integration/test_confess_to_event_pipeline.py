@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from gods.config import runtime_config
+from gods.inbox import list_events, InboxMessageState
 
 
 client = TestClient(app)
@@ -26,11 +27,7 @@ def test_confess_to_event_pipeline():
         body = res.json()
         assert "inbox_event_id" in body
 
-        inbox_res = client.get(
-            f"/projects/{project_id}/inbox/events",
-            params={"agent_id": "receiver", "state": "pending", "limit": 50},
-        )
-        inbox = inbox_res.json().get("items", [])
+        inbox = [x.to_dict() for x in list_events(project_id=project_id, agent_id="receiver", state=InboxMessageState.PENDING, limit=50)]
         assert any(item.get("content") == "hello" for item in inbox)
         assert any(item.get("title") == "hello-title" for item in inbox)
 

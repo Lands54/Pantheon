@@ -47,16 +47,16 @@ def cmd_config(args):
             print(f"   Summarize Threshold: {proj.get('summarize_threshold', 12)} messages")
             print(f"   Keep Count: {proj.get('summarize_keep_count', 5)} messages")
             print(f"   Tool Loop Max: {proj.get('tool_loop_max', 8)} per pulse")
-            print(f"   Memory Compact Trigger Chars: {proj.get('memory_compact_trigger_chars', 200000)}")
-            print(f"   Memory Compact Keep Chars: {proj.get('memory_compact_keep_chars', 50000)}")
+            print(f"   Memory Compact Trigger Tokens: {proj.get('memory_compact_trigger_tokens', 12000)}")
+            print(f"   Memory Compact Strategy: {proj.get('memory_compact_strategy', 'semantic_llm')}")
             print(f"\n🪞 Janus Context:")
             print(f"   Strategy: {proj.get('context_strategy', 'structured_v1')}")
             print(f"   Token Budget Total: {proj.get('context_token_budget_total', 32000)}")
             print(f"   Budget Task State: {proj.get('context_budget_task_state', 4000)}")
             print(f"   Budget Observations: {proj.get('context_budget_observations', 12000)}")
             print(f"   Budget Inbox: {proj.get('context_budget_inbox', 4000)}")
-            print(f"   Budget Recent Messages: {proj.get('context_budget_recent_messages', 12000)}")
-            print(f"   Recent Message Limit: {proj.get('context_recent_message_limit', 50)}")
+            print(f"   Budget State Window: {proj.get('context_budget_state_window', 12000)}")
+            print(f"   State Window Limit: {proj.get('context_state_window_limit', 50)}")
             print(f"   Observation Window: {proj.get('context_observation_window', 30)}")
             print(f"   Include Inbox Status Hints: {proj.get('context_include_inbox_status_hints', True)}")
             print(f"   Write Build Report: {proj.get('context_write_build_report', True)}")
@@ -199,8 +199,8 @@ def cmd_config(args):
                 "context_budget_task_state",
                 "context_budget_observations",
                 "context_budget_inbox",
-                "context_budget_recent_messages",
-                "context_recent_message_limit",
+                "context_budget_state_window",
+                "context_state_window_limit",
                 "context_observation_window",
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
@@ -228,9 +228,9 @@ def cmd_config(args):
                     "context_budget_task_state",
                     "context_budget_observations",
                     "context_budget_inbox",
-                    "context_budget_recent_messages",
-                    "context_recent_message_limit",
-                    "context_observation_window",
+                    "context_budget_state_window",
+                    "context_state_window_limit",
+                "context_observation_window",
                 }:
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
@@ -315,9 +315,13 @@ def cmd_config(args):
                 elif parts[1] == "keep":
                     data["projects"][pid]["summarize_keep_count"] = int(args.value)
                 elif parts[1] == "compact_trigger":
-                    data["projects"][pid]["memory_compact_trigger_chars"] = int(args.value)
-                elif parts[1] == "compact_keep":
-                    data["projects"][pid]["memory_compact_keep_chars"] = int(args.value)
+                    data["projects"][pid]["memory_compact_trigger_tokens"] = int(args.value)
+                elif parts[1] == "compact_strategy":
+                    value = str(args.value).strip().lower()
+                    if value not in {"semantic_llm", "rule_based"}:
+                        print("❌ memory.compact_strategy must be semantic_llm | rule_based")
+                        return
+                    data["projects"][pid]["memory_compact_strategy"] = value
                 else:
                     print(f"❌ Unknown memory key: {parts[1]}")
                     return
@@ -329,8 +333,8 @@ def cmd_config(args):
                     data["projects"][pid]["context_strategy"] = args.value
                 elif parts[1] == "token_budget_total":
                     data["projects"][pid]["context_token_budget_total"] = int(args.value)
-                elif parts[1] == "recent_message_limit":
-                    data["projects"][pid]["context_recent_message_limit"] = int(args.value)
+                elif parts[1] == "state_window_limit":
+                    data["projects"][pid]["context_state_window_limit"] = int(args.value)
                 elif parts[1] == "observation_window":
                     data["projects"][pid]["context_observation_window"] = int(args.value)
                 elif parts[1] == "include_inbox_status_hints":
@@ -344,8 +348,8 @@ def cmd_config(args):
                         data["projects"][pid]["context_budget_observations"] = int(args.value)
                     elif parts[2] == "inbox":
                         data["projects"][pid]["context_budget_inbox"] = int(args.value)
-                    elif parts[2] == "recent_messages":
-                        data["projects"][pid]["context_budget_recent_messages"] = int(args.value)
+                    elif parts[2] == "state_window":
+                        data["projects"][pid]["context_budget_state_window"] = int(args.value)
                     else:
                         print(f"❌ Unknown context budget key: {parts[2]}")
                         return
@@ -610,15 +614,15 @@ def cmd_config(args):
                 print("  pulse_priority_weights ({\"inbox_event\":100,...})")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
-                print("  memory.compact_trigger (chars)")
-                print("  memory.compact_keep (chars)")
+                print("  memory.compact_trigger (tokens)")
+                print("  memory.compact_strategy (semantic_llm|rule_based)")
                 print("  context.strategy (structured_v1)")
                 print("  context.token_budget_total (tokens)")
                 print("  context.budget.task_state (tokens)")
                 print("  context.budget.observations (tokens)")
                 print("  context.budget.inbox (tokens)")
-                print("  context.budget.recent_messages (tokens)")
-                print("  context.recent_message_limit (count)")
+                print("  context.budget.state_window (tokens)")
+                print("  context.state_window_limit (count)")
                 print("  context.observation_window (count)")
                 print("  context.include_inbox_status_hints (true/false)")
                 print("  context.write_build_report (true/false)")
@@ -670,8 +674,8 @@ def cmd_config(args):
                 print("  context_budget_task_state (tokens)")
                 print("  context_budget_observations (tokens)")
                 print("  context_budget_inbox (tokens)")
-                print("  context_budget_recent_messages (tokens)")
-                print("  context_recent_message_limit (count)")
+                print("  context_budget_state_window (tokens)")
+                print("  context_state_window_limit (count)")
                 print("  context_observation_window (count)")
                 print("  context_include_inbox_status_hints (true/false)")
                 print("  context_write_build_report (true/false)")

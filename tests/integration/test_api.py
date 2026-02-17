@@ -53,6 +53,9 @@ def test_create_project():
     response = client.get("/projects")
     data = response.json()
     assert test_project_id in data["projects"]
+    proj = data["projects"][test_project_id]
+    assert proj.get("active_agents", []) == []
+    assert proj.get("agent_settings", {}) == {}
     
     # Cleanup
     client.delete(f"/projects/{test_project_id}")

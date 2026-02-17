@@ -7,7 +7,9 @@ import json
 import os
 from langchain_core.tools import tool
 
-RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_state.json"}
+from gods.paths import agent_dir
+
+RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_state.json", "state_window.json"}
 HIDDEN_DIR_NAMES = {"debug"}
 
 
@@ -26,18 +28,25 @@ def validate_path(caller_id: str, project_id: str, path: str) -> Path:
     """
     Validates that a requested path is within the agent's project territory.
     """
-    project_root = Path(__file__).parent.parent.parent.absolute()
-    agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+    agent_territory = _agent_territory(project_id, caller_id)
     
     # Ensure directory exists for new agents
     agent_territory.mkdir(parents=True, exist_ok=True)
     
     target_path = (agent_territory / path).resolve()
-    
-    if not str(target_path).startswith(str(agent_territory)):
+
+    try:
+        target_path.relative_to(agent_territory)
+    except ValueError:
         raise PermissionError(f"Divine Restriction: Access to {path} is forbidden. You are confined to your domain.")
-    
+
     return target_path
+
+
+def _agent_territory(project_id: str, caller_id: str) -> Path:
+    territory = agent_dir(project_id, caller_id).resolve()
+    territory.mkdir(parents=True, exist_ok=True)
+    return territory
 
 
 def _cwd_prefix(agent_territory: Path, message: str) -> str:
@@ -125,7 +134,7 @@ def read_file(path: str, caller_id: str, project_id: str = "default") -> str:
     """Read a scroll from your library. Only your personal scrolls are accessible."""
     try:
         file_path = validate_path(caller_id, project_id, path)
-        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         if _is_reserved_path(file_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -145,8 +154,7 @@ def read_file(path: str, caller_id: str, project_id: str = "default") -> str:
         with open(file_path, "r", encoding="utf-8") as f:
             return _cwd_prefix(agent_territory, f.read())
     except Exception as e:
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
             agent_territory,
             "Filesystem Error",
@@ -160,7 +168,7 @@ def write_file(path: str, content: str, caller_id: str, project_id: str = "defau
     """Inscribe a new scroll or overwrite an existing one in your territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
-        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         if _is_reserved_path(file_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -173,8 +181,7 @@ def write_file(path: str, content: str, caller_id: str, project_id: str = "defau
             f.write(content)
         return _cwd_prefix(agent_territory, f"Scroll {path} has been inscribed.")
     except Exception as e:
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
             agent_territory,
             "Filesystem Error",
@@ -188,7 +195,7 @@ def replace_content(path: str, target_content: str, replacement_content: str, ca
     """Refine the scripture within your project territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
-        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         if _is_reserved_path(file_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -226,8 +233,7 @@ def replace_content(path: str, target_content: str, replacement_content: str, ca
         file_path.write_text(new_content, encoding="utf-8")
         return _cwd_prefix(agent_territory, f"Sacred scripture {path} has been refined.")
     except Exception as e:
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
             agent_territory,
             "Filesystem Error",
@@ -241,7 +247,7 @@ def insert_content(path: str, anchor: str, content_to_insert: str, position: str
     """Expand the scripture within your project territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
-        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         if _is_reserved_path(file_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -282,8 +288,7 @@ def insert_content(path: str, anchor: str, content_to_insert: str, position: str
         file_path.write_text(new_content, encoding="utf-8")
         return _cwd_prefix(agent_territory, f"New passage manifested in {path} ({position} the anchor).")
     except Exception as e:
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
             agent_territory,
             "Filesystem Error",
@@ -297,7 +302,7 @@ def multi_replace(path: str, replacements_json: str, caller_id: str, project_id:
     """Reshape the doctrine within your project territory."""
     try:
         file_path = validate_path(caller_id, project_id, path)
-        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         if _is_reserved_path(file_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -320,8 +325,7 @@ def multi_replace(path: str, replacements_json: str, caller_id: str, project_id:
         file_path.write_text(content, encoding="utf-8")
         return _cwd_prefix(agent_territory, f"Doctrine in {path} reshaped.")
     except Exception as e:
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
             agent_territory,
             "Filesystem Error",
@@ -335,7 +339,7 @@ def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "def
     """Survey the chambers within your current project territory."""
     try:
         dir_path = validate_path(caller_id, project_id, path)
-        agent_territory = (Path(__file__).parent.parent.parent.absolute() / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         if _is_reserved_path(dir_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -370,8 +374,7 @@ def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "def
         result = [f"{'[CHAMBER]' if (dir_path / item).is_dir() else '[SCROLL]'} {item}" for item in items]
         return _cwd_prefix(agent_territory, "\n".join(result))
     except Exception as e:
-        project_root = Path(__file__).parent.parent.parent.absolute()
-        agent_territory = (project_root / "projects" / project_id / "agents" / caller_id).resolve()
+        agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
             agent_territory,
             "Filesystem Error",

@@ -49,9 +49,6 @@ class _DummyAgent:
         self.executed_tools = []
         self.memory_log = []
 
-    def build_context(self, **kwargs):
-        return "ctx"
-
     def get_tools(self):
         return []
 

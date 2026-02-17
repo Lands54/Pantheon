@@ -8,10 +8,11 @@ import uuid
 from pathlib import Path
 
 from gods.inbox.outbox_models import OutboxReceipt, OutboxReceiptStatus
+from gods.paths import runtime_dir, runtime_locks_dir
 
 
 def _runtime_dir(project_id: str) -> Path:
-    path = Path("projects") / project_id / "runtime"
+    path = runtime_dir(project_id)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -21,7 +22,7 @@ def _receipts_path(project_id: str) -> Path:
 
 
 def _lock_path(project_id: str) -> Path:
-    lock_dir = _runtime_dir(project_id) / "locks"
+    lock_dir = runtime_locks_dir(project_id)
     lock_dir.mkdir(parents=True, exist_ok=True)
     return lock_dir / "outbox_receipts.lock"
 

@@ -1,4 +1,4 @@
-"""Context strategy runtime policy resolvers."""
+"""Context strategy runtime policy resolvers (Janus-owned)."""
 from __future__ import annotations
 
 from gods.config import runtime_config
@@ -54,8 +54,11 @@ def resolve_context_cfg(project_id: str, agent_id: str) -> dict:
         "budget_task_state": int(getattr(proj, "context_budget_task_state", 4000) if proj else 4000),
         "budget_observations": int(getattr(proj, "context_budget_observations", 12000) if proj else 12000),
         "budget_inbox": int(getattr(proj, "context_budget_inbox", 4000) if proj else 4000),
-        "budget_recent_messages": int(getattr(proj, "context_budget_recent_messages", 12000) if proj else 12000),
-        "recent_message_limit": int(getattr(proj, "context_recent_message_limit", 50) if proj else 50),
+        "budget_inbox_unread": int(getattr(proj, "context_budget_inbox_unread", 2000) if proj else 2000),
+        "budget_inbox_read_recent": int(getattr(proj, "context_budget_inbox_read_recent", 1000) if proj else 1000),
+        "budget_inbox_receipts": int(getattr(proj, "context_budget_inbox_receipts", 1000) if proj else 1000),
+        "budget_state_window": int(getattr(proj, "context_budget_state_window", 12000) if proj else 12000),
+        "state_window_limit": int(getattr(proj, "context_state_window_limit", 50) if proj else 50),
         "observation_window": int(getattr(proj, "context_observation_window", 30) if proj else 30),
         "include_inbox_status_hints": bool(getattr(proj, "context_include_inbox_status_hints", True) if proj else True),
         "write_build_report": bool(getattr(proj, "context_write_build_report", True) if proj else True),

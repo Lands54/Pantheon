@@ -4,10 +4,11 @@ Manages LLM instances using runtime configuration.
 """
 import json
 import time
-from pathlib import Path
 
 from gods.config import runtime_config
 from langchain_core.messages import AIMessage
+from gods.mnemosyne.compaction import note_llm_token_io
+from gods.paths import runtime_debug_dir
 
 
 class GodBrain:
@@ -83,7 +84,7 @@ class GodBrain:
 
         meta = trace_meta or {}
         current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
-        trace_dir = Path("projects") / current_project / "agents" / self.agent_id / "debug"
+        trace_dir = runtime_debug_dir(current_project, self.agent_id)
         trace_dir.mkdir(parents=True, exist_ok=True)
         trace_file = trace_dir / "llm_io.jsonl"
 
@@ -98,6 +99,10 @@ class GodBrain:
             "request_messages": [self._serialize_message(m) for m in request_messages],
             "request_tools": [getattr(t, "name", str(t)) for t in (tools or [])],
         }
+        estimated_context_tokens = 0
+        for m in request_messages or []:
+            estimated_context_tokens += max(1, len(str(getattr(m, "content", "") or "")) // 4)
+        payload["estimated_context_tokens"] = int(estimated_context_tokens)
         if request_raw is not None:
             payload["request_raw"] = request_raw
         if response_message is not None:
@@ -107,6 +112,25 @@ class GodBrain:
 
         with open(trace_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        try:
+            prompt_tokens = 0
+            total_tokens = 0
+            if response_message is not None:
+                meta = getattr(response_message, "response_metadata", {}) or {}
+                usage = meta.get("token_usage", {}) if isinstance(meta, dict) else {}
+                if isinstance(usage, dict):
+                    prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+                    total_tokens = int(usage.get("total_tokens", 0) or 0)
+            note_llm_token_io(
+                current_project,
+                self.agent_id,
+                mode=mode,
+                estimated_context_tokens=estimated_context_tokens,
+                prompt_tokens=prompt_tokens,
+                total_tokens=total_tokens,
+            )
+        except Exception:
+            pass
 
     def get_llm(self):
         """

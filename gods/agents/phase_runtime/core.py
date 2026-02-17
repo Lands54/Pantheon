@@ -493,6 +493,15 @@ class AgentPhaseRuntime:
                         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
                         tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
                         obs = self.agent.execute_tool("finalize", args)
+                        try:
+                            _sleep_sec = int(args.get("sleep_sec", 0) or 0)
+                        except Exception:
+                            _sleep_sec = 0
+                        state["__finalize_control"] = {
+                            "mode": str(args.get("mode", "done") or "done").strip().lower(),
+                            "sleep_sec": _sleep_sec,
+                            "reason": str(args.get("reason", "") or ""),
+                        }
                         state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
                         tracer.event(
                             "tool_executed",
@@ -765,6 +774,15 @@ class AgentPhaseRuntime:
                     args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
                     tool_call_id = call.get("id") or f"finalize_{uuid.uuid4().hex[:8]}"
                     obs = self.agent.execute_tool("finalize", args)
+                    try:
+                        _sleep_sec = int(args.get("sleep_sec", 0) or 0)
+                    except Exception:
+                        _sleep_sec = 0
+                    state["__finalize_control"] = {
+                        "mode": str(args.get("mode", "done") or "done").strip().lower(),
+                        "sleep_sec": _sleep_sec,
+                        "reason": str(args.get("reason", "") or ""),
+                    }
                     state["messages"].append(ToolMessage(content=obs, tool_call_id=tool_call_id, name="finalize"))
                     tracer.event(
                         "tool_executed",

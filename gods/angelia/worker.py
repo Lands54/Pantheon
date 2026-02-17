@@ -70,6 +70,21 @@ def _next_cooldown(project_id: str, next_step: str, empty_cycles: int) -> int:
     return policy.cooldown_from_next_step(project_id, next_step, empty_cycles)
 
 
+def _finalize_quiescent_cooldown(project_id: str, result: dict) -> int:
+    if not isinstance(result, dict):
+        return 0
+    ctl = result.get("__finalize_control")
+    if not isinstance(ctl, dict):
+        return 0
+    mode = str(ctl.get("mode", "done") or "done").strip().lower()
+    if mode != "quiescent":
+        return 0
+    if not policy.finalize_quiescent_enabled(project_id):
+        return 0
+    requested = ctl.get("sleep_sec", None)
+    return int(policy.finalize_sleep_sec(project_id, requested if requested is not None else None))
+
+
 def _set_running(st: AgentRuntimeStatus, event_id: str, event_type: str):
     st.run_state = AgentRunState.RUNNING
     st.current_event_id = event_id
@@ -156,6 +171,9 @@ def worker_loop(ctx: WorkerContext):
                 else:
                     empty_cycles = 0
                 cooldown = _next_cooldown(project_id, next_step, empty_cycles)
+                quiescent_cooldown = _finalize_quiescent_cooldown(project_id, result)
+                if quiescent_cooldown > 0:
+                    cooldown = max(int(cooldown), int(quiescent_cooldown))
                 store.mark_done(project_id, event.event_id)
                 record_intent(intent_from_angelia_event(event, stage="done", extra_payload={"next_step": next_step}))
                 _set_idle(st, cooldown)

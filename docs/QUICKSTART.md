@@ -45,11 +45,10 @@ API 文档：`http://localhost:8000/docs`
 ### 4.3 通信与观测
 
 ```bash
-./temple.sh broadcast "讨论当前目标"
-./temple.sh confess genesis "请先处理收件箱"
-./temple.sh confess genesis "先记录，不要立即执行" --silent
+./temple.sh confess genesis --title "任务指令" "请先处理收件箱"
+./temple.sh confess genesis --title "记录" "先记录，不要立即执行" --silent
 ./temple.sh check genesis
-./temple.sh prayers
+./temple.sh inbox outbox --agent "High Overseer" --to genesis --limit 20
 ```
 
 ### 4.4 配置

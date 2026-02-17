@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from gods.mnemosyne.intent_registry import tool_intent_names
+from gods.paths import mnemosyne_dir
 from gods.prompts import prompt_registry
-import gods.tools as tools_pkg
 
 
 class MemoryPolicyMissingError(RuntimeError):
@@ -18,19 +19,13 @@ class MemoryTemplateMissingError(RuntimeError):
 
 
 def _mn_root(project_id: str) -> Path:
-    p = Path("projects") / project_id / "mnemosyne"
+    p = mnemosyne_dir(project_id)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def policy_path(project_id: str) -> Path:
     return _mn_root(project_id) / "memory_policy.json"
-
-
-def _tool_names() -> list[str]:
-    raw = getattr(tools_pkg, "_DEFAULT_TOOL_ORDER", [])
-    out = [str(x).strip() for x in list(raw or []) if str(x).strip()]
-    return sorted(set(out))
 
 
 def required_intent_keys() -> list[str]:
@@ -53,7 +48,7 @@ def required_intent_keys() -> list[str]:
         "phase.retry.act",
         "phase.retry.observe",
     ]
-    for tool_name in _tool_names():
+    for tool_name in tool_intent_names():
         keys.append(f"tool.{tool_name}.ok")
         keys.append(f"tool.{tool_name}.error")
         keys.append(f"tool.{tool_name}.blocked")
@@ -62,16 +57,26 @@ def required_intent_keys() -> list[str]:
 
 def default_memory_policy() -> dict[str, dict[str, Any]]:
     policy: dict[str, dict[str, Any]] = {
-        "event.inbox_event": {"to_chronicle": True, "to_runtime_log": True, "template": "memory_event_inbox_event"},
+        "event.inbox_event": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_inbox_event"},
         "event.timer": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_timer"},
-        "event.manual": {"to_chronicle": True, "to_runtime_log": True, "template": "memory_event_manual"},
+        "event.manual": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_manual"},
         "event.system": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_event_system"},
-        "inbox.received.unread": {"to_chronicle": True, "to_runtime_log": True, "template": "memory_inbox_received_unread"},
+        "inbox.received.unread": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_inbox_received_unread"},
+        "inbox.notice.contract_commit_notice": {
+            "to_chronicle": True,
+            "to_runtime_log": True,
+            "template": "memory_inbox_notice_contract_commit",
+        },
+        "inbox.notice.contract_fully_committed": {
+            "to_chronicle": True,
+            "to_runtime_log": True,
+            "template": "memory_inbox_notice_contract_fully_committed",
+        },
         "inbox.read_ack": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_inbox_read_ack"},
         "outbox.sent.pending": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_outbox_pending"},
         "outbox.sent.delivered": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_outbox_delivered"},
         "outbox.sent.handled": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_outbox_handled"},
-        "outbox.sent.failed": {"to_chronicle": True, "to_runtime_log": True, "template": "memory_outbox_failed"},
+        "outbox.sent.failed": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_outbox_failed"},
         "llm.response": {"to_chronicle": True, "to_runtime_log": False, "template": "memory_llm_response"},
         "agent.mode.freeform": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_agent_mode_freeform"},
         "agent.safety.tool_loop_cap": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_agent_safety_tool_loop_cap"},
@@ -80,7 +85,7 @@ def default_memory_policy() -> dict[str, dict[str, Any]]:
         "phase.retry.act": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_phase_retry_act"},
         "phase.retry.observe": {"to_chronicle": False, "to_runtime_log": True, "template": "memory_phase_retry_observe"},
     }
-    for tool_name in _tool_names():
+    for tool_name in tool_intent_names():
         policy[f"tool.{tool_name}.ok"] = {"to_chronicle": True, "to_runtime_log": False, "template": "memory_tool_ok"}
         policy[f"tool.{tool_name}.error"] = {"to_chronicle": True, "to_runtime_log": True, "template": "memory_tool_error"}
         policy[f"tool.{tool_name}.blocked"] = {"to_chronicle": False, "to_runtime_log": True, "template": "memory_tool_blocked"}

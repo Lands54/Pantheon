@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from gods.config import runtime_config
+from gods.inbox import list_events, InboxMessageState
 
 
 client = TestClient(app)
@@ -25,16 +26,10 @@ def test_project_event_isolation():
         client.post("/agents/create", json={"agent_id": "x", "directives": "# x"})
         client.post("/confess", json={"agent_id": "x", "title": "m1-title", "message": "m1", "silent": True})
 
-        p1_rows = client.get(
-            f"/projects/{p1}/inbox/events",
-            params={"agent_id": "x", "state": "pending", "limit": 50},
-        ).json()["items"]
+        p1_rows = [x.to_dict() for x in list_events(project_id=p1, agent_id="x", state=InboxMessageState.PENDING, limit=50)]
         assert len(p1_rows) >= 1
 
-        p2_rows = client.get(
-            f"/projects/{p2}/inbox/events",
-            params={"agent_id": "x", "state": "pending", "limit": 50},
-        ).json()["items"]
+        p2_rows = [x.to_dict() for x in list_events(project_id=p2, agent_id="x", state=InboxMessageState.PENDING, limit=50)]
         assert p2_rows == []
     finally:
         _switch_project(old_project)

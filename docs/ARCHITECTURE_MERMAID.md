@@ -46,7 +46,7 @@ flowchart LR
       HM["hermes/*"]
       MN["mnemosyne/*"]
       TL["tools/*"]
-      CFG["config.py"]
+      CFG["gods.config package"]
     end
 
     SRV --> APP
@@ -80,18 +80,15 @@ flowchart TD
 sequenceDiagram
     participant App as "api.app startup"
     participant Sim as "SimulationService"
-    participant Sch as "api.scheduler"
+    participant Sch as "gods.angelia.scheduler"
     participant Agent as "GodAgent"
 
     App->>Sim: "pause_all_projects_on_startup()"
-    App->>Sim: "create simulation_loop task"
+    App->>Sim: "start angelia supervisor"
     loop "every 1s"
-      Sim->>Sch: "pick_pulse_batch(project, active_agents, batch_size)"
-      Sch-->>Sim: "[(agent_id, reason)]"
-      par "for each agent"
-        Sim->>Sch: "pulse_agent_sync(project, agent, reason)"
-        Sch->>Agent: "process(state)"
-      end
+      Sim->>Sch: "tick_timer_once(project)"
+      Sch-->>Sim: "enqueue timer events if needed"
+      Sch->>Agent: "worker loop consumes queued events"
     end
 ```
 
@@ -602,4 +599,69 @@ sequenceDiagram
     API->>AST: 读取事件/状态
     API->>MNE: 读取归档/报告
     API-->>CLI: JSON/摘要输出
+```
+
+```mermaid
+flowchart LR
+    subgraph RT["运行时层"]
+        E["Angelia Event Queue"]
+        W["Worker"]
+        G["GodAgent.process"]
+    end
+
+    subgraph MEM["Mnemosyne 资产层"]
+        P["agent_profiles/*.md"]
+        C["chronicles/*.md"]
+        A["chronicles/*_archive.md"]
+        T["task_state/*.json (task_card)"]
+        R["runtime_events/*.jsonl"]
+        POL["memory_policy.json (strict)"]
+        TOK["token_io/*.jsonl"]
+        CR["context_reports/*.jsonl"]
+        ID["inbox_digest/*.jsonl"]
+        CMP["Compaction Engine"]
+    end
+
+    subgraph JAN["Janus 构建层 structured_v1"]
+        JP["read_profile()"]
+        JC["load_chronicle_for_context()"]
+        JT["read_task_state()"]
+        JI["build_inbox_overview()"]
+        JO["list_observations()"]
+        ASM["assemble_llm_messages()"]
+        SYS["SystemMessage"]
+    end
+
+    subgraph LLM["推理层"]
+        B["Brain.think_with_tools"]
+        O["AIMessage / Tool Calls"]
+    end
+
+    E --> W --> G
+    G -->|"record_intent"| POL
+    POL -->|"to_chronicle"| C
+    POL -->|"to_runtime_log"| R
+    C --> CMP
+    CMP -->|"rewrite compacted"| C
+    CMP -->|"archive old"| A
+
+    G -->|"update task state"| T
+    B -->|"token usage"| TOK
+
+    P --> JP
+    C --> JC
+    T --> JT
+    R --> JI
+    R --> JO
+
+    JP --> ASM
+    JC --> ASM
+    JT --> ASM
+    JI --> ASM
+    JO --> ASM
+
+    ASM --> SYS --> B --> O --> G
+    ASM -->|"write build report"| CR
+    W -->|"inbox delivery digest"| ID
+
 ```

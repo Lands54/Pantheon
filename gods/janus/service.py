@@ -5,8 +5,8 @@ import json
 import time
 from typing import Any
 
-from gods.agents.context_policy import resolve_context_cfg
 from gods.janus.assembler import assemble_llm_messages
+from gods.janus.context_policy import resolve_context_cfg
 from gods.janus.journal import latest_context_report, list_context_reports, write_context_report
 from gods.janus.models import ContextBuildRequest
 from gods.janus.registry import get_strategy

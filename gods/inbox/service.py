@@ -13,7 +13,7 @@ from gods.inbox.store import (
     mark_inbox_events_handled,
     take_deliverable_inbox_events,
 )
-from gods.mnemosyne import record_intent
+from gods.mnemosyne import load_memory_policy, record_intent
 from gods.mnemosyne.intent_builders import (
     intent_from_inbox_read,
     intent_from_inbox_received,
@@ -21,6 +21,23 @@ from gods.mnemosyne.intent_builders import (
 )
 
 _WAKE_ENQUEUE: Callable[..., dict[str, Any]] | None = None
+
+
+def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
+    mt = str(msg_type or "").strip().lower()
+    preferred = {
+        "contract_commit_notice": "inbox.notice.contract_commit_notice",
+        "contract_fully_committed": "inbox.notice.contract_fully_committed",
+    }.get(mt, "inbox.received.unread")
+    if preferred == "inbox.received.unread":
+        return preferred
+    try:
+        policy = load_memory_policy(project_id)
+        if preferred in policy:
+            return preferred
+    except Exception:
+        pass
+    return "inbox.received.unread"
 
 
 def set_wake_enqueue(func: Callable[..., dict[str, Any]] | None):
@@ -65,6 +82,8 @@ def enqueue_message(
             title=title,
             sender=sender,
             message_id=event.event_id,
+            msg_type=msg_type,
+            intent_key=_resolve_inbox_received_intent_key(project_id, msg_type),
         )
     )
     record_intent(

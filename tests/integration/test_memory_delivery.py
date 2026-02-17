@@ -57,8 +57,8 @@ def test_memory_is_delivered_to_next_pulse():
         phase_mode_enabled=True,
         phase_single_tool_call=True,
         tool_loop_max=3,
-        memory_compact_trigger_chars=500000,
-        memory_compact_keep_chars=300000,
+        memory_compact_trigger_tokens=120000,
+        memory_compact_strategy="rule_based",
     )
 
     try:

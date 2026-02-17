@@ -22,16 +22,11 @@ from cli.commands.mnemosyne import cmd_mnemosyne
 from cli.commands.runtime import cmd_runtime
 from cli.commands.detach import cmd_detach
 from cli.commands.context import cmd_context
-from cli.commands.pulse import cmd_pulse
 from cli.commands.inbox import cmd_inbox
 from cli.commands.angelia import cmd_angelia
 from cli.commands.project import cmd_project as cmd_project_v2
 from cli.commands.agent import cmd_agent as cmd_agent_v2
-from cli.commands.communication import (
-    cmd_broadcast as cmd_broadcast_v2,
-    cmd_confess as cmd_confess_v2,
-    cmd_prayers as cmd_prayers_v2,
-)
+from cli.commands.communication import cmd_confess as cmd_confess_v2
 from cli.utils import get_base_url
 
 CONFIG_PATH = Path("config.json")
@@ -108,9 +103,6 @@ def cmd_project(args):
 def cmd_agent(args):
     cmd_agent_v2(args)
 
-def cmd_broadcast(args):
-    cmd_broadcast_v2(args)
-
 def cmd_test(args):
     """Run Automated Integration Tests"""
     import time
@@ -131,8 +123,7 @@ def cmd_test(args):
         # 3. Switch to project
         print("Step 2: Switching to test world...")
         config["current_project"] = test_id
-        # Activate genesis
-        config["projects"][test_id]["active_agents"] = ["genesis"]
+        config["projects"][test_id]["active_agents"] = []
         requests.post(f"{get_base_url()}/config/save", json=config)
 
         # 4. Create another agent
@@ -147,24 +138,29 @@ def cmd_test(args):
         config["projects"][test_id]["active_agents"].append("tester")
         requests.post(f"{get_base_url()}/config/save", json=config)
 
-        # 6. Broadcast and check responses
-        print("Step 4: Running broadcast integration...")
-        received_success = False
-        payload = {"message": "Divine Test Signal: Please respond."}
-        with requests.post(f"{get_base_url()}/broadcast", json=payload, stream=True) as r:
-            for line in r.iter_lines():
-                if line:
-                    line_str = line.decode('utf-8')
-                    if line_str.startswith('data: '):
-                        data = json.loads(line_str[6:])
-                        content = data.get("content", "")
-                        if "MANIFEST_SUCCESS" in content:
-                            received_success = True
-        
-        if received_success:
-            print("\n✅ TEST PASSED: Agent communication verified.")
+        # 6. Confess and check outbox
+        print("Step 4: Running confess pipeline integration...")
+        send_res = requests.post(
+            f"{get_base_url()}/confess",
+            json={
+                "agent_id": "tester",
+                "title": "Divine Test Signal",
+                "message": "Please respond with MANIFEST_SUCCESS in your next pulse.",
+                "silent": False,
+            },
+        )
+        ok = send_res.status_code == 200
+        outbox_res = requests.get(
+            f"{get_base_url()}/projects/{test_id}/inbox/outbox",
+            params={"from_agent_id": "High Overseer", "to_agent_id": "tester", "limit": 20},
+        )
+        rows = (outbox_res.json() or {}).get("items", []) if outbox_res.status_code == 200 else []
+        ok = ok and any(str(x.get("title", "")) == "Divine Test Signal" for x in rows)
+
+        if ok:
+            print("\n✅ TEST PASSED: Confess communication verified.")
         else:
-            print("\n⚠️  TEST PARTIAL: Agent responded but trigger word missing.")
+            print("\n⚠️  TEST PARTIAL: Confess accepted but outbox record not confirmed.")
 
         # 7. Cleanup
         if args.cleanup:
@@ -336,24 +332,9 @@ def main():
     p_ctx_reports.add_argument("agent")
     p_ctx_reports.add_argument("--limit", type=int, default=20)
 
-    # pulse queue operations (deprecated)
-    p_pulse = subparsers.add_parser("pulse", help="Pulse queue operations (deprecated, use angelia)")
-    pulse_sub = p_pulse.add_subparsers(dest="subcommand")
-    p_pulse_queue = pulse_sub.add_parser("queue", help="Show pulse queue events")
-    p_pulse_queue.add_argument("--agent", default="")
-    p_pulse_queue.add_argument("--status", default="queued")
-    p_pulse_queue.add_argument("--limit", type=int, default=50)
-    p_pulse_push = pulse_sub.add_parser("push", help="Push manual/system pulse event")
-    p_pulse_push.add_argument("agent")
-    p_pulse_push.add_argument("--type", default="manual", choices=["manual", "system", "timer", "inbox_event"])
-
-    # inbox event operations (deprecated)
-    p_inbox = subparsers.add_parser("inbox", help="Inbox event operations (deprecated)")
+    # inbox operations
+    p_inbox = subparsers.add_parser("inbox", help="Inbox operations")
     inbox_sub = p_inbox.add_subparsers(dest="subcommand")
-    p_inbox_events = inbox_sub.add_parser("events", help="Show inbox event records")
-    p_inbox_events.add_argument("--agent", default="")
-    p_inbox_events.add_argument("--state", default="")
-    p_inbox_events.add_argument("--limit", type=int, default=50)
     p_inbox_outbox = inbox_sub.add_parser("outbox", help="Show outbox receipt records")
     p_inbox_outbox.add_argument("--agent", default="")
     p_inbox_outbox.add_argument("--to", default="")
@@ -390,10 +371,6 @@ def main():
     p_agent.add_argument("subcommand", choices=["view", "edit"])
     p_agent.add_argument("id")
 
-    # broadcast
-    p_bc = subparsers.add_parser("broadcast")
-    p_bc.add_argument("message")
-    
     # confess
     p_cf = subparsers.add_parser("confess")
     p_cf.add_argument("id")
@@ -401,9 +378,6 @@ def main():
     p_cf.add_argument("message")
     p_cf.add_argument("--silent", action="store_true", help="Send message without triggering an immediate pulse")
     
-    # prayers
-    subparsers.add_parser("prayers")
-
     # test
     p_test = subparsers.add_parser("test", help="Run automated integration tests")
     p_test.add_argument("--cleanup", action="store_true", help="Delete test project after completion")
@@ -446,9 +420,6 @@ def main():
     if args.command == "context" and not args.subcommand:
         p_ctx.print_help()
         sys.exit(0)
-    if args.command == "pulse" and not args.subcommand:
-        p_pulse.print_help()
-        sys.exit(0)
     if args.command == "inbox" and not args.subcommand:
         p_inbox.print_help()
         sys.exit(0)
@@ -466,11 +437,9 @@ def main():
     elif args.command == "runtime": cmd_runtime(args)
     elif args.command == "detach": cmd_detach(args)
     elif args.command == "context": cmd_context(args)
-    elif args.command == "pulse": cmd_pulse(args)
     elif args.command == "inbox": cmd_inbox(args)
     elif args.command == "angelia": cmd_angelia(args)
     elif args.command == "agent": cmd_agent(args)
-    elif args.command == "broadcast": cmd_broadcast(args)
     elif args.command == "test": cmd_test(args)
     elif args.command == "activate":
         try:
@@ -494,8 +463,6 @@ def main():
         except: print("❌ Server error.")
     elif args.command == "confess":
         cmd_confess_v2(args)
-    elif args.command == "prayers":
-        cmd_prayers_v2(args)
     else:
         parser.print_help()
 

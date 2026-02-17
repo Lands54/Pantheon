@@ -69,6 +69,20 @@ class AngeliaSupervisor:
         self.notify(project_id, agent_id)
         return {"project_id": project_id, "agent_id": agent_id, "status": "notified"}
 
+    def stop_project_workers(self, project_id: str):
+        to_stop: list[tuple[tuple[str, str], _WorkerHandle]] = []
+        with self._lock:
+            for key, handle in list(self._workers.items()):
+                pid, _aid = key
+                if pid == project_id:
+                    to_stop.append((key, handle))
+            for key, _handle in to_stop:
+                self._workers.pop(key, None)
+
+        for (_pid, _aid), handle in to_stop:
+            handle.stop_event.set()
+            handle.thread.join(timeout=1.0)
+
     def enqueue_event(
         self,
         project_id: str,

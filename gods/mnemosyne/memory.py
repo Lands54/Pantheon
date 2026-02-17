@@ -15,11 +15,13 @@ from gods.mnemosyne.policy_registry import (
     ensure_memory_policy,
     load_memory_policy as _load_strict_policy,
 )
+from gods.paths import mnemosyne_dir
 from gods.prompts import prompt_registry
+from gods.mnemosyne.compaction import ensure_compacted
 
 
 def _mn_root(project_id: str) -> Path:
-    p = Path("projects") / project_id / "mnemosyne"
+    p = mnemosyne_dir(project_id)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -99,6 +101,10 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
     chronicle_written = False
     if sink.to_chronicle and str(text or "").strip():
         _append_chronicle(intent.project_id, intent.agent_id, text)
+        try:
+            ensure_compacted(intent.project_id, intent.agent_id)
+        except Exception:
+            pass
         chronicle_written = True
 
     runtime_written = False
@@ -141,31 +147,3 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
             "template": decision.policy.template,
         },
     }
-
-
-def record_memory_event(
-    *,
-    project_id: str,
-    agent_id: str,
-    record_type: str,
-    payload: dict[str, Any] | None = None,
-    fallback_text: str = "",
-) -> dict[str, Any]:
-    # Deprecated legacy adapter.
-    legacy_key = str(record_type or "").strip()
-    if legacy_key == "default":
-        legacy_key = "llm.response"
-    elif legacy_key == "freeform_mode_marker":
-        legacy_key = "agent.mode.freeform"
-    elif legacy_key == "tool_loop_safety_cap":
-        legacy_key = "agent.safety.tool_loop_cap"
-    intent = MemoryIntent(
-        intent_key=legacy_key,
-        project_id=project_id,
-        agent_id=agent_id,
-        source_kind="agent",
-        payload=payload or {},
-        fallback_text=str(fallback_text or ""),
-        timestamp=time.time(),
-    )
-    return record_intent(intent)

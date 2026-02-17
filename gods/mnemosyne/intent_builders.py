@@ -1,6 +1,7 @@
 """Builders for converting runtime signals to typed MemoryIntent."""
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -44,15 +45,39 @@ def intent_from_tool_result(
     if st not in {"ok", "blocked", "error"}:
         st = "error"
     tn = str(tool_name or "unknown").strip()
+    raw_result = str(result or "")
+    compact = _compact_tool_result(raw_result, max_len=900)
     return MemoryIntent(
         intent_key=f"tool.{tn}.{st}",
         project_id=project_id,
         agent_id=agent_id,
         source_kind="tool",
-        payload={"tool_name": tn, "status": st, "args": args or {}, "result": str(result or "")[:2000]},
+        payload={
+            "tool_name": tn,
+            "status": st,
+            "args": args or {},
+            "result": raw_result[:2000],
+            "result_compact": compact,
+        },
         fallback_text=f"[[ACTION]] {tn} ({st}) -> {result}",
         timestamp=time.time(),
     )
+
+
+def _compact_tool_result(text: str, max_len: int = 900) -> str:
+    s = str(text or "")
+    # redact noisy ids in plain text forms: key=value
+    s = re.sub(r"\b(event_id|message_id|receipt_id|outbox_receipt_id|job_id)\s*=\s*[A-Za-z0-9_-]{8,}", r"\1=<redacted>", s)
+    s = re.sub(r"\bid\s*=\s*[A-Za-z0-9_-]{8,}", "id=<redacted>", s)
+    s = re.sub(r"\bmid\s*=\s*[A-Za-z0-9_-]{8,}", "mid=<redacted>", s)
+    # redact noisy ids in JSON-like forms: "key": "value"
+    s = re.sub(
+        r'"(event_id|message_id|receipt_id|outbox_receipt_id|job_id)"\s*:\s*"[^"]{8,}"',
+        r'"\1":"<redacted>"',
+        s,
+    )
+    s = re.sub(r'"id"\s*:\s*"[^"]{8,}"', r'"id":"<redacted>"', s)
+    return s[: max(80, int(max_len))]
 
 
 def intent_from_llm_response(project_id: str, agent_id: str, phase: str, content: str) -> MemoryIntent:
@@ -86,13 +111,15 @@ def intent_from_inbox_received(
     title: str,
     sender: str,
     message_id: str,
+    msg_type: str = "",
+    intent_key: str = "inbox.received.unread",
 ) -> MemoryIntent:
     return MemoryIntent(
-        intent_key="inbox.received.unread",
+        intent_key=str(intent_key or "inbox.received.unread"),
         project_id=project_id,
         agent_id=agent_id,
         source_kind="inbox",
-        payload={"title": title, "sender": sender, "message_id": message_id},
+        payload={"title": title, "sender": sender, "message_id": message_id, "msg_type": str(msg_type or "")},
         fallback_text=f"[INBOX_UNREAD] title={title} from={sender} id={message_id}",
         timestamp=time.time(),
     )
