@@ -124,6 +124,9 @@ def _check_gods_cross_domain(repo: Path, path: Path, imports: list[tuple[int, st
 
 
 def _check_tests(path: Path, imports: list[tuple[int, str]], out: list[Violation]):
+    whitebox_domain = _whitebox_domain(path)
+    if whitebox_domain:
+        _check_whitebox_reason(path, out)
     for line, mod in imports:
         if not mod.startswith("gods."):
             continue
@@ -132,6 +135,22 @@ def _check_tests(path: Path, imports: list[tuple[int, str]], out: list[Violation
             continue
         domain = parts[1]
         if domain not in CORE_DOMAINS:
+            continue
+        if whitebox_domain:
+            # Whitebox tests can access same-domain internals only.
+            if domain == whitebox_domain:
+                continue
+            if parts[2] == "facade":
+                continue
+            out.append(
+                Violation(
+                    "R4",
+                    str(path),
+                    line,
+                    mod,
+                    f"whitebox test for '{whitebox_domain}' may not import internal modules of '{domain}'",
+                )
+            )
             continue
         if parts[2] == "facade":
             continue
@@ -144,6 +163,37 @@ def _check_tests(path: Path, imports: list[tuple[int, str]], out: list[Violation
                 "tests for core domains must import through facade only",
             )
         )
+
+
+def _whitebox_domain(path: Path) -> str | None:
+    parts = path.parts
+    try:
+        idx = parts.index("whitebox")
+    except ValueError:
+        return None
+    if idx + 1 >= len(parts):
+        return None
+    domain = parts[idx + 1]
+    return domain if domain in CORE_DOMAINS else None
+
+
+def _check_whitebox_reason(path: Path, out: list[Violation]):
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return
+    header = "\n".join(text.splitlines()[:40]).lower()
+    if "@whitebox-reason:" in header:
+        return
+    out.append(
+        Violation(
+            "R4",
+            str(path),
+            1,
+            "(file-header)",
+            "whitebox test must include '@whitebox-reason:' comment in file header",
+        )
+    )
 
 
 def run_checks(repo: Path) -> list[Violation]:

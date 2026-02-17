@@ -12,7 +12,8 @@
    - `gods.<domain>.facade`
    - 或 `gods.<domain>` 顶层公开导出
 3. `gods` 核心域（`angelia|iris|hermes|mnemosyne|janus|runtime`）跨域调用，必须走对方 `facade`。
-4. 测试代码对核心域也遵循 facade 入口，不直连内部实现。
+4. 测试代码对核心域默认也遵循 facade 入口，不直连内部实现。
+5. 白盒例外：仅 `tests/whitebox/<domain>/**` 允许访问该 `<domain>` 的内部实现，且必须在文件头声明 `@whitebox-reason:`；白盒测试依然禁止跨域内部导入（跨域只能走 facade）。
 
 ## 自动化检查
 - `scripts/check_import_cycles.py`
