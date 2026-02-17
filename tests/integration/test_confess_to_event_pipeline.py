@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from gods.config import runtime_config
-from gods.inbox import list_events, InboxMessageState
+from gods.iris import list_events, InboxMessageState
 
 
 client = TestClient(app)

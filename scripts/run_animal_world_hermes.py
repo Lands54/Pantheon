@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from gods.config import runtime_config, ProjectConfig
-from gods.hermes import hermes_service
+from gods.hermes.service import hermes_service
 
 
 @dataclass

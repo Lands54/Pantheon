@@ -1,4 +1,4 @@
-"""Inbox JSONL store with project-local file locking."""
+"""Iris inbox JSONL store with project-local file locking."""
 from __future__ import annotations
 
 import fcntl
@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
-from gods.inbox.models import InboxEvent, InboxMessageState
+from gods.iris.models import InboxEvent, InboxMessageState
 from gods.paths import runtime_dir, runtime_locks_dir
 
 _ALLOWED_TRANSITIONS: dict[InboxMessageState, set[InboxMessageState]] = {

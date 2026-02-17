@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
-from gods.inbox.outbox_models import OutboxReceipt, OutboxReceiptStatus
+from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
 from gods.paths import runtime_dir, runtime_locks_dir
 
 

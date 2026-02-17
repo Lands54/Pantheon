@@ -36,7 +36,7 @@ flowchart TB
 - Event queue scheduler, worker lifecycle, wakeup and timer injection.
 - Agent runtime state tracking (`angelia_agents.json`).
 
-### gods.inbox
+### gods.iris (Iris)
 - Inbox message persistence and state transitions.
 - Outbox receipt updates and ack handling.
 
@@ -78,7 +78,7 @@ flowchart LR
     SERVICES --> REPORT["gods.project.reporting"]
 
     ANG --> AGENT["gods.agents"]
-    ANG --> INBOX["gods.inbox"]
+    ANG --> INBOX["gods.iris"]
 
     AGENT --> JANUS["gods.janus"]
     AGENT --> TOOLS["gods.tools"]

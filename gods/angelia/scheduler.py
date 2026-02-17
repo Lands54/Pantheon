@@ -11,7 +11,7 @@ from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.worker import WorkerContext, worker_loop
 from gods.config import runtime_config
-from gods.inbox.service import set_wake_enqueue
+from gods.iris.service import set_wake_enqueue
 
 logger = logging.getLogger("GodsServer")
 

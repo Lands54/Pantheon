@@ -4,7 +4,6 @@ Handles /projects endpoints for multi-project operations.
 """
 from fastapi import APIRouter, HTTPException, Request
 from api.services import project_service
-from gods.inbox import list_outbox_receipts
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -89,15 +88,13 @@ async def get_outbox_receipts(
     limit: int = 100,
 ):
     """Inspect outbox receipts for sender-side message status."""
-    project_service.ensure_exists(project_id)
-    rows = list_outbox_receipts(
+    return project_service.outbox_receipts(
         project_id=project_id,
         from_agent_id=from_agent_id,
         to_agent_id=to_agent_id,
         status=status,
         limit=max(1, min(limit, 500)),
     )
-    return {"project_id": project_id, "items": [r.to_dict() for r in rows]}
 
 
 @router.get("/{project_id}/runtime/agents")

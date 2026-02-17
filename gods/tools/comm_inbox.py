@@ -6,8 +6,8 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-from gods.inbox import ack_handled, list_outbox_receipts
-from gods.inbox.store import take_deliverable_inbox_events
+from gods.iris import ack_handled, list_outbox_receipts
+from gods.iris.store import take_deliverable_inbox_events
 from gods.paths import runtime_dir
 from gods.tools.comm_common import format_comm_error
 

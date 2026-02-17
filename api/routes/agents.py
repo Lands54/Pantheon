@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from gods.config import runtime_config, AgentModelConfig
 from gods.angelia.scheduler import angelia_supervisor
-from gods.inbox import has_pending
+from gods.iris import has_pending
 from api.models import CreateAgentRequest
 
 router = APIRouter(prefix="/agents", tags=["agents"])

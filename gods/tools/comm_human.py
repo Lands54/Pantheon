@@ -7,9 +7,9 @@ import time
 
 from langchain_core.tools import tool
 
-from gods.inbox import enqueue_message
+from gods.iris import enqueue_message
 from gods.paths import mnemosyne_dir, project_buffers_dir, project_dir
-from gods.pulse import get_priority_weights, is_inbox_event_enabled
+from gods.angelia.pulse import get_priority_weights, is_inbox_event_enabled
 from gods.tools.comm_common import format_comm_error
 
 

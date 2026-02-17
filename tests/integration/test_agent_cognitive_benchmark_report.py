@@ -17,9 +17,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from gods.agents.base import GodAgent
 from gods.config import AgentModelConfig, ProjectConfig, runtime_config
-from gods.inbox.service import enqueue_message
+from gods.iris.service import enqueue_message
 from gods.mnemosyne import write_entry
-from gods.pulse.scheduler_hooks import inject_inbox_before_pulse
+from gods.angelia.pulse.scheduler_hooks import inject_inbox_before_pulse
 from gods.runtime.detach import submit as detach_submit
 
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 import shutil
 
-from gods.pulse.queue import enqueue_pulse_event, pick_pulse_events
+from gods.angelia.pulse.queue import enqueue_pulse_event, pick_pulse_events
 
 
 def test_pulse_queue_priority_and_stable_pick_order():

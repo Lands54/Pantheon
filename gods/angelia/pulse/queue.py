@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
-from gods.pulse.models import PulseEvent, PulseEventStatus
+from gods.angelia.pulse.models import PulseEvent, PulseEventStatus
 from gods.paths import runtime_dir, runtime_locks_dir
 
 

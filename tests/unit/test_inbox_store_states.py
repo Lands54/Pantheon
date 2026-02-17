@@ -1,8 +1,8 @@
 from pathlib import Path
 import shutil
 
-from gods.inbox.models import InboxMessageState
-from gods.inbox.store import (
+from gods.iris.models import InboxMessageState
+from gods.iris.store import (
     enqueue_inbox_event,
     list_inbox_events,
     transition_inbox_state,

@@ -535,7 +535,7 @@ sequenceDiagram
     participant CFG as "gods.config"
     participant ANG as "gods.angelia.scheduler"
     participant AST as "gods.angelia.store"
-    participant IBS as "gods.inbox.store"
+    participant IBS as "gods.iris.store"
     participant WK as "gods.angelia.worker"
     participant AG as "gods.agents.base.GodAgent"
     participant PH as "gods.agents.phase_runtime"

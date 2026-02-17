@@ -66,8 +66,11 @@ def test_agent_level_phase_strategy_override_to_freeform():
         assert out["next_step"] == "finish"
 
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
-        assert "[MODE] freeform" in mem_text
         assert "[[ACTION]] list_dir" in mem_text
+        runtime_text = (Path("projects") / project_id / "mnemosyne" / "runtime_events" / f"{agent_id}.jsonl").read_text(
+            encoding="utf-8"
+        )
+        assert "agent.mode.freeform" in runtime_text
     finally:
         if old_project is None:
             runtime_config.projects.pop(project_id, None)

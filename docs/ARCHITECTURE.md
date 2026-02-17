@@ -45,15 +45,15 @@ Gods Platform 采用三层结构：
 - `service.py`：submit/list/stop/reconcile/startup_lost 统一入口。
 - 一期限制：仅 `command_executor=docker` 可用，local 后端明确拒绝。
 
-### 2.3 Inbox + Pulse 事件模块（`gods/inbox` + `gods/pulse`）
+### 2.3 Iris + Angelia Pulse 事件模块（`gods/iris` + `gods/angelia/pulse`）
 
-- `gods/inbox/models.py`：Inbox 事件与 4 态（`pending/delivered/deferred/handled`）。
-- `gods/inbox/store.py`：`projects/{project_id}/runtime/inbox_events.jsonl` 读写与状态迁移（文件锁）。
-- `gods/inbox/service.py`：消息入队、批量注入、handled 回执。
-- `gods/pulse/models.py`：Pulse 事件（`inbox_event/timer/manual/system`）与状态。
-- `gods/pulse/queue.py`：`projects/{project_id}/runtime/pulse_events.jsonl` 队列、优先级出队、去重。
-- `gods/pulse/policy.py`：空队列保底心跳与注入预算策略（配置驱动）。
-- `gods/pulse/scheduler_hooks.py`：调度前注入与 `after_action` 软打断注入。
+- `gods/iris/models.py`：Iris(Inbox) 事件与 4 态（`pending/delivered/deferred/handled`）。
+- `gods/iris/store.py`：`projects/{project_id}/runtime/inbox_events.jsonl` 读写与状态迁移（文件锁）。
+- `gods/iris/service.py`：消息入队、批量注入、handled 回执。
+- `gods/angelia/pulse/models.py`：Pulse 事件（`inbox_event/timer/manual/system`）与状态。
+- `gods/angelia/pulse/queue.py`：`projects/{project_id}/runtime/pulse_events.jsonl` 队列、优先级出队、去重。
+- `gods/angelia/pulse/policy.py`：空队列保底心跳与注入预算策略（配置驱动）。
+- `gods/angelia/pulse/scheduler_hooks.py`：调度前注入与 `after_action` 软打断注入。
 
 ### 2.4 Hermes 协议总线（`gods/hermes/`）
 

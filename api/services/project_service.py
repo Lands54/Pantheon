@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from gods.config import ProjectConfig, runtime_config
+from gods.iris import list_outbox_receipts
 from gods.project.reporting import build_project_report, load_project_report
 from gods.protocols import build_knowledge_graph
 from gods.angelia.scheduler import angelia_supervisor
@@ -253,6 +254,24 @@ class ProjectService:
             "agent_id": agent_id,
             "reports": rows,
         }
+
+    def outbox_receipts(
+        self,
+        project_id: str,
+        from_agent_id: str = "",
+        to_agent_id: str = "",
+        status: str = "",
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = list_outbox_receipts(
+            project_id=project_id,
+            from_agent_id=from_agent_id,
+            to_agent_id=to_agent_id,
+            status=status,
+            limit=max(1, min(limit, 500)),
+        )
+        return {"project_id": project_id, "items": [r.to_dict() for r in rows]}
 
     def get_report(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)

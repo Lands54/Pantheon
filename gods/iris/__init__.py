@@ -1,7 +1,7 @@
-"""Inbox module exports."""
-from gods.inbox.models import InboxEvent, InboxMessageState
-from gods.inbox.outbox_models import OutboxReceipt, OutboxReceiptStatus
-from gods.inbox.service import (
+"""Iris module exports (inbox/outbox event domain)."""
+from gods.iris.models import InboxEvent, InboxMessageState
+from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
+from gods.iris.service import (
     ack_handled,
     enqueue_message,
     fetch_inbox_context,

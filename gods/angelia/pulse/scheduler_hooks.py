@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from langchain_core.messages import SystemMessage
 
-from gods.inbox.service import fetch_inbox_context
-from gods.pulse.policy import get_inject_budget, get_interrupt_mode
+from gods.iris.service import fetch_inbox_context
+from gods.angelia.pulse.policy import get_inject_budget, get_interrupt_mode
 
 
 def inject_inbox_before_pulse(state: dict, project_id: str, agent_id: str):

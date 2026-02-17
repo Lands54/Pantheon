@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from gods.inbox.service import enqueue_message, fetch_inbox_context
+from gods.iris.service import enqueue_message, fetch_inbox_context
 from gods.janus.journal import inbox_digest_path
 
 

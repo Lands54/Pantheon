@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gods.inbox.service import build_inbox_overview
+from gods.iris.service import build_inbox_overview
 from gods.janus.journal import list_observations, read_profile, read_task_state
 from gods.janus.models import ContextBuildRequest, ContextBuildResult
 from gods.janus.strategy_base import ContextStrategy

@@ -1,12 +1,12 @@
-"""Inbox service orchestration for event-driven delivery."""
+"""Iris service orchestration for event-driven inbox/outbox delivery."""
 from __future__ import annotations
 
 from typing import Any, Callable
 
-from gods.inbox.models import InboxEvent, InboxMessageState
-from gods.inbox.outbox_models import OutboxReceipt, OutboxReceiptStatus
-from gods.inbox.outbox_store import create_receipt, list_receipts, update_status_by_message_id
-from gods.inbox.store import (
+from gods.iris.models import InboxEvent, InboxMessageState
+from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
+from gods.iris.outbox_store import create_receipt, list_receipts, update_status_by_message_id
+from gods.iris.store import (
     enqueue_inbox_event,
     has_pending_inbox_events,
     list_inbox_events,

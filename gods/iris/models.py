@@ -1,4 +1,4 @@
-"""Inbox event models."""
+"""Iris event models."""
 from __future__ import annotations
 
 from dataclasses import dataclass
