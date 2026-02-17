@@ -24,13 +24,13 @@ class CommunicationService:
             content=message,
             msg_type="confession",
             trigger_pulse=trigger_pulse,
-            pulse_priority=int(weights.get("inbox_event", 100)),
+            pulse_priority=int(weights.get("mail_event", weights.get("inbox_event", 100))),
         )
         if trigger_pulse:
-            logger.info(f"⚡ Inbox event queued for {agent_id} in {project_id}")
-            status = "Confession delivered and pulse enqueued"
+            logger.info(f"⚡ Mail event queued for {agent_id} in {project_id}")
+            status = "Confession queued and worker wakeup sent"
         else:
-            status = "Confession delivered silently (no immediate pulse)"
+            status = "Confession queued silently (no immediate wakeup)"
         return {"status": status, **res}
 
 

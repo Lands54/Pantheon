@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from gods.runtime.docker.manager import DockerRuntimeManager
 from gods.runtime.docker.template import exec_args
+from gods.runtime.detach.events import emit_detach_event
 from gods.runtime.detach.models import DetachStatus
 from gods.runtime.detach.store import append_log, transition_job, update_job
 
@@ -62,6 +63,21 @@ def _run_job(handle: _Handle, tail_chars: int):
             started_at=time.time(),
             pid_or_container_exec_ref=str(proc.pid),
         )
+        try:
+            emit_detach_event(
+                handle.project_id,
+                "detach_started_event",
+                payload={
+                    "job_id": handle.job_id,
+                    "agent_id": handle.agent_id,
+                    "command": handle.command,
+                    "pid_or_container_exec_ref": str(proc.pid),
+                    "status": "running",
+                },
+                dedupe_key=f"detach_started:{handle.job_id}",
+            )
+        except Exception:
+            pass
 
         if proc.stdout is not None:
             for line in proc.stdout:
@@ -70,13 +86,73 @@ def _run_job(handle: _Handle, tail_chars: int):
         code = proc.wait()
         if handle.stop_flag.is_set():
             transition_job(handle.project_id, handle.job_id, DetachStatus.STOPPED, stop_reason="manual", exit_code=code)
+            try:
+                emit_detach_event(
+                    handle.project_id,
+                    "detach_stopped_event",
+                    payload={
+                        "job_id": handle.job_id,
+                        "agent_id": handle.agent_id,
+                        "exit_code": int(code),
+                        "stop_reason": "manual",
+                        "status": "stopped",
+                    },
+                    dedupe_key=f"detach_stopped:{handle.job_id}:{code}",
+                )
+            except Exception:
+                pass
         elif code == 0:
             transition_job(handle.project_id, handle.job_id, DetachStatus.STOPPED, stop_reason="", exit_code=0)
+            try:
+                emit_detach_event(
+                    handle.project_id,
+                    "detach_stopped_event",
+                    payload={
+                        "job_id": handle.job_id,
+                        "agent_id": handle.agent_id,
+                        "exit_code": 0,
+                        "stop_reason": "",
+                        "status": "stopped",
+                    },
+                    dedupe_key=f"detach_stopped:{handle.job_id}:0",
+                )
+            except Exception:
+                pass
         else:
             transition_job(handle.project_id, handle.job_id, DetachStatus.FAILED, stop_reason="error", exit_code=code)
+            try:
+                emit_detach_event(
+                    handle.project_id,
+                    "detach_failed_event",
+                    payload={
+                        "job_id": handle.job_id,
+                        "agent_id": handle.agent_id,
+                        "exit_code": int(code),
+                        "stop_reason": "error",
+                        "status": "failed",
+                    },
+                    dedupe_key=f"detach_failed:{handle.job_id}:{code}",
+                )
+            except Exception:
+                pass
     except Exception as e:
         append_log(handle.project_id, handle.job_id, f"[runner-error] {e}\n", tail_chars)
         transition_job(handle.project_id, handle.job_id, DetachStatus.FAILED, stop_reason="error")
+        try:
+            emit_detach_event(
+                handle.project_id,
+                "detach_failed_event",
+                payload={
+                    "job_id": handle.job_id,
+                    "agent_id": handle.agent_id,
+                    "stop_reason": "error",
+                    "status": "failed",
+                    "error": str(e),
+                },
+                dedupe_key=f"detach_failed:{handle.job_id}:exception",
+            )
+        except Exception:
+            pass
     finally:
         _unregister(handle.job_id)
 
@@ -107,6 +183,15 @@ def stop_job(project_id: str, job_id: str, grace_sec: int, reason: str = "manual
 
     handle.stop_flag.set()
     transition_job(project_id, job_id, DetachStatus.STOPPING, stop_reason=reason)
+    try:
+        emit_detach_event(
+            project_id,
+            "detach_stopping_event",
+            payload={"job_id": job_id, "reason": str(reason or "manual"), "status": "stopping"},
+            dedupe_key=f"detach_stopping:{job_id}",
+        )
+    except Exception:
+        pass
 
     proc = handle.proc
     if proc is None:

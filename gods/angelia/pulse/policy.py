@@ -5,7 +5,7 @@ from gods.config import runtime_config
 
 
 _DEFAULT_WEIGHTS = {
-    "inbox_event": 100,
+    "mail_event": 100,
     "manual": 80,
     "system": 60,
     "timer": 10,

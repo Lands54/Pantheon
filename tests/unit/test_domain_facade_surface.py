@@ -13,6 +13,8 @@ def test_iris_facade_surface():
     from gods.iris import facade
 
     assert hasattr(facade, "enqueue_message")
+    assert hasattr(facade, "enqueue_mail_event")
+    assert hasattr(facade, "pick_mail_event")
     assert hasattr(facade, "fetch_inbox_context")
     assert hasattr(facade, "list_outbox_receipts")
 

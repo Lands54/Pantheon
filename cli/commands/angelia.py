@@ -23,26 +23,39 @@ def cmd_angelia(args):
 
     if args.subcommand == "enqueue":
         payload = json.loads(args.payload) if args.payload else {}
+        raw_type = str(args.type or "").strip().lower()
+        mapped_type = {
+            "timer": "timer_event",
+            "manual": "manual_event",
+            "system": "system_event",
+        }.get(raw_type, raw_type if raw_type.endswith("_event") else "manual_event")
         req = {
             "project_id": pid,
-            "agent_id": args.agent,
-            "event_type": args.type,
+            "domain": "angelia",
+            "event_type": mapped_type,
             "priority": args.priority,
-            "payload": payload,
+            "payload": {"agent_id": args.agent, **payload},
             "dedupe_key": args.dedupe_key,
         }
-        res = requests.post(f"{base}/angelia/events/enqueue", json=req, timeout=10)
+        res = requests.post(f"{base}/events/submit", json=req, timeout=10)
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
     elif args.subcommand == "events":
+        raw_type = str(args.type or "").strip().lower()
+        mapped_type = {
+            "timer": "timer_event",
+            "manual": "manual_event",
+            "system": "system_event",
+        }.get(raw_type, raw_type)
         params = {
             "project_id": pid,
+            "domain": "angelia",
             "agent_id": args.agent or "",
             "state": args.state or "",
-            "event_type": args.type or "",
+            "event_type": mapped_type or "",
             "limit": args.limit,
         }
-        res = requests.get(f"{base}/angelia/events", params=params, timeout=10)
+        res = requests.get(f"{base}/events", params=params, timeout=10)
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
     elif args.subcommand == "agents":
@@ -59,7 +72,7 @@ def cmd_angelia(args):
 
     elif args.subcommand == "retry":
         res = requests.post(
-            f"{base}/angelia/events/{args.event_id}/retry",
+            f"{base}/events/{args.event_id}/retry",
             json={"project_id": pid},
             timeout=10,
         )

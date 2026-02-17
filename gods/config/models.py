@@ -44,7 +44,7 @@ class ProjectConfig(BaseModel):
     pulse_event_inject_budget: int = 3
     pulse_interrupt_mode: str = "after_action"
     pulse_priority_weights: Dict[str, int] = Field(
-        default_factory=lambda: {"inbox_event": 100, "manual": 80, "system": 60, "timer": 10}
+        default_factory=lambda: {"mail_event": 100, "manual": 80, "system": 60, "timer": 10}
     )
     inbox_event_enabled: bool = True
 
@@ -52,7 +52,7 @@ class ProjectConfig(BaseModel):
     angelia_worker_per_agent: int = 1
     angelia_event_max_attempts: int = 3
     angelia_processing_timeout_sec: int = 60
-    angelia_cooldown_preempt_types: List[str] = Field(default_factory=lambda: ["inbox_event", "manual"])
+    angelia_cooldown_preempt_types: List[str] = Field(default_factory=lambda: ["mail_event", "manual"])
     angelia_timer_enabled: bool = True
     angelia_timer_idle_sec: int = 60
     angelia_dedupe_window_sec: int = 5

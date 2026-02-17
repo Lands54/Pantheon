@@ -2,8 +2,8 @@
 
 ## 0. Conventions
 - SSOT: single source of truth.
-- Wake event: Angelia queue event (`angelia_events.jsonl`).
-- Inbox message: business message record (`inbox_events.jsonl`).
+- Wake event: mailbox notify/wait signal (in-memory, non-authoritative).
+- Event bus event: single source record (`events.jsonl`).
 - Outbox receipt: sender-side delivery status (`outbox_receipts.jsonl`).
 - Config source: `config.json` via `gods.config` package.
 - Boundary rule: `api/routes -> api/services -> gods.<domain>.facade`.
@@ -34,12 +34,17 @@ flowchart TB
 - Runtime singleton (`runtime_config`) as config access entry.
 
 ### gods.angelia
-- Event queue scheduler, worker lifecycle, wakeup and timer injection.
+- Event scheduler, worker lifecycle, wakeup and timer injection.
 - Agent runtime state tracking (`angelia_agents.json`).
+- Worker executes through `EventHandler` registry dispatch.
 
 ### gods.iris (Iris)
-- Inbox message persistence and state transitions.
+- Mail semantic event ownership on top of unified EventBus.
 - Outbox receipt updates and ack handling.
+
+### gods.events
+- Unified `EventRecord` model + event store + transition guard.
+- `EventHandler` lifecycle contract and registry.
 
 ### gods.agents + phase_runtime
 - Agent pulse process entry.
@@ -79,7 +84,8 @@ flowchart LR
     SERVICES --> REPORT["gods.project.reporting"]
 
     ANG --> AGENT["gods.agents"]
-    ANG --> INBOX["gods.iris"]
+    ANG --> EVT["gods.events (EventBus SSOT)"]
+    EVT --> INBOX["gods.iris (Mail semantics)"]
 
     AGENT --> JANUS["gods.janus"]
     AGENT --> TOOLS["gods.tools"]
@@ -110,16 +116,16 @@ flowchart TD
     I["Input"] --> R["Routes"] --> S["Services"] --> D["Domain"] --> O["Storage + Response"]
 ```
 
-### 4.2 Angelia supervisor/worker
+### 4.2 Angelia supervisor/worker (Iris-backed events)
 Input: enqueue/wake/timer tick.
-Core state: events queue + agent runtime status.
+Core state: Iris mail_events queue + agent runtime status.
 Main flow: enqueue -> pick -> process -> done/requeue/dead.
 Output: next wakeup eligibility + metrics.
 ```mermaid
 sequenceDiagram
     participant API as "API/Tool"
     participant SUP as "AngeliaSupervisor"
-    participant ST as "angelia.store"
+    participant ST as "events.store (via iris/angelia facade)"
     participant WK as "worker_loop"
     participant AG as "GodAgent"
 
@@ -255,9 +261,8 @@ flowchart LR
 ## 5. SSOT Table
 | Fact | SSOT | Notes |
 |---|---|---|
-| Wake events | `projects/{project}/runtime/angelia_events.jsonl` | Only Angelia queue truth |
+| Unified events | `projects/{project}/runtime/events.jsonl` | EventBus single source of truth (iris/angelia/hermes/runtime) |
 | Agent runtime status | `projects/{project}/runtime/angelia_agents.json` | Managed by Angelia store |
-| Inbox business messages | `projects/{project}/runtime/inbox_events.jsonl` | Source for message content/state |
 | Outbox receipts | `projects/{project}/runtime/outbox_receipts.jsonl` | Sender-side delivery state |
 | Context reports | `projects/{project}/mnemosyne/context_reports/{agent}.jsonl` | Janus build reports |
 | Chronicle memory | `projects/{project}/mnemosyne/chronicles/{agent}.md` | Compaction-aware |
@@ -270,4 +275,4 @@ flowchart LR
 - Do not add legacy context shim module under `gods.agents.context_policy`.
 - Do not add legacy memory adapter API (`record_memory_event`).
 - Do not bypass `gods.config` for config load/save/migration.
-- Do not create parallel wake-event stores outside Angelia queue.
+- Do not create parallel event stores outside Iris `mail_events.jsonl`.

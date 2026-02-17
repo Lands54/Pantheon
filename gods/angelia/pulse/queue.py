@@ -15,7 +15,7 @@ from gods.angelia.pulse.models import PulseEvent, PulseEventStatus
 from gods.paths import runtime_dir, runtime_locks_dir
 
 
-_VALID_EVENT_TYPES = {"inbox_event", "timer", "manual", "system"}
+_VALID_EVENT_TYPES = {"mail_event", "timer", "manual", "system"}
 
 
 def _runtime_dir(project_id: str) -> Path:

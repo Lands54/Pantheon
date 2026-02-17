@@ -5,7 +5,7 @@ from gods.config import runtime_config
 
 
 _DEFAULT_WEIGHTS = {
-    "inbox_event": 100,
+    "mail_event": 100,
     "manual": 80,
     "system": 60,
     "timer": 10,
@@ -47,10 +47,10 @@ def timer_enabled(project_id: str) -> bool:
 
 def cooldown_preempt_types(project_id: str) -> set[str]:
     proj = _project(project_id)
-    raw = getattr(proj, "angelia_cooldown_preempt_types", ["inbox_event", "manual"]) if proj else ["inbox_event", "manual"]
+    raw = getattr(proj, "angelia_cooldown_preempt_types", ["mail_event", "manual"]) if proj else ["mail_event", "manual"]
     out = {str(x).strip() for x in (raw or []) if str(x).strip()}
     if not out:
-        out = {"inbox_event", "manual"}
+        out = {"mail_event", "manual"}
     return out
 
 

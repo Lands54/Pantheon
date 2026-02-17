@@ -1,15 +1,22 @@
-"""Iris service orchestration for event-driven inbox/outbox delivery."""
+"""Iris service orchestration for unified mail-event delivery."""
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
-from gods.iris.models import InboxEvent, InboxMessageState
+from gods.iris.models import InboxEvent, InboxMessageState, MailEventState
 from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
 from gods.iris.outbox_store import create_receipt, list_receipts, update_status_by_message_id
 from gods.iris.store import (
-    enqueue_inbox_event,
+    enqueue_mail_event,
     has_pending_inbox_events,
     list_inbox_events,
+    list_mail_events,
+    mark_mail_done,
+    mark_mail_failed_or_requeue,
+    mark_mail_processing,
+    pick_next_mail_event,
+    reclaim_stale_mail_processing,
+    retry_mail_event,
     mark_inbox_events_handled,
     take_deliverable_inbox_events,
 )
@@ -19,9 +26,6 @@ from gods.mnemosyne.facade import (
     intent_from_inbox_received,
     intent_from_outbox_status,
 )
-
-_WAKE_ENQUEUE: Callable[..., dict[str, Any]] | None = None
-
 
 def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
     mt = str(msg_type or "").strip().lower()
@@ -40,10 +44,9 @@ def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
     return "inbox.received.unread"
 
 
-def set_wake_enqueue(func: Callable[..., dict[str, Any]] | None):
-    """Register wake event enqueuer without creating hard module dependency."""
-    global _WAKE_ENQUEUE
-    _WAKE_ENQUEUE = func
+def set_wake_enqueue(_func):
+    """Legacy no-op after single-source switch."""
+    return None
 
 
 def enqueue_message(
@@ -59,9 +62,12 @@ def enqueue_message(
 ) -> dict:
     if not str(title or "").strip():
         raise ValueError("title is required")
-    event = enqueue_inbox_event(
+    event = enqueue_mail_event(
         project_id=project_id,
         agent_id=agent_id,
+        event_type="mail_event",
+        priority=int(pulse_priority),
+        payload={"reason": "mail_event", "source": "iris"},
         sender=sender,
         title=title,
         content=content,
@@ -96,16 +102,14 @@ def enqueue_message(
             status=receipt.status.value,
         )
     )
-    pulse_event = None
-    if trigger_pulse and _WAKE_ENQUEUE is not None:
+    woke = False
+    if trigger_pulse:
         try:
-            pulse_event = _WAKE_ENQUEUE(
-                project_id=project_id,
-                agent_id=agent_id,
-                event_type="inbox_event",
-                priority=pulse_priority,
-                payload={"inbox_event_id": event.event_id},
-            )
+            # Cross-domain via facade only: wake target worker for newly queued mail event.
+            from gods.angelia import facade as angelia_facade
+
+            angelia_facade.wake_agent(project_id=project_id, agent_id=agent_id)
+            woke = True
         except Exception as e:
             failed_rows = update_status_by_message_id(
                 project_id=project_id,
@@ -127,11 +131,11 @@ def enqueue_message(
                 )
             raise
     return {
-        "inbox_event_id": event.event_id,
+        "mail_event_id": event.event_id,
         "title": title,
         "outbox_receipt_id": receipt.receipt_id,
         "outbox_status": receipt.status.value,
-        "pulse_event_id": (pulse_event.get("event_id", "") if pulse_event else ""),
+        "wakeup_sent": bool(woke),
     }
 
 
@@ -346,6 +350,49 @@ def list_events(
 ) -> list[InboxEvent]:
     return list_inbox_events(project_id, agent_id=agent_id, state=state, limit=limit)
 
+
+def pick_mail_event(project_id: str, agent_id: str, now: float, cooldown_until: float, preempt_types: set[str]):
+    return pick_next_mail_event(project_id, agent_id, now, cooldown_until, preempt_types)
+
+
+def mark_processing(project_id: str, event_id: str) -> bool:
+    return mark_mail_processing(project_id, event_id)
+
+
+def mark_done(project_id: str, event_id: str) -> bool:
+    return mark_mail_done(project_id, event_id)
+
+
+def mark_failed_or_requeue(project_id: str, event_id: str, error_code: str, error_message: str, retry_delay_sec: int = 0) -> str:
+    return mark_mail_failed_or_requeue(project_id, event_id, error_code, error_message, retry_delay_sec)
+
+
+def reclaim_stale_processing(project_id: str, timeout_sec: int) -> int:
+    return reclaim_stale_mail_processing(project_id, timeout_sec)
+
+
+def retry_event(project_id: str, event_id: str) -> bool:
+    return retry_mail_event(project_id, event_id)
+
+
+def list_mail_runtime_events(
+    project_id: str,
+    agent_id: str = "",
+    state: str = "",
+    event_type: str = "",
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    st = MailEventState(state) if state else None
+    return [
+        row.to_dict()
+        for row in list_mail_events(
+            project_id=project_id,
+            agent_id=agent_id,
+            state=st,
+            event_type=event_type,
+            limit=limit,
+        )
+    ]
 
 def list_outbox_receipts(
     project_id: str,

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from gods.config import runtime_config
 from gods.runtime.detach.models import DetachStatus
+from gods.runtime.detach.events import emit_detach_event
 from gods.runtime.detach.policy import select_fifo_victims
 from gods.runtime.detach.runner import stop_job
 from gods.runtime.detach.store import (
@@ -136,6 +137,20 @@ def submit(project_id: str, agent_id: str, command: str) -> dict:
     started = start_job(project_id, job.job_id, agent_id, command, _log_tail(project_id))
     if not started:
         raise DetachError("DETACH_RUNNER_ERROR", "runner start failed")
+    try:
+        emit_detach_event(
+            project_id,
+            "detach_submitted_event",
+            payload={
+                "job_id": job.job_id,
+                "agent_id": agent_id,
+                "command": command,
+                "status": "queued",
+            },
+            dedupe_key=f"detach_submitted:{job.job_id}",
+        )
+    except Exception:
+        pass
 
     reconcile(project_id)
     return {"ok": True, "job_id": job.job_id, "status": "queued", "project_id": project_id, "agent_id": agent_id}
@@ -157,6 +172,20 @@ def stop(project_id: str, job_id: str, reason: str = "manual") -> dict:
         raise DetachError("DETACH_NOT_FOUND", f"job '{job_id}' not found")
     stop_job(project_id, job_id, _grace(project_id), reason=reason)
     row = get_job(project_id, job_id)
+    try:
+        emit_detach_event(
+            project_id,
+            "detach_stopping_event",
+            payload={
+                "job_id": job_id,
+                "agent_id": item.agent_id,
+                "reason": str(reason or "manual"),
+                "status": "stopping",
+            },
+            dedupe_key=f"detach_stopping:{job_id}",
+        )
+    except Exception:
+        pass
     return {"ok": True, "project_id": project_id, "job": (row.to_dict() if row else None)}
 
 
@@ -199,12 +228,33 @@ def reconcile(project_id: str) -> dict:
             evicted.append(v.job_id)
             jobs2 = [j for j in jobs2 if j.job_id != v.job_id]
 
-    return {"project_id": project_id, "evicted": evicted}
+    out = {"project_id": project_id, "evicted": evicted}
+    try:
+        emit_detach_event(
+            project_id,
+            "detach_reconciled_event",
+            payload=out,
+            dedupe_key=f"detach_reconcile:{int(now)}",
+        )
+    except Exception:
+        pass
+    return out
 
 
 def startup_mark_lost(project_id: str) -> int:
     _project_cfg(project_id)
-    return mark_non_final_as_lost(project_id)
+    n = mark_non_final_as_lost(project_id)
+    if n > 0:
+        try:
+            emit_detach_event(
+                project_id,
+                "detach_lost_event",
+                payload={"count": int(n), "reason": "startup_lost"},
+                dedupe_key=f"detach_lost:{int(time.time())}",
+            )
+        except Exception:
+            pass
+    return n
 
 
 def startup_mark_lost_all_projects() -> dict:

@@ -117,34 +117,24 @@ async def runtime_reconcile(project_id: str):
 
 @router.post("/{project_id}/detach/submit")
 async def detach_submit(project_id: str, req: Request):
-    """Submit one detach background command job."""
-    data = await req.json()
-    agent_id = str(data.get("agent_id", "")).strip()
-    command = str(data.get("command", "")).strip()
-    if not agent_id or not command:
-        raise HTTPException(status_code=400, detail="agent_id and command are required")
-    return project_service.detach_submit(project_id, agent_id, command)
+    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/submit with runtime detach event")
 
 
 @router.get("/{project_id}/detach/jobs")
 async def detach_jobs(project_id: str, agent_id: str = "", status: str = "", limit: int = 50):
-    """List detach jobs in one project."""
-    return project_service.detach_list(project_id, agent_id, status, max(1, min(limit, 500)))
+    raise HTTPException(status_code=410, detail="Deprecated. Use GET /events?domain=runtime")
 
 
 @router.post("/{project_id}/detach/jobs/{job_id}/stop")
 async def detach_stop(project_id: str, job_id: str):
-    """Stop one detach job."""
-    return project_service.detach_stop(project_id, job_id)
+    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/submit detach_stopping_event")
 
 
 @router.post("/{project_id}/detach/reconcile")
 async def detach_reconcile(project_id: str):
-    """Apply ttl and fifo eviction policy once."""
-    return project_service.detach_reconcile(project_id)
+    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/reconcile")
 
 
 @router.get("/{project_id}/detach/jobs/{job_id}/logs")
 async def detach_logs(project_id: str, job_id: str):
-    """Read detach log tail."""
-    return project_service.detach_logs(project_id, job_id)
+    raise HTTPException(status_code=410, detail="Deprecated. Use runtime logs via events domain tools")

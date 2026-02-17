@@ -25,7 +25,7 @@ def test_confess_to_event_pipeline():
         res = client.post("/confess", json={"agent_id": "receiver", "title": "hello-title", "message": "hello", "silent": False})
         assert res.status_code == 200
         body = res.json()
-        assert "inbox_event_id" in body
+        assert "mail_event_id" in body
 
         inbox = [x.to_dict() for x in list_events(project_id=project_id, agent_id="receiver", state=InboxMessageState.PENDING, limit=50)]
         assert any(item.get("content") == "hello" for item in inbox)
@@ -39,14 +39,20 @@ def test_confess_to_event_pipeline():
         assert any(item.get("title") == "hello-title" for item in outbox_items)
         assert any(item.get("status") in {"pending", "delivered", "handled"} for item in outbox_items)
 
-        pulse_event_id = str(body.get("pulse_event_id", "") or "").strip()
-        if pulse_event_id:
-            evt_res = client.get(
-                "/angelia/events",
-                params={"project_id": project_id, "agent_id": "receiver", "event_type": "inbox_event", "limit": 50},
-            )
-            items = evt_res.json().get("items", [])
-            assert any(item.get("event_id") == pulse_event_id for item in items)
+        mail_event_id = str(body.get("mail_event_id", "") or "").strip()
+        assert mail_event_id
+        evt_res = client.get(
+            "/events",
+            params={
+                "project_id": project_id,
+                "domain": "iris",
+                "agent_id": "receiver",
+                "event_type": "mail_event",
+                "limit": 50,
+            },
+        )
+        items = evt_res.json().get("items", [])
+        assert any(item.get("event_id") == mail_event_id for item in items)
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

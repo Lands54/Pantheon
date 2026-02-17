@@ -324,7 +324,7 @@ class HermesContracts:
 
         trigger = bool(is_inbox_event_enabled(project_id))
         weights = get_priority_weights(project_id)
-        priority = int(weights.get("inbox_event", 100))
+        priority = int(weights.get("mail_event", weights.get("inbox_event", 100)))
         msg = (
             f"Hermes Notice: agent '{committer}' committed contract "
             f"'{title}@{version}'."
@@ -364,7 +364,7 @@ class HermesContracts:
 
         trigger = bool(is_inbox_event_enabled(project_id))
         weights = get_priority_weights(project_id)
-        priority = int(weights.get("inbox_event", 100))
+        priority = int(weights.get("mail_event", weights.get("inbox_event", 100)))
         msg = (
             f"Hermes Notice: contract '{title}@{version}' is now fully committed "
             f"by all required committers."

@@ -52,16 +52,16 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
             content=message,
             msg_type="private",
             trigger_pulse=trigger,
-            pulse_priority=int(weights.get("inbox_event", 100)),
+            pulse_priority=int(weights.get("mail_event", weights.get("inbox_event", 100))),
         )
         return (
             f"Revelation sent to {to_id}. "
             f"title={title}, "
-            f"event_id={queued.get('inbox_event_id', '')}, "
+            f"event_id={queued.get('mail_event_id', '')}, "
             f"outbox_receipt_id={queued.get('outbox_receipt_id', '')}, "
             f"outbox_status={queued.get('outbox_status', 'pending')}, "
-            f"pulse_triggered={str(bool(trigger)).lower()}, "
-            "initial_state=pending"
+            f"wakeup_sent={str(bool(queued.get('wakeup_sent', False))).lower()}, "
+            "initial_state=queued"
         )
     except Exception as e:
         return format_comm_error(

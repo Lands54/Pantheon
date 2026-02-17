@@ -21,9 +21,9 @@ def test_angelia_priority_without_permanent_starvation():
         store.enqueue_event(
             project_id=project_id,
             agent_id="a",
-            event_type="inbox_event",
+            event_type="mail_event",
             priority=100,
-            payload={"k": 1, "inbox_event_id": "x"},
+            payload={"k": 1, "mail_event_id": "x"},
             dedupe_key="",
             max_attempts=3,
             dedupe_window_sec=0,
@@ -34,10 +34,10 @@ def test_angelia_priority_without_permanent_starvation():
             agent_id="a",
             now=now,
             cooldown_until=0.0,
-            preempt_types={"inbox_event", "manual"},
+            preempt_types={"mail_event", "manual"},
         )
         assert first is not None
-        assert first.event_type == "inbox_event"
+        assert first.event_type == "mail_event"
         store.mark_done(project_id, first.event_id)
 
         second = store.pick_next_event(
@@ -45,7 +45,7 @@ def test_angelia_priority_without_permanent_starvation():
             agent_id="a",
             now=now,
             cooldown_until=0.0,
-            preempt_types={"inbox_event", "manual"},
+            preempt_types={"mail_event", "manual"},
         )
         assert second is not None
         assert second.event_type == "timer"

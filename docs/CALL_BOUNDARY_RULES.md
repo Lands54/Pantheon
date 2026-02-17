@@ -15,6 +15,16 @@
 4. 测试代码对核心域默认也遵循 facade 入口，不直连内部实现。
 5. 白盒例外：仅 `tests/whitebox/<domain>/**` 允许访问该 `<domain>` 的内部实现，且必须在文件头声明 `@whitebox-reason:`；白盒测试依然禁止跨域内部导入（跨域只能走 facade）。
 
+## 事件职责边界（vNext）
+1. `gods.events` 是统一事件总线主账本（`events.jsonl`），负责状态迁移与持久化。
+2. `gods.iris` 负责 Mail 语义（deliver/handled/receipt）并通过 facade 访问总线。
+3. `gods.angelia` 负责调度执行与 worker 生命周期；执行必须经 `EventHandler` registry。
+4. `mailbox notify/wait` 仅是唤醒机制，不可作为事件真实状态来源。
+
+## API 边界（Breaking）
+1. 新统一入口：`/events/*`。
+2. 旧 ` /angelia/events* ` 与 ` /projects/{project_id}/detach/* ` 已下线（`410 Gone`）。
+
 ## 自动化检查
 - `scripts/check_import_cycles.py`
 - `scripts/check_call_boundaries.py`

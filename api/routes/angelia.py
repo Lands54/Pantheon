@@ -32,14 +32,7 @@ class TickTimerRequest(BaseModel):
 
 @router.post("/events/enqueue")
 async def enqueue_event(req: EnqueueEventRequest) -> dict:
-    return angelia_service.enqueue_event(
-        project_id=req.project_id,
-        agent_id=req.agent_id,
-        event_type=req.event_type,
-        payload=req.payload,
-        priority=req.priority,
-        dedupe_key=req.dedupe_key,
-    )
+    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/submit")
 
 
 @router.get("/events")
@@ -50,18 +43,12 @@ async def list_events(
     event_type: str = "",
     limit: int = 100,
 ):
-    return angelia_service.list_events(
-        project_id=project_id,
-        agent_id=agent_id,
-        state=state,
-        event_type=event_type,
-        limit=max(1, min(limit, 1000)),
-    )
+    raise HTTPException(status_code=410, detail="Deprecated. Use GET /events")
 
 
 @router.post("/events/{event_id}/retry")
 async def retry_event(event_id: str, req: RetryEventRequest) -> dict:
-    return angelia_service.retry_event(event_id=event_id, project_id=req.project_id)
+    raise HTTPException(status_code=410, detail="Deprecated. Use POST /events/{event_id}/retry")
 
 
 @router.get("/agents/status")

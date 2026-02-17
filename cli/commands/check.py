@@ -52,25 +52,27 @@ def cmd_check(args):
     except Exception:
         pass
     
-    # Show wake queue status (Angelia inbox_event)
+    # Show unified event queue status (Iris mail_event)
     try:
         queued_res = requests.get(
-            f"{base_url}/angelia/events",
+            f"{base_url}/events",
             params={
                 "project_id": pid,
+                "domain": "iris",
                 "agent_id": agent_id,
-                "event_type": "inbox_event",
+                "event_type": "mail_event",
                 "state": "queued",
                 "limit": 500,
             },
             timeout=4,
         )
         processing_res = requests.get(
-            f"{base_url}/angelia/events",
+            f"{base_url}/events",
             params={
                 "project_id": pid,
+                "domain": "iris",
                 "agent_id": agent_id,
-                "event_type": "inbox_event",
+                "event_type": "mail_event",
                 "state": "processing",
                 "limit": 500,
             },
@@ -78,7 +80,7 @@ def cmd_check(args):
         )
         queued_n = len((queued_res.json() or {}).get("items", []))
         processing_n = len((processing_res.json() or {}).get("items", []))
-        print(f"📥 Wake Queue(inbox_event): queued={queued_n}, processing={processing_n}")
+        print(f"📥 Event Queue(mail_event): queued={queued_n}, processing={processing_n}")
     except Exception:
         print("📥 Wake Queue: unavailable")
     
