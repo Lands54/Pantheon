@@ -1,11 +1,11 @@
-"""Angelia store: scheduler runtime status + Iris-backed event access."""
+"""Angelia store: scheduler runtime status + EventBus-backed event access."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
+from gods import events as events_bus
 from gods.angelia.models import AgentRuntimeStatus, AngeliaEvent
-from gods.iris import facade as iris_facade
 
 
 def runtime_dir(project_id: str) -> Path:
@@ -43,35 +43,50 @@ def list_events(
     event_type: str = "",
     limit: int = 100,
 ) -> list[AngeliaEvent]:
-    state_val = state.value if state is not None else ""
-    rows = iris_facade.list_mail_runtime_events(
+    st = None
+    if state is not None:
+        try:
+            st = events_bus.EventState(state.value)
+        except Exception:
+            return []
+    rows = events_bus.list_events(
         project_id=project_id,
-        agent_id=agent_id,
-        state=state_val,
+        domain="",
         event_type=event_type,
+        state=st,
         limit=limit,
+        agent_id=agent_id,
     )
-    return [AngeliaEvent.from_dict(row) for row in rows]
+    out: list[AngeliaEvent] = []
+    for row in rows:
+        payload = row.payload or {}
+        rid = str(payload.get("agent_id", ""))
+        raw = row.to_dict()
+        raw["agent_id"] = rid
+        out.append(AngeliaEvent.from_dict(raw))
+    return out
 
 
 def has_queued(project_id: str, agent_id: str) -> bool:
-    rows = iris_facade.list_mail_runtime_events(
+    rows = events_bus.list_events(
         project_id=project_id,
-        agent_id=agent_id,
-        state="queued",
+        domain="",
         event_type="",
+        state=events_bus.EventState.QUEUED,
         limit=1,
+        agent_id=agent_id,
     )
     return bool(rows)
 
 
 def count_queued(project_id: str, agent_id: str = "") -> int:
-    rows = iris_facade.list_mail_runtime_events(
+    rows = events_bus.list_events(
         project_id=project_id,
-        agent_id=agent_id,
-        state="queued",
+        domain="",
         event_type="",
+        state=events_bus.EventState.QUEUED,
         limit=2000,
+        agent_id=agent_id,
     )
     return len(rows)
 
@@ -86,17 +101,19 @@ def enqueue_event(
     max_attempts: int = 3,
     dedupe_window_sec: int = 0,
 ) -> AngeliaEvent:
-    event = iris_facade.enqueue_mail_event(
+    event = events_bus.EventRecord.create(
         project_id=project_id,
-        agent_id=agent_id,
+        domain="angelia",
         event_type=event_type,
         priority=priority,
-        payload=payload or {},
+        payload={"agent_id": agent_id, **(payload or {})},
         dedupe_key=dedupe_key,
         max_attempts=max_attempts,
-        dedupe_window_sec=dedupe_window_sec,
     )
-    return AngeliaEvent.from_dict(event.to_dict())
+    event = events_bus.append_event(event, dedupe_window_sec=dedupe_window_sec)
+    raw = event.to_dict()
+    raw["agent_id"] = agent_id
+    return AngeliaEvent.from_dict(raw)
 
 
 def pick_next_event(
@@ -106,39 +123,47 @@ def pick_next_event(
     cooldown_until: float,
     preempt_types: set[str],
 ) -> AngeliaEvent | None:
-    row = iris_facade.pick_mail_event(project_id, agent_id, now, cooldown_until, preempt_types)
-    if row is None:
+    rows = events_bus.list_events(
+        project_id=project_id,
+        state=events_bus.EventState.QUEUED,
+        limit=5000,
+        agent_id=agent_id,
+    )
+    cand = None
+    for row in rows:
+        if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
+            continue
+        cand = row
+        break
+    if cand is None:
         return None
-    return AngeliaEvent.from_dict(row.to_dict())
+    ok = events_bus.transition_state(project_id, cand.event_id, events_bus.EventState.PICKED)
+    if not ok:
+        return None
+    raw = cand.to_dict()
+    raw["state"] = events_bus.EventState.PICKED.value
+    raw["agent_id"] = str((cand.payload or {}).get("agent_id", ""))
+    return AngeliaEvent.from_dict(raw)
 
 
 def mark_processing(project_id: str, event_id: str) -> bool:
-    return bool(iris_facade.mark_processing(project_id, event_id))
+    return bool(events_bus.transition_state(project_id, event_id, events_bus.EventState.PROCESSING))
 
 
 def mark_done(project_id: str, event_id: str) -> bool:
-    return bool(iris_facade.mark_done(project_id, event_id))
+    return bool(events_bus.transition_state(project_id, event_id, events_bus.EventState.DONE))
 
 
 def mark_failed_or_requeue(project_id: str, event_id: str, error_code: str, error_message: str, retry_delay_sec: int = 0) -> str:
-    return str(
-        iris_facade.mark_failed_or_requeue(
-            project_id,
-            event_id,
-            error_code,
-            error_message,
-            retry_delay_sec,
-        )
-        or ""
-    )
+    return str(events_bus.requeue_or_dead(project_id, event_id, error_code, error_message, retry_delay_sec) or "")
 
 
 def retry_event(project_id: str, event_id: str) -> bool:
-    return bool(iris_facade.retry_event(project_id, event_id))
+    return bool(events_bus.retry_event(project_id, event_id))
 
 
 def reclaim_stale_processing(project_id: str, timeout_sec: int) -> int:
-    return int(iris_facade.reclaim_stale_processing(project_id, timeout_sec) or 0)
+    return int(events_bus.reconcile_stale(project_id, timeout_sec) or 0)
 
 
 def get_agent_status(project_id: str, agent_id: str) -> AgentRuntimeStatus:

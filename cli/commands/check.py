@@ -164,5 +164,8 @@ def cmd_check(args):
         except Exception as e:
             print(f"   (llm trace parse failed: {e})")
     
-    print(f"\n💡 Tip: Use './temple.sh confess {agent_id} \"your message\"' to send a message")
+    print(
+        "\n💡 Tip: Use './temple.sh events submit --domain interaction --type interaction.message.sent "
+        f"--payload \"{{\\\"to_id\\\":\\\"{agent_id}\\\",\\\"sender_id\\\":\\\"human.overseer\\\",\\\"title\\\":\\\"msg\\\",\\\"content\\\":\\\"...\\\",\\\"msg_type\\\":\\\"confession\\\",\\\"trigger_pulse\\\":true}}\"'"
+    )
     print(f"💡 Tip: View full memory with 'cat projects/{pid}/mnemosyne/chronicles/{agent_id}.md'")

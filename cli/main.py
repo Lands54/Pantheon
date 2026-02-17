@@ -24,10 +24,11 @@ from cli.commands.detach import cmd_detach
 from cli.commands.context import cmd_context
 from cli.commands.inbox import cmd_inbox
 from cli.commands.angelia import cmd_angelia
+from cli.commands.events import cmd_events
 from cli.commands.project import cmd_project as cmd_project_v2
 from cli.commands.agent import cmd_agent as cmd_agent_v2
-from cli.commands.communication import cmd_confess as cmd_confess_v2
 from cli.utils import get_base_url
+from gods.identity import HUMAN_AGENT_ID
 
 CONFIG_PATH = Path("config.json")
 
@@ -138,21 +139,28 @@ def cmd_test(args):
         config["projects"][test_id]["active_agents"].append("tester")
         requests.post(f"{get_base_url()}/config/save", json=config)
 
-        # 6. Confess and check outbox
-        print("Step 4: Running confess pipeline integration...")
+        # 6. Interaction message submit and check outbox
+        print("Step 4: Running interaction-message pipeline integration...")
         send_res = requests.post(
-            f"{get_base_url()}/confess",
+            f"{get_base_url()}/events/submit",
             json={
-                "agent_id": "tester",
-                "title": "Divine Test Signal",
-                "message": "Please respond with MANIFEST_SUCCESS in your next pulse.",
-                "silent": False,
+                "project_id": test_id,
+                "domain": "interaction",
+                "event_type": "interaction.message.sent",
+                "payload": {
+                    "to_id": "tester",
+                    "sender_id": HUMAN_AGENT_ID,
+                    "title": "Divine Test Signal",
+                    "content": "Please respond with MANIFEST_SUCCESS in your next pulse.",
+                    "msg_type": "confession",
+                    "trigger_pulse": True,
+                },
             },
         )
         ok = send_res.status_code == 200
         outbox_res = requests.get(
             f"{get_base_url()}/projects/{test_id}/inbox/outbox",
-            params={"from_agent_id": "High Overseer", "to_agent_id": "tester", "limit": 20},
+            params={"from_agent_id": HUMAN_AGENT_ID, "to_agent_id": "tester", "limit": 20},
         )
         rows = (outbox_res.json() or {}).get("items", []) if outbox_res.status_code == 200 else []
         ok = ok and any(str(x.get("title", "")) == "Divine Test Signal" for x in rows)
@@ -362,6 +370,29 @@ def main():
     p_ang_retry.add_argument("event_id")
     ang_sub.add_parser("timer-tick", help="Run one timer injection pass")
 
+    # unified events operations
+    p_ev = subparsers.add_parser("events", help="Unified event bus operations")
+    ev_sub = p_ev.add_subparsers(dest="subcommand")
+    p_ev_submit = ev_sub.add_parser("submit", help="Submit one event")
+    p_ev_submit.add_argument("--domain", required=True)
+    p_ev_submit.add_argument("--type", required=True)
+    p_ev_submit.add_argument("--priority", type=int, default=None)
+    p_ev_submit.add_argument("--payload", default="{}")
+    p_ev_submit.add_argument("--dedupe-key", default="")
+    p_ev_submit.add_argument("--max-attempts", type=int, default=3)
+    p_ev_list = ev_sub.add_parser("list", help="List events")
+    p_ev_list.add_argument("--domain", default="")
+    p_ev_list.add_argument("--type", default="")
+    p_ev_list.add_argument("--state", default="")
+    p_ev_list.add_argument("--agent", default="")
+    p_ev_list.add_argument("--limit", type=int, default=50)
+    p_ev_retry = ev_sub.add_parser("retry", help="Retry dead/failed event")
+    p_ev_retry.add_argument("event_id")
+    p_ev_ack = ev_sub.add_parser("ack", help="Ack one event")
+    p_ev_ack.add_argument("event_id")
+    p_ev_reconcile = ev_sub.add_parser("reconcile", help="Reconcile stale processing events")
+    p_ev_reconcile.add_argument("--timeout-sec", type=int, default=60)
+
     # activate / deactivate
     subparsers.add_parser("activate").add_argument("id")
     subparsers.add_parser("deactivate").add_argument("id")
@@ -371,13 +402,6 @@ def main():
     p_agent.add_argument("subcommand", choices=["view", "edit"])
     p_agent.add_argument("id")
 
-    # confess
-    p_cf = subparsers.add_parser("confess")
-    p_cf.add_argument("id")
-    p_cf.add_argument("--title", required=True, help="Message title")
-    p_cf.add_argument("message")
-    p_cf.add_argument("--silent", action="store_true", help="Send message without triggering an immediate pulse")
-    
     # test
     p_test = subparsers.add_parser("test", help="Run automated integration tests")
     p_test.add_argument("--cleanup", action="store_true", help="Delete test project after completion")
@@ -426,6 +450,9 @@ def main():
     if args.command == "angelia" and not args.subcommand:
         p_ang.print_help()
         sys.exit(0)
+    if args.command == "events" and not args.subcommand:
+        p_ev.print_help()
+        sys.exit(0)
     
     if args.command == "init": cmd_init(args)
     elif args.command == "list": cmd_list(args)
@@ -439,6 +466,7 @@ def main():
     elif args.command == "context": cmd_context(args)
     elif args.command == "inbox": cmd_inbox(args)
     elif args.command == "angelia": cmd_angelia(args)
+    elif args.command == "events": cmd_events(args)
     elif args.command == "agent": cmd_agent(args)
     elif args.command == "test": cmd_test(args)
     elif args.command == "activate":
@@ -461,8 +489,6 @@ def main():
                 requests.post(f"{get_base_url()}/config/save", json=res)
                 print(f"🌘 {args.id} deactivated in {pid}.")
         except: print("❌ Server error.")
-    elif args.command == "confess":
-        cmd_confess_v2(args)
     else:
         parser.print_help()
 

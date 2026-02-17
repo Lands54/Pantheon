@@ -12,10 +12,7 @@ class EventState(str, Enum):
     QUEUED = "queued"
     PICKED = "picked"
     PROCESSING = "processing"
-    DELIVERED = "delivered"
-    HANDLED = "handled"
     DONE = "done"
-    DEFERRED = "deferred"
     FAILED = "failed"
     DEAD = "dead"
 

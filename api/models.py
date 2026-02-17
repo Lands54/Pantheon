@@ -30,3 +30,4 @@ class HumanMessageRequest(BaseModel):
     title: str = ""
     message: str
     silent: bool = False
+    sender_id: str = ""

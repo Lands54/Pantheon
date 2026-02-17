@@ -13,9 +13,10 @@ def test_iris_facade_surface():
     from gods.iris import facade
 
     assert hasattr(facade, "enqueue_message")
-    assert hasattr(facade, "enqueue_mail_event")
-    assert hasattr(facade, "pick_mail_event")
     assert hasattr(facade, "fetch_inbox_context")
+    assert hasattr(facade, "ack_handled")
+    assert hasattr(facade, "has_pending")
+    assert hasattr(facade, "build_inbox_overview")
     assert hasattr(facade, "list_outbox_receipts")
 
 
@@ -48,3 +49,11 @@ def test_runtime_facade_surface():
     assert hasattr(facade, "detach_submit")
     assert hasattr(facade, "docker_available")
     assert hasattr(facade, "resolve_execution_backend")
+
+
+def test_interaction_facade_surface():
+    from gods.interaction import facade
+
+    assert hasattr(facade, "submit_message_event")
+    assert hasattr(facade, "submit_read_event")
+    assert hasattr(facade, "submit_hermes_notice")

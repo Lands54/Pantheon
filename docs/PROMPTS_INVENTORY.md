@@ -31,8 +31,8 @@
 
 - 广播消息前缀：
   - `SACRED DECREE: {req.message}`
-- confess 来源固定：
-  - `"from": "High Overseer"`
+- interaction.message.sent 默认 sender：
+  - `"sender_id": "human.overseer"`
 
 ## 4) 调度器脉冲上下文
 

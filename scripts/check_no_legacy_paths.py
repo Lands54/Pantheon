@@ -14,6 +14,8 @@ EXCLUDE_DIRS = {
     ".pytest_cache",
     "frontend/node_modules",
     "archive",
+    "archives",
+    "projects",
     ".venv",
 }
 
@@ -28,6 +30,12 @@ PATTERNS = [
     ("removed_angelia_events_routes", re.compile(r"/angelia/events"), {"docs", "scripts"}),
     ("removed_detach_project_routes", re.compile(r"/projects/\{project_id\}/detach/"), {"docs", "scripts"}),
     ("removed_pulse_queue_store", re.compile(r"pulse_events\.jsonl"), {"docs", "scripts", "gods/events"}),
+    ("removed_inbox_compat_api", re.compile(r"\b(enqueue_inbox_event|list_inbox_events|transition_inbox_state|take_deliverable_inbox_events|mark_inbox_events_handled)\b"), {"scripts"}),
+    ("removed_legacy_config_field", re.compile(r"\b(inbox_event_enabled|queue_idle_heartbeat_sec)\b"), {"docs", "gods/events/migrate.py", "tests", "scripts"}),
+    ("removed_legacy_state_window_path", re.compile(r"\blegacy_agent_state_window_path\b"), {"tests", "scripts"}),
+    ("removed_confess_route", re.compile(r"@router\.post\(\"/confess\"\)|/confess\b"), {"tests", "docs", "scripts"}),
+    ("removed_send_to_human_tool", re.compile(r"\bsend_to_human\b"), {"docs", "tests", "scripts"}),
+    ("forbid_hermes_direct_iris_enqueue", re.compile(r"from\s+gods\.iris\.facade\s+import\s+enqueue_message"), {"scripts", "tests"}),
 ]
 
 

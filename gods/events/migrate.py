@@ -1,138 +1,64 @@
-"""Runtime migration helpers for unified event bus."""
+"""Startup legacy-file guards for strict zero-compat mode."""
 from __future__ import annotations
 
 import json
-import shutil
-import time
 from pathlib import Path
 
-from gods.events.models import EventRecord
-from gods.events.store import append_event, events_path
+from gods.events.models import EventState
 
 
-def _read_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    out: list[dict] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except Exception:
-            continue
-    return out
+_LEGACY_RUNTIME_FILES = (
+    "mail_events.jsonl",
+    "angelia_events.jsonl",
+    "pulse_events.jsonl",
+)
 
 
-def _mark_backup(path: Path):
-    if not path.exists():
-        return
-    ts = int(time.time())
-    bak = path.with_suffix(path.suffix + f".bak.{ts}")
-    shutil.move(str(path), str(bak))
+def _project_runtime(project_id: str) -> Path:
+    return Path("projects") / project_id / "runtime"
 
 
-def _append(project_id: str, domain: str, event_type: str, priority: int, payload: dict, row: dict):
-    rec = EventRecord.create(
-        project_id=project_id,
-        domain=domain,
-        event_type=event_type,
-        priority=priority,
-        payload=payload,
-        dedupe_key=str(row.get("dedupe_key", "")),
-        max_attempts=int(row.get("max_attempts", 3) or 3),
-        event_id=str(row.get("event_id", "") or None),
-        meta={"migrated": True},
-    )
-    state = str(row.get("state", "queued") or "queued")
-    try:
-        rec.state = rec.state.__class__(state)
-    except Exception:
-        pass
-    rec.created_at = float(row.get("created_at", time.time()) or time.time())
-    rec.available_at = float(row.get("available_at", rec.created_at) or rec.created_at)
-    rec.picked_at = float(row.get("picked_at")) if row.get("picked_at") is not None else None
-    rec.done_at = float(row.get("done_at")) if row.get("done_at") is not None else None
-    rec.attempt = int(row.get("attempt", 0) or 0)
-    rec.error_code = str(row.get("error_code", ""))
-    rec.error_message = str(row.get("error_message", ""))
-    append_event(rec)
+def assert_no_legacy_files(project_id: str):
+    rt = _project_runtime(project_id)
+    exists = []
+    for name in _LEGACY_RUNTIME_FILES:
+        p = rt / name
+        if p.exists() and p.stat().st_size > 0:
+            exists.append(str(p))
+    if exists:
+        msg = (
+            "legacy runtime files detected; zero-compat mode blocks startup. "
+            "remove/migrate these files manually: " + ", ".join(exists)
+        )
+        raise RuntimeError(msg)
+    ep = rt / "events.jsonl"
+    if ep.exists():
+        allowed = {x.value for x in EventState}
+        bad_states: set[str] = set()
+        for line in ep.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            st = str(row.get("state", "")).strip()
+            if st and st not in allowed:
+                bad_states.add(st)
+        if bad_states:
+            raise RuntimeError(
+                "events.jsonl contains unsupported legacy states in strict mode: "
+                + ", ".join(sorted(bad_states))
+            )
 
 
-def migrate_project(project_id: str) -> dict:
-    rt = Path("projects") / project_id / "runtime"
-    proto = Path("projects") / project_id / "protocols"
-    out = events_path(project_id)
-    if out.exists() and out.stat().st_size > 0:
-        return {"project_id": project_id, "status": "skipped", "reason": "already_migrated", "count": 0}
-
-    count = 0
-    sources = [
-        rt / "mail_events.jsonl",
-        rt / "angelia_events.jsonl",
-        rt / "pulse_events.jsonl",
-        rt / "detach_jobs.jsonl",
-        proto / "invocations.jsonl",
-    ]
-
-    for row in _read_jsonl(rt / "mail_events.jsonl"):
-        _append(project_id, "iris", str(row.get("event_type", "mail_event")), int(row.get("priority", 100)), row.get("payload") or {}, row)
-        count += 1
-    for row in _read_jsonl(rt / "angelia_events.jsonl"):
-        _append(project_id, "angelia", str(row.get("event_type", "system_event")), int(row.get("priority", 50)), row.get("payload") or {}, row)
-        count += 1
-    for row in _read_jsonl(rt / "pulse_events.jsonl"):
-        et = str(row.get("event_type", "system"))
-        mapped = {
-            "inbox_event": "mail_event",
-            "mail_event": "mail_event",
-            "timer": "timer_event",
-            "manual": "manual_event",
-            "system": "system_event",
-        }.get(et, "system_event")
-        _append(project_id, "angelia", mapped, int(row.get("priority", 50)), row.get("payload") or {}, row)
-        count += 1
-    for row in _read_jsonl(rt / "detach_jobs.jsonl"):
-        st = str(row.get("status", "queued"))
-        mapped = {
-            "queued": "detach_submitted_event",
-            "running": "detach_started_event",
-            "stopping": "detach_stopping_event",
-            "stopped": "detach_stopped_event",
-            "failed": "detach_failed_event",
-            "lost": "detach_lost_event",
-        }.get(st, "detach_submitted_event")
-        payload = {
-            "agent_id": row.get("agent_id", ""),
-            "job_id": row.get("job_id", ""),
-            "command": row.get("command", ""),
-            "status": st,
-            "exit_code": row.get("exit_code"),
-        }
-        _append(project_id, "runtime", mapped, 40, payload, row)
-        count += 1
-    for row in _read_jsonl(proto / "invocations.jsonl"):
-        payload = {
-            "name": row.get("name", ""),
-            "caller_id": row.get("caller_id", ""),
-            "ok": row.get("ok", False),
-            "mode": row.get("mode", "sync"),
-            "status": row.get("status", ""),
-        }
-        _append(project_id, "hermes", "hermes_protocol_invoked_event", 30, payload, row)
-        count += 1
-
-    for src in sources:
-        _mark_backup(src)
-    return {"project_id": project_id, "status": "migrated", "count": count}
-
-
-def migrate_all_projects() -> dict[str, dict]:
+def assert_no_legacy_files_all_projects() -> dict[str, str]:
     root = Path("projects")
-    rows: dict[str, dict] = {}
+    rows: dict[str, str] = {}
     if not root.exists():
         return rows
     for p in sorted([x for x in root.iterdir() if x.is_dir()]):
-        rows[p.name] = migrate_project(p.name)
+        assert_no_legacy_files(p.name)
+        rows[p.name] = "ok"
     return rows

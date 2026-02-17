@@ -52,7 +52,7 @@ Gods Platform 采用三层结构：
 - `gods/events/handler.py` + `registry.py`：`EventHandler` 五阶段与注册表。
 - `gods/iris`：Mail 语义与回执语义（`mail_event/mail_deliver_event/mail_ack_event`）。
 - `gods/angelia`：调度执行与 worker 生命周期；worker 通过 `registry` 分发 `EventHandler`。
-- `gods/angelia/pulse/*`：保留为兼容/策略资产，不再作为主事件链路存储。
+- `gods/angelia/pulse/*`：仅保留注入预算/中断策略，不包含独立事件存储。
 
 ### 2.4 Hermes 协议总线（`gods/hermes/`）
 
@@ -68,7 +68,7 @@ Gods Platform 采用三层结构：
 
 ### 2.5 配置与持久化
 
-- `gods/config/*`：`config.json` 的模型、加载迁移、规范化与保存。
+- `gods/config/*`：`config.json` 的严格模型、加载校验与保存（零兼容，不自动迁移）。
 - `projects/{project_id}/memory.sqlite`：LangGraph checkpoint。
 - `projects/{project_id}/mnemosyne/chronicles/{agent_id}.md`：可读记忆日志。
 - `projects/{project_id}/runtime/events.jsonl`：统一事件总线单一事实源（Iris/Angelia/Hermes/Detach）。
@@ -107,8 +107,8 @@ Gods Platform 采用三层结构：
   - 额外支持：`/hermes/contracts/*`（契约注册/承诺/解析）
   - 额外支持：`/hermes/ports/*`（项目级端口租约 reserve/release/list）
 - `api/routes/mnemosyne.py`：Mnemosyne 档案写入/查询/读取。
-- `api/routes/communication.py`：
-  - `/confess`：向指定 Agent 私聊并写入 `mail_event`；默认同时发送 worker wakeup（`silent=false`）。
+- Agent 交互消息统一入口：
+  - `POST /events/submit`（`domain=interaction,event_type=interaction.message.sent`）。
 
 ## 3.5 服务层（`api/services/`）
 
@@ -126,9 +126,9 @@ Gods Platform 采用三层结构：
 - 子命令：
   - 项目管理：`project list/create/switch/delete`
   - Agent 管理：`list/activate/deactivate/agent view|edit`
-  - 通信：`confess`
+  - 通信：`events submit --domain interaction --type interaction.message.sent`
   - 配置：`config show/set/models`
-  - 事件调试：`angelia events/enqueue`、`inbox outbox`
+  - 事件调试：`events submit/list/retry/ack/reconcile`、`inbox outbox`
   - 后台任务：`detach submit/list/stop/logs`
 
 ## 5. 多项目隔离模型

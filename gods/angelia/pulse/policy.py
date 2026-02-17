@@ -14,7 +14,7 @@ _DEFAULT_WEIGHTS = {
 
 def get_idle_heartbeat_sec(project_id: str) -> int:
     proj = runtime_config.projects.get(project_id)
-    value = int(getattr(proj, "queue_idle_heartbeat_sec", 60) if proj else 60)
+    value = int(getattr(proj, "angelia_timer_idle_sec", 60) if proj else 60)
     return max(5, min(value, 3600))
 
 
@@ -46,5 +46,5 @@ def get_priority_weights(project_id: str) -> dict[str, int]:
 
 
 def is_mail_event_wakeup_enabled(project_id: str) -> bool:
-    proj = runtime_config.projects.get(project_id)
-    return bool(getattr(proj, "inbox_event_enabled", True) if proj else True)
+    _ = project_id
+    return True

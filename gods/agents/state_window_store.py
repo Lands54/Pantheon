@@ -7,17 +7,13 @@ from typing import Any
 from langchain_core.messages import messages_from_dict, messages_to_dict
 
 from gods.config import runtime_config
-from gods.paths import legacy_agent_state_window_path, runtime_state_window_path
+from gods.paths import runtime_state_window_path
 
 
 def _state_window_path(project_id: str, agent_id: str):
     p = runtime_state_window_path(project_id, agent_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
-
-
-def _legacy_path(project_id: str, agent_id: str):
-    return legacy_agent_state_window_path(project_id, agent_id)
 
 
 def _state_window_limit(project_id: str) -> int:
@@ -28,16 +24,6 @@ def _state_window_limit(project_id: str) -> int:
 
 def load_state_window(project_id: str, agent_id: str) -> list[Any]:
     p = _state_window_path(project_id, agent_id)
-    legacy = _legacy_path(project_id, agent_id)
-    if (not p.exists()) and legacy.exists():
-        try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
-            legacy.unlink(missing_ok=True)
-        except Exception:
-            # Best-effort migration. Continue with whichever file is readable.
-            if not p.exists():
-                p = legacy
     if not p.exists():
         return []
     try:

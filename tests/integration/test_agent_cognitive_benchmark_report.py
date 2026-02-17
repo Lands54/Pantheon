@@ -491,7 +491,6 @@ def _prepare_tool_prompt(project_id: str, agent_id: str, tool_name: str) -> str:
         "check_inbox": base + " 参数: {}。",
         "check_outbox": base + " 参数: {limit:20}。",
         "send_message": base + " 参数: {to_id:'peer', title:'tool-bench', message:'ping'}。",
-        "send_to_human": base + " 参数: {message:'strict bench report ping'}。",
         "finalize": base + " 参数: {mode:'done'}。",
         "post_to_synod": base + " 参数: {reason:'bench', message:'sync'}。",
         "abstain_from_synod": base + " 参数: {reason:'bench'}。",

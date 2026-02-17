@@ -68,12 +68,6 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.simulation_interval_min = _clamp_int(proj.simulation_interval_min, 1, 600)
     proj.simulation_interval_max = _clamp_int(proj.simulation_interval_max, proj.simulation_interval_min, 3600)
 
-    proj.queue_idle_heartbeat_sec = _clamp_int(proj.queue_idle_heartbeat_sec, 5, 3600)
-    if proj.queue_idle_heartbeat_sec != 60:
-        logger.warning(
-            "Field queue_idle_heartbeat_sec in project '%s' is legacy and ignored; use angelia_timer_idle_sec.",
-            project_id,
-        )
     proj.pulse_event_inject_budget = _clamp_int(proj.pulse_event_inject_budget, 1, 100)
 
     proj.angelia_worker_per_agent = _clamp_int(proj.angelia_worker_per_agent, 1, 1)

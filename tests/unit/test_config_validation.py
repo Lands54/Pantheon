@@ -7,7 +7,6 @@ def test_angelia_timer_idle_is_single_source():
     old = runtime_config.projects.get(pid)
     try:
         runtime_config.projects[pid] = ProjectConfig(
-            queue_idle_heartbeat_sec=999,
             angelia_timer_idle_sec=17,
         )
         assert policy.timer_idle_sec(pid) == 17

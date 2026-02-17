@@ -36,10 +36,6 @@ def runtime_state_window_path(project_id: str, agent_id: str) -> Path:
     return runtime_dir(project_id) / "state_windows" / f"{agent_id}.json"
 
 
-def legacy_agent_state_window_path(project_id: str, agent_id: str) -> Path:
-    return agent_dir(project_id, agent_id) / "state_window.json"
-
-
 def mnemosyne_dir(project_id: str) -> Path:
     return project_dir(project_id) / "mnemosyne"
 

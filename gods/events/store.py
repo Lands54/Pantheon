@@ -14,21 +14,24 @@ _ALLOWED_TRANSITIONS: dict[EventState, set[EventState]] = {
     EventState.QUEUED: {
         EventState.PICKED,
         EventState.PROCESSING,
-        EventState.DELIVERED,
-        EventState.DEFERRED,
-        EventState.HANDLED,
         EventState.DONE,
         EventState.FAILED,
         EventState.DEAD,
     },
     EventState.PICKED: {EventState.PROCESSING, EventState.QUEUED, EventState.FAILED, EventState.DEAD},
     EventState.PROCESSING: {EventState.DONE, EventState.QUEUED, EventState.FAILED, EventState.DEAD},
-    EventState.DELIVERED: {EventState.HANDLED},
-    EventState.DEFERRED: {EventState.DELIVERED, EventState.HANDLED, EventState.QUEUED},
-    EventState.HANDLED: set(),
     EventState.DONE: set(),
     EventState.FAILED: {EventState.QUEUED},
     EventState.DEAD: {EventState.QUEUED},
+}
+
+_FORBIDDEN_BUSINESS_FIELDS = {
+    "delivered_at",
+    "handled_at",
+    "read_at",
+    "mail_state",
+    "receipt_state",
+    "contract_state",
 }
 
 
@@ -83,6 +86,9 @@ def _with_lock(project_id: str, mutator):
 
 
 def append_event(record: EventRecord, dedupe_window_sec: int = 0) -> EventRecord:
+    if any(k in (record.payload or {}) for k in _FORBIDDEN_BUSINESS_FIELDS):
+        bad = sorted([k for k in (record.payload or {}).keys() if k in _FORBIDDEN_BUSINESS_FIELDS])
+        raise ValueError(f"event payload contains forbidden business-state fields: {', '.join(bad)}")
     now = time.time()
 
     def _mut(rows: list[dict[str, Any]]):
@@ -101,7 +107,6 @@ def append_event(record: EventRecord, dedupe_window_sec: int = 0) -> EventRecord
                     EventState.QUEUED.value,
                     EventState.PICKED.value,
                     EventState.PROCESSING.value,
-                    EventState.DEFERRED.value,
                 }:
                     return rows, EventRecord.from_dict(row)
         rows.append(record.to_dict())

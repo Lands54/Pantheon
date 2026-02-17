@@ -219,6 +219,34 @@ def run_checks(repo: Path) -> list[Violation]:
         imports = list(_iter_imports(path))
         _check_tests(path, imports, violations)
 
+    # R5: hard bans for interaction-only boundaries
+    for path in (repo / "gods" / "hermes").rglob("*.py"):
+        imports = list(_iter_imports(path))
+        for line, mod in imports:
+            if mod.startswith("gods.iris.facade"):
+                violations.append(
+                    Violation(
+                        "R5",
+                        str(path),
+                        line,
+                        mod,
+                        "gods/hermes must not import gods.iris.facade directly; use interaction events",
+                    )
+                )
+    comm_human = repo / "gods" / "tools" / "comm_human.py"
+    if comm_human.exists():
+        for line, mod in _iter_imports(comm_human):
+            if mod.startswith("gods.iris"):
+                violations.append(
+                    Violation(
+                        "R5",
+                        str(comm_human),
+                        line,
+                        mod,
+                        "tools/comm_human must not call iris directly; submit interaction events",
+                    )
+                )
+
     return violations
 
 

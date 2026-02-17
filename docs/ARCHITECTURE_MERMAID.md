@@ -236,9 +236,9 @@ flowchart LR
 ## 16. Agent 间交互方案（消息 + 协议双通道）
 ```mermaid
 flowchart TD
-    A["Agent A"] --> Msg["send_message / confess"]
+    A["Agent A"] --> Msg["send_message / events submit"]
     Msg --> Buf["projects/{id}/buffers/{agent}.jsonl"]
-    Buf --> Sch["Scheduler inbox_event priority"]
+    Buf --> Sch["Scheduler mail_event priority"]
     Sch --> B["Agent B pulse"]
     B --> Inbox["check_inbox tool"]
     Inbox --> Decision["Reason/Act/Observe decision"]
@@ -379,7 +379,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     subgraph Msg["消息通道 (buffers/*.jsonl)"]
-      M1["send_message/confess"] --> M2["check_inbox"]
+      M1["send_message/events submit"] --> M2["check_inbox"]
       M2 --> M3["协商文本 / 任务分配"]
     end
 
@@ -420,7 +420,7 @@ sequenceDiagram
     participant S as StructuredV1Strategy
     participant B as GodBrain.think_with_tools (LLM1)
 
-    Note over EQ,W: 触发源：inbox_event / manual / system / timer
+    Note over EQ,W: 触发源：mail_event / manual / system / timer
     EQ->>W: pick_next_event(agent_id,event_type,payload)
 
     rect rgb(245,245,245)
@@ -550,14 +550,14 @@ sequenceDiagram
     API->>SVC: startup_event()
     SVC->>ANG: start()
     SVC->>CFG: 读取项目配置
-    SVC->>AST: 迁移/恢复 Angelia 事件存储（若需要）
+    SVC->>AST: 严格健康检查（发现 legacy 文件直接失败）
 
-    Note over CLI,API: 事件入口（confess/send_message/manual/timer）
-    CLI->>API: /confess 或 /events/submit
-    API->>IBS: 写 inbox message (pending)（若是消息类）
+    Note over CLI,API: 事件入口（events submit/send_message/manual/timer）
+    CLI->>API: /events/submit
+    API->>IBS: 写 inbox message (queued)（若是消息类）
     API->>ANG: enqueue_event(project_id,agent_id,event_type,payload)
 
-    ANG->>AST: 持久化 AngeliaEvent(queued)
+    ANG->>AST: 持久化 EventRecord(queued)
     ANG->>WK: notify(agent mailbox)
 
     loop 每个活跃 agent 单 worker 常驻

@@ -9,8 +9,14 @@ from fastapi import HTTPException
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
 from gods import events as events_bus
-from gods.iris import facade as iris_facade
+from gods.interaction import facade as interaction_facade
 from gods.runtime import facade as runtime_facade
+
+EVENT_MESSAGE_SENT = "interaction.message.sent"
+EVENT_MESSAGE_READ = "interaction.message.read"
+EVENT_HERMES_NOTICE = "interaction.hermes.notice"
+EVENT_DETACH_NOTICE = "interaction.detach.notice"
+EVENT_AGENT_TRIGGER = "interaction.agent.trigger"
 
 
 class EventService:
@@ -33,35 +39,105 @@ class EventService:
         if not domain or not event_type:
             raise HTTPException(status_code=400, detail="domain and event_type are required")
 
-        # Mail path
-        if domain == "iris" and event_type in {"mail_event", "mail_deliver_event", "mail_ack_event"}:
-            agent_id = str(payload.get("agent_id", "")).strip()
+        # Interaction path (single entry for agent interactions).
+        if domain == "interaction" and event_type in {
+            EVENT_MESSAGE_SENT,
+            EVENT_MESSAGE_READ,
+            EVENT_HERMES_NOTICE,
+            EVENT_DETACH_NOTICE,
+            EVENT_AGENT_TRIGGER,
+        }:
+            if event_type == EVENT_MESSAGE_READ:
+                agent_id = str(payload.get("agent_id", "")).strip()
+                event_ids = [str(x) for x in (payload.get("event_ids", []) or []) if str(x).strip()]
+                if not agent_id or not event_ids:
+                    raise HTTPException(status_code=400, detail="interaction.message.read requires payload.agent_id and payload.event_ids")
+                return interaction_facade.submit_read_event(
+                    project_id=pid,
+                    agent_id=agent_id,
+                    event_ids=event_ids,
+                    priority=pri,
+                    dedupe_key=dedupe_key,
+                )
+            if event_type == EVENT_AGENT_TRIGGER:
+                agent_id = str(payload.get("agent_id", "")).strip()
+                reason = str(payload.get("reason", "interaction_trigger")).strip()
+                if not agent_id:
+                    raise HTTPException(status_code=400, detail="interaction.agent.trigger requires payload.agent_id")
+                return interaction_facade.submit_agent_trigger(
+                    project_id=pid,
+                    agent_id=agent_id,
+                    reason=reason,
+                    priority=pri,
+                    dedupe_key=dedupe_key,
+                )
+            if event_type == EVENT_HERMES_NOTICE:
+                targets = [str(x).strip() for x in (payload.get("targets", []) or []) if str(x).strip()]
+                if targets:
+                    sender_id = str(payload.get("sender_id", "Hermes")).strip() or "Hermes"
+                    title = str(payload.get("title", "Hermes Notice")).strip() or "Hermes Notice"
+                    content = str(payload.get("content", ""))
+                    msg_type = str(payload.get("msg_type", "contract_notice")).strip() or "contract_notice"
+                    sent = interaction_facade.submit_hermes_notice(
+                        project_id=pid,
+                        targets=targets,
+                        sender_id=sender_id,
+                        title=title,
+                        content=content,
+                        msg_type=msg_type,
+                        trigger_pulse=bool(payload.get("trigger_pulse", True)),
+                        priority=pri,
+                        dedupe_prefix=dedupe_key or "hermes_notice",
+                    )
+                    return {
+                        "event_id": "",
+                        "event_type": EVENT_HERMES_NOTICE,
+                        "state": "queued",
+                        "project_id": pid,
+                        "agent_id": "",
+                        "wakeup_sent": bool(sent),
+                        "meta": {"sent_targets": sent},
+                    }
+            if event_type == EVENT_DETACH_NOTICE:
+                aid = str(payload.get("agent_id", "")).strip()
+                title = str(payload.get("title", "Detach Notice")).strip() or "Detach Notice"
+                content = str(payload.get("content", ""))
+                if not aid:
+                    raise HTTPException(status_code=400, detail="interaction.detach.notice requires payload.agent_id")
+                return interaction_facade.submit_detach_notice(
+                    project_id=pid,
+                    agent_id=aid,
+                    title=title,
+                    content=content,
+                    msg_type=str(payload.get("msg_type", "detach_notice")),
+                    trigger_pulse=bool(payload.get("trigger_pulse", True)),
+                    priority=pri,
+                    dedupe_key=dedupe_key,
+                )
+            # message.sent/hermes.notice single-target path.
+            to_id = str(payload.get("to_id", "") or payload.get("agent_id", "")).strip()
+            sender_id = str(payload.get("sender_id", "") or payload.get("sender", "")).strip()
             title = str(payload.get("title", "")).strip()
             content = str(payload.get("content", ""))
-            sender = str(payload.get("sender", "system"))
-            msg_type = str(payload.get("msg_type", "private"))
-            if not agent_id or not title:
-                raise HTTPException(status_code=400, detail="mail_event requires payload.agent_id and payload.title")
-            row = iris_facade.enqueue_message(
+            msg_type = str(payload.get("msg_type", "private")).strip() or "private"
+            if not to_id or not sender_id or not title:
+                raise HTTPException(status_code=400, detail="interaction.message.sent requires payload.to_id|agent_id, payload.sender_id, payload.title")
+            return interaction_facade.submit_message_event(
                 project_id=pid,
-                agent_id=agent_id,
-                sender=sender,
+                to_id=to_id,
+                sender_id=sender_id,
                 title=title,
                 content=content,
                 msg_type=msg_type,
-                trigger_pulse=True,
-                pulse_priority=pri,
+                trigger_pulse=bool(payload.get("trigger_pulse", True)),
+                priority=pri,
+                dedupe_key=dedupe_key,
+                event_type=event_type,
             )
-            return {
-                "project_id": pid,
-                "domain": "iris",
-                "event_type": event_type,
-                "event_id": row.get("mail_event_id", ""),
-                "state": "queued",
-                "agent_id": agent_id,
-                "wakeup_sent": bool(row.get("wakeup_sent", False)),
-                "meta": row,
-            }
+
+        # Mail path is removed from public entry in zero-compat mode.
+        if domain == "iris" and event_type in {"mail_event", "mail_deliver_event", "mail_ack_event"}:
+            raise HTTPException(status_code=410, detail="iris mail events moved to domain=interaction,event_type=interaction.message.sent")
 
         # Angelia scheduling path
         if domain == "angelia" and event_type in {"timer_event", "manual_event", "system_event"}:
@@ -189,10 +265,10 @@ class EventService:
 
     def ack(self, project_id: str | None, event_id: str) -> dict[str, Any]:
         pid = resolve_project(project_id)
-        ok = events_bus.transition_state(pid, event_id, events_bus.EventState.HANDLED)
+        ok = events_bus.transition_state(pid, event_id, events_bus.EventState.DONE)
         if not ok:
             raise HTTPException(status_code=404, detail=f"event '{event_id}' not ack-able/not found")
-        return {"project_id": pid, "event_id": event_id, "status": "handled"}
+        return {"project_id": pid, "event_id": event_id, "status": "done"}
 
     def reconcile(self, project_id: str | None, timeout_sec: int = 60) -> dict[str, Any]:
         pid = resolve_project(project_id)

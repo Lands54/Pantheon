@@ -1,23 +1,23 @@
 # 与 Agent 对话指南
 
 ## 当前通信模型（v2）
-- 仅保留 `confess` 单播消息入口。
+- 统一使用 `events submit` 的 interaction 消息入口。
 - 广播与 prayers 命令已移除。
 - 消息状态通过 outbox 与 Angelia 事件队列观测。
 
 ## 1. 向单个 Agent 发送消息
 ```bash
-./temple.sh confess genesis --title "任务指令" "请先检查 inbox 并完成本轮实现"
+./temple.sh events submit --domain interaction --type interaction.message.sent --payload '{"to_id":"genesis","sender_id":"human.overseer","title":"任务指令","content":"请先检查 inbox 并完成本轮实现","msg_type":"confession","trigger_pulse":true}'
 ```
 
 可选静默发送（不立即触发 wake 事件）：
 ```bash
-./temple.sh confess genesis --title "记录" "仅记录，不立即执行" --silent
+./temple.sh events submit --domain interaction --type interaction.message.sent --payload '{"to_id":"genesis","sender_id":"human.overseer","title":"记录","content":"仅记录，不立即执行","msg_type":"confession","trigger_pulse":false}'
 ```
 
 ## 2. 查看消息送达状态（发送方）
 ```bash
-./temple.sh inbox outbox --agent "High Overseer" --to genesis --limit 20
+./temple.sh inbox outbox --agent "human.overseer" --to genesis --limit 20
 ```
 
 状态含义：
@@ -36,7 +36,7 @@
 ```bash
 ./temple.sh check genesis
 ./temple.sh angelia events --agent genesis --limit 100
-./temple.sh inbox outbox --agent "High Overseer" --to genesis --limit 50
+./temple.sh inbox outbox --agent "human.overseer" --to genesis --limit 50
 ```
 
 ## 5. 推荐对话模板

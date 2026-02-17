@@ -10,7 +10,6 @@ def test_idle_heartbeat_enqueued_when_queue_empty(monkeypatch):
     project_id = "unit_idle_heartbeat"
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=["a"],
-        queue_idle_heartbeat_sec=60,
         angelia_timer_enabled=True,
         angelia_timer_idle_sec=60,
     )

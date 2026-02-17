@@ -45,10 +45,10 @@ API 文档：`http://localhost:8000/docs`
 ### 4.3 通信与观测
 
 ```bash
-./temple.sh confess genesis --title "任务指令" "请先处理收件箱"
-./temple.sh confess genesis --title "记录" "先记录，不要立即执行" --silent
+./temple.sh events submit --domain interaction --type interaction.message.sent --payload '{"to_id":"genesis","sender_id":"human.overseer","title":"任务指令","content":"请先处理收件箱","msg_type":"confession","trigger_pulse":true}'
+./temple.sh events submit --domain interaction --type interaction.message.sent --payload '{"to_id":"genesis","sender_id":"human.overseer","title":"记录","content":"先记录，不要立即执行","msg_type":"confession","trigger_pulse":false}'
 ./temple.sh check genesis
-./temple.sh inbox outbox --agent "High Overseer" --to genesis --limit 20
+./temple.sh inbox outbox --agent "human.overseer" --to genesis --limit 20
 ```
 
 ### 4.4 配置

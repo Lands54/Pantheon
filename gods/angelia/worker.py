@@ -18,6 +18,9 @@ from gods.mnemosyne.facade import intent_from_angelia_event
 from gods.mnemosyne import record_intent
 from gods.prompts import prompt_registry
 from gods.angelia.pulse.policy import get_inject_budget
+from gods.interaction.handler import register_handlers as register_interaction_handlers
+
+register_interaction_handlers()
 
 
 @dataclass

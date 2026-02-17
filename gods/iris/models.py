@@ -21,7 +21,7 @@ class MailEventState(str, Enum):
 
 
 class InboxMessageState(str, Enum):
-    """Back-compat enum mapped to MailEvent states."""
+    """Mailbox semantic states."""
 
     PENDING = MailEventState.QUEUED.value
     DELIVERED = MailEventState.DELIVERED.value
@@ -116,5 +116,4 @@ class MailEvent:
         )
 
 
-# Keep old public name while switching to single-event source.
 InboxEvent = MailEvent

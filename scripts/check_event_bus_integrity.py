@@ -21,6 +21,9 @@ REQUIRED = {
     "meta",
 }
 
+ALLOWED_STATES = {"queued", "picked", "processing", "done", "failed", "dead"}
+FORBIDDEN_PAYLOAD_FIELDS = {"delivered_at", "handled_at", "read_at", "mail_state", "receipt_state", "contract_state"}
+
 
 def check_file(path: Path) -> tuple[int, list[str]]:
     errs: list[str] = []
@@ -39,6 +42,15 @@ def check_file(path: Path) -> tuple[int, list[str]]:
         missing = [k for k in REQUIRED if k not in row]
         if missing:
             errs.append(f"{path}:{i}: missing {','.join(missing)}")
+            continue
+        state = str(row.get("state", "")).strip()
+        if state not in ALLOWED_STATES:
+            errs.append(f"{path}:{i}: invalid transport state '{state}'")
+        payload = row.get("payload")
+        if isinstance(payload, dict):
+            bad = sorted([k for k in payload.keys() if str(k) in FORBIDDEN_PAYLOAD_FIELDS])
+            if bad:
+                errs.append(f"{path}:{i}: payload has forbidden business fields {','.join(bad)}")
     return count, errs
 
 

@@ -26,4 +26,32 @@ def emit_detach_event(
         meta=meta or {"source": "detach"},
     )
     events_bus.append_event(rec)
-
+    aid = str((payload or {}).get("agent_id", "")).strip()
+    if not aid:
+        return
+    title_map = {
+        "detach_submitted_event": "Detach Submitted",
+        "detach_started_event": "Detach Started",
+        "detach_stopping_event": "Detach Stopping",
+        "detach_stopped_event": "Detach Stopped",
+        "detach_failed_event": "Detach Failed",
+        "detach_reconciled_event": "Detach Reconciled",
+        "detach_lost_event": "Detach Lost",
+    }
+    if event_type not in title_map:
+        return
+    try:
+        from gods.interaction import facade as interaction_facade
+        content = f"{event_type}: {payload or {}}"
+        interaction_facade.submit_detach_notice(
+            project_id=project_id,
+            agent_id=aid,
+            title=title_map[event_type],
+            content=content,
+            msg_type="detach_notice",
+            trigger_pulse=True,
+            priority=priority,
+            dedupe_key=f"interaction_{dedupe_key or event_type}",
+        )
+    except Exception:
+        pass

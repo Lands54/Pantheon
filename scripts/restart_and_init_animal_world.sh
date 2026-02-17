@@ -89,7 +89,7 @@ Hermes + Python 执行规范（必须遵守）
 1) 所有实现必须通过 Python 代码落地（.py 文件 + 可执行命令验证）。
 2) 跨代理调用统一使用 HermesClient（优先 route），禁止假设对方文件结构。
 3) 协商后先走 contract-register -> commit-contract -> resolve-contract，再实现代码。
-4) 每完成一个可验证里程碑，调用 send_to_human 汇报：已完成内容/风险/下一步。
+4) 每完成一个可验证里程碑，调用 send_message(to_id='human.overseer', ...) 汇报：已完成内容/风险/下一步。
 5) 禁止只提交自然语言协议或伪代码，必须给出可运行实现。
 
 Python 示例：
@@ -218,12 +218,19 @@ msg = (
 for aid in agents.keys():
     req(
         "POST",
-        "/confess",
+        "/events/submit",
         json={
-            "agent_id": aid,
-            "title": "animal_world.bootstrap",
-            "message": msg,
-            "silent": False,
+            "project_id": project_id,
+            "domain": "interaction",
+            "event_type": "interaction.message.sent",
+            "payload": {
+                "to_id": aid,
+                "sender_id": "human.overseer",
+                "title": "animal_world.bootstrap",
+                "content": msg,
+                "msg_type": "confession",
+                "trigger_pulse": True,
+            },
         },
     ).raise_for_status()
 

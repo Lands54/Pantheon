@@ -30,7 +30,7 @@ flowchart TB
 - Runtime lifecycle wiring (start/stop/reconcile/report).
 
 ### gods.config
-- Typed models, load/save, migration, normalization.
+- Typed models, strict load/save validation, normalization.
 - Runtime singleton (`runtime_config`) as config access entry.
 
 ### gods.angelia
@@ -39,7 +39,7 @@ flowchart TB
 - Worker executes through `EventHandler` registry dispatch.
 
 ### gods.iris (Iris)
-- Mail semantic event ownership on top of unified EventBus.
+- Mailbox business state machine ownership (delivery/handled/receipts).
 - Outbox receipt updates and ack handling.
 
 ### gods.events
@@ -118,7 +118,7 @@ flowchart TD
 
 ### 4.2 Angelia supervisor/worker (Iris-backed events)
 Input: enqueue/wake/timer tick.
-Core state: Iris mail_events queue + agent runtime status.
+Core state: EventBus transport queue + Iris mailbox status + agent runtime status.
 Main flow: enqueue -> pick -> process -> done/requeue/dead.
 Output: next wakeup eligibility + metrics.
 ```mermaid
@@ -210,7 +210,7 @@ flowchart TD
 ### 4.7 Config load/normalize/save
 Input: config.json or API save payload.
 Core state: typed models + normalization rules.
-Main flow: load -> migrate legacy -> normalize -> runtime singleton -> save.
+Main flow: load -> strict validate -> normalize -> runtime singleton -> save.
 Output: normalized config state.
 ```mermaid
 sequenceDiagram

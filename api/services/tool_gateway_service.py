@@ -8,7 +8,8 @@ from typing import Any
 from fastapi import HTTPException
 
 from api.services.common.project_context import resolve_project
-from gods.iris import facade as iris_facade
+from gods.angelia import facade as angelia_facade
+from gods.interaction import facade as interaction_facade
 from gods.tools import facade as tools_facade
 
 
@@ -30,22 +31,7 @@ class ToolGatewayService:
         except Exception:
             parsed = None
         if not isinstance(parsed, list):
-            # Fallback: gateway should still expose inspectable inbox messages even when
-            # check_inbox returns warning text due anti-spam guard or empty queue.
-            rows = iris_facade.list_inbox_events(project_id=pid, agent_id=agent_id, state=None, limit=50)
-            parsed = [
-                {
-                    "id": item.event_id,
-                    "title": item.title,
-                    "from": item.sender,
-                    "to": item.agent_id,
-                    "status": item.state.value,
-                    "type": item.msg_type,
-                    "content": item.content,
-                    "created_at": item.created_at,
-                }
-                for item in rows
-            ]
+            parsed = []
         return {"project_id": pid, "agent_id": agent_id, "result": text, "messages": parsed}
 
     def check_outbox(
@@ -93,17 +79,20 @@ class ToolGatewayService:
             raise HTTPException(status_code=404, detail=f"Target agent '{to_id}' not found in '{pid}'")
         if not str(title or "").strip():
             raise HTTPException(status_code=400, detail="title is required")
-
-        text = tools_facade.send_message.invoke(
-            {
-                "to_id": to_id,
-                "title": title,
-                "message": message,
-                "caller_id": from_id,
-                "project_id": pid,
-            }
+        weights = angelia_facade.get_priority_weights(pid)
+        trigger = angelia_facade.is_mail_event_wakeup_enabled(pid)
+        row = interaction_facade.submit_message_event(
+            project_id=pid,
+            to_id=to_id,
+            sender_id=from_id,
+            title=title,
+            content=message,
+            msg_type="private",
+            trigger_pulse=trigger,
+            priority=int(weights.get("mail_event", 100)),
+            event_type="interaction.message.sent",
         )
-        return {"project_id": pid, "from_id": from_id, "to_id": to_id, "result": text}
+        return {"project_id": pid, "from_id": from_id, "to_id": to_id, **row}
 
 
 tool_gateway_service = ToolGatewayService()

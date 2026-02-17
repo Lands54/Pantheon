@@ -10,8 +10,8 @@
 
 ## 2. 存储 Breaking
 - 新 SSOT：`projects/{project_id}/runtime/events.jsonl`
-- 迁移脚本：`scripts/migrate_events_to_bus.py`
-- 旧文件迁移后重命名：`*.bak.<ts>`
+- 零兼容：不提供迁移脚本、不做自动迁移
+- 若检测到旧事件文件，启动直接失败并要求人工清理
 
 ## 3. 开发 Breaking
 - 新事件必须使用 `EventRecord + EventHandler`。

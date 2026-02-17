@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 CONFIG_FILE = Path("config.json")
@@ -16,6 +16,7 @@ def _default_projects() -> Dict[str, "ProjectConfig"]:
 
 class AgentModelConfig(BaseModel):
     """Configuration for an agent's model settings."""
+    model_config = ConfigDict(extra="forbid")
 
     model: str = "stepfun/step-3.5-flash:free"
     # Event-driven inbox is default path; check_inbox is opt-in for debug/audit.
@@ -30,6 +31,7 @@ class AgentModelConfig(BaseModel):
 
 class ProjectConfig(BaseModel):
     """Project-level runtime configuration."""
+    model_config = ConfigDict(extra="forbid")
 
     name: Optional[str] = None
     active_agents: List[str] = Field(default_factory=list)
@@ -39,14 +41,11 @@ class ProjectConfig(BaseModel):
     simulation_interval_min: int = 10
     simulation_interval_max: int = 40
 
-    # Deprecated: no longer used by Angelia timer policy; kept for config.json compatibility only.
-    queue_idle_heartbeat_sec: int = 60
     pulse_event_inject_budget: int = 3
     pulse_interrupt_mode: str = "after_action"
     pulse_priority_weights: Dict[str, int] = Field(
         default_factory=lambda: {"mail_event": 100, "manual": 80, "system": 60, "timer": 10}
     )
-    inbox_event_enabled: bool = True
 
     angelia_enabled: bool = True
     angelia_worker_per_agent: int = 1
@@ -135,6 +134,7 @@ class ProjectConfig(BaseModel):
 
 class SystemConfig(BaseModel):
     """Global system configuration and project map."""
+    model_config = ConfigDict(extra="forbid")
 
     openrouter_api_key: str = ""
     current_project: str = "default"

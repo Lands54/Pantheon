@@ -54,7 +54,6 @@ def test_gods_tools_list():
     # Communication tools
     assert "check_inbox" in tool_names
     assert "send_message" in tool_names
-    assert "send_to_human" in tool_names
     assert "finalize" in tool_names
     
     # Filesystem tools

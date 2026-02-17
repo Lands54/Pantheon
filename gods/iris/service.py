@@ -1,24 +1,15 @@
 """Iris service orchestration for unified mail-event delivery."""
 from __future__ import annotations
 
-from typing import Any
-
-from gods.iris.models import InboxEvent, InboxMessageState, MailEventState
+from gods.iris.models import MailEventState
 from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
 from gods.iris.outbox_store import create_receipt, list_receipts, update_status_by_message_id
 from gods.iris.store import (
+    deliver_mailbox_events,
     enqueue_mail_event,
-    has_pending_inbox_events,
-    list_inbox_events,
-    list_mail_events,
-    mark_mail_done,
-    mark_mail_failed_or_requeue,
-    mark_mail_processing,
-    pick_next_mail_event,
-    reclaim_stale_mail_processing,
-    retry_mail_event,
-    mark_inbox_events_handled,
-    take_deliverable_inbox_events,
+    has_pending_mailbox_events,
+    list_mailbox_events,
+    mark_mailbox_events_handled,
 )
 from gods.mnemosyne import load_memory_policy, record_intent
 from gods.mnemosyne.facade import (
@@ -42,11 +33,6 @@ def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
     except Exception:
         pass
     return "inbox.received.unread"
-
-
-def set_wake_enqueue(_func):
-    """Legacy no-op after single-source switch."""
-    return None
 
 
 def enqueue_message(
@@ -140,7 +126,7 @@ def enqueue_message(
 
 
 def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[str, list[str]]:
-    events = take_deliverable_inbox_events(project_id, agent_id, budget)
+    events = deliver_mailbox_events(project_id, agent_id, budget)
     if not events:
         return "", []
     for item in events:
@@ -167,17 +153,17 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
             f"- [title={item.title}][from={item.sender}][status={item.state.value}] at={item.created_at:.3f} id={item.event_id}: {item.content}"
         )
     ids = [item.event_id for item in events]
-    read_recent = list_inbox_events(
+    read_recent = list_mailbox_events(
         project_id=project_id,
         agent_id=agent_id,
-        state=InboxMessageState.HANDLED,
+        state=MailEventState.HANDLED,
         limit=max(1, min(budget, 10)),
     )
     receipts = list_receipts(project_id=project_id, from_agent_id=agent_id, limit=max(1, min(budget * 3, 50)))
     unread_count = len(
-        list_inbox_events(project_id=project_id, agent_id=agent_id, state=InboxMessageState.PENDING, limit=1000)
+        list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.QUEUED, limit=1000)
     ) + len(
-        list_inbox_events(project_id=project_id, agent_id=agent_id, state=InboxMessageState.DEFERRED, limit=1000)
+        list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.DEFERRED, limit=1000)
     )
     status_count = {"pending": 0, "delivered": 0, "handled": 0, "failed": 0}
     for r in receipts:
@@ -235,23 +221,23 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
 
 def build_inbox_overview(project_id: str, agent_id: str, budget: int = 20) -> str:
     budget = max(1, int(budget))
-    unread = list_inbox_events(
+    unread = list_mailbox_events(
         project_id=project_id,
         agent_id=agent_id,
-        state=InboxMessageState.PENDING,
+        state=MailEventState.QUEUED,
         limit=budget,
-    ) + list_inbox_events(
+    ) + list_mailbox_events(
         project_id=project_id,
         agent_id=agent_id,
-        state=InboxMessageState.DEFERRED,
+        state=MailEventState.DEFERRED,
         limit=budget,
     )
     unread.sort(key=lambda x: x.created_at)
     unread = unread[-budget:]
-    read_recent = list_inbox_events(
+    read_recent = list_mailbox_events(
         project_id=project_id,
         agent_id=agent_id,
-        state=InboxMessageState.HANDLED,
+        state=MailEventState.HANDLED,
         limit=max(1, budget // 2),
     )
     receipts = list_receipts(project_id=project_id, from_agent_id=agent_id, limit=max(1, budget * 2))
@@ -305,7 +291,7 @@ def build_inbox_overview(project_id: str, agent_id: str, budget: int = 20) -> st
 
 
 def ack_handled(project_id: str, event_ids: list[str], agent_id: str = ""):
-    handled = mark_inbox_events_handled(project_id, event_ids)
+    handled = mark_mailbox_events_handled(project_id, event_ids)
     for item in handled:
         updated = update_status_by_message_id(
             project_id=project_id,
@@ -339,60 +325,8 @@ def ack_handled(project_id: str, event_ids: list[str], agent_id: str = ""):
 
 
 def has_pending(project_id: str, agent_id: str) -> bool:
-    return has_pending_inbox_events(project_id, agent_id)
+    return has_pending_mailbox_events(project_id, agent_id)
 
-
-def list_events(
-    project_id: str,
-    agent_id: str | None,
-    state: InboxMessageState | None,
-    limit: int,
-) -> list[InboxEvent]:
-    return list_inbox_events(project_id, agent_id=agent_id, state=state, limit=limit)
-
-
-def pick_mail_event(project_id: str, agent_id: str, now: float, cooldown_until: float, preempt_types: set[str]):
-    return pick_next_mail_event(project_id, agent_id, now, cooldown_until, preempt_types)
-
-
-def mark_processing(project_id: str, event_id: str) -> bool:
-    return mark_mail_processing(project_id, event_id)
-
-
-def mark_done(project_id: str, event_id: str) -> bool:
-    return mark_mail_done(project_id, event_id)
-
-
-def mark_failed_or_requeue(project_id: str, event_id: str, error_code: str, error_message: str, retry_delay_sec: int = 0) -> str:
-    return mark_mail_failed_or_requeue(project_id, event_id, error_code, error_message, retry_delay_sec)
-
-
-def reclaim_stale_processing(project_id: str, timeout_sec: int) -> int:
-    return reclaim_stale_mail_processing(project_id, timeout_sec)
-
-
-def retry_event(project_id: str, event_id: str) -> bool:
-    return retry_mail_event(project_id, event_id)
-
-
-def list_mail_runtime_events(
-    project_id: str,
-    agent_id: str = "",
-    state: str = "",
-    event_type: str = "",
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    st = MailEventState(state) if state else None
-    return [
-        row.to_dict()
-        for row in list_mail_events(
-            project_id=project_id,
-            agent_id=agent_id,
-            state=st,
-            event_type=event_type,
-            limit=limit,
-        )
-    ]
 
 def list_outbox_receipts(
     project_id: str,

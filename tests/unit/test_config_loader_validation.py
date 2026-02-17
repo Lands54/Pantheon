@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from gods.config import SystemConfig
 
 
-def test_load_migrates_legacy_config(tmp_path, monkeypatch):
+def test_load_rejects_legacy_config_payload(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     legacy = {
         "openrouter_api_key": "k1",
@@ -18,11 +20,8 @@ def test_load_migrates_legacy_config(tmp_path, monkeypatch):
     }
     Path("config.json").write_text(json.dumps(legacy), encoding="utf-8")
 
-    cfg = SystemConfig.load()
-    assert cfg.current_project == "default"
-    assert "default" in cfg.projects
-    assert cfg.projects["default"].active_agents == ["a"]
-    assert cfg.projects["default"].agent_settings["a"].model == "m1"
+    with pytest.raises(RuntimeError):
+        SystemConfig.load()
 
 
 def test_load_normalizes_invalid_values(tmp_path, monkeypatch):

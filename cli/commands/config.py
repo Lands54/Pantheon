@@ -31,16 +31,14 @@ def cmd_config(args):
             print(f"   Enabled: {proj.get('simulation_enabled', False)}")
             print(f"   Interval: {proj.get('simulation_interval_min', 10)}-{proj.get('simulation_interval_max', 40)}s")
             print(f"   Autonomous Batch Size: {proj.get('autonomous_batch_size', 4)}")
-            print(f"   Queue Idle Heartbeat: {proj.get('queue_idle_heartbeat_sec', 60)}s")
             print(f"   Event Inject Budget: {proj.get('pulse_event_inject_budget', 3)}")
             print(f"   Interrupt Mode: {proj.get('pulse_interrupt_mode', 'after_action')}")
-            print(f"   Inbox Event Enabled: {proj.get('inbox_event_enabled', True)}")
             print(f"   Angelia Enabled: {proj.get('angelia_enabled', True)}")
             print(f"   Angelia Timer Enabled: {proj.get('angelia_timer_enabled', True)}")
             print(f"   Angelia Timer Idle: {proj.get('angelia_timer_idle_sec', 60)}s")
             print(f"   Angelia Max Attempts: {proj.get('angelia_event_max_attempts', 3)}")
             print(f"   Angelia Processing Timeout: {proj.get('angelia_processing_timeout_sec', 60)}s")
-            print(f"   Angelia Cooldown Preempt Types: {proj.get('angelia_cooldown_preempt_types', ['inbox_event','manual'])}")
+            print(f"   Angelia Cooldown Preempt Types: {proj.get('angelia_cooldown_preempt_types', ['mail_event','manual'])}")
             print(f"   Angelia Dedupe Window: {proj.get('angelia_dedupe_window_sec', 5)}s")
             
             print(f"\n📊 Memory:")
@@ -163,10 +161,8 @@ def cmd_config(args):
             direct_key = args.key.strip()
 
             if direct_key in {
-                "queue_idle_heartbeat_sec",
                 "pulse_event_inject_budget",
                 "pulse_interrupt_mode",
-                "inbox_event_enabled",
                 "pulse_priority_weights",
                 "angelia_enabled",
                 "angelia_worker_per_agent",
@@ -206,7 +202,6 @@ def cmd_config(args):
                 "context_write_build_report",
             }:
                 if direct_key in {
-                    "queue_idle_heartbeat_sec",
                     "pulse_event_inject_budget",
                     "angelia_worker_per_agent",
                     "angelia_event_max_attempts",
@@ -235,7 +230,7 @@ def cmd_config(args):
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
                     data["projects"][pid][direct_key] = float(args.value)
-                elif direct_key in {"inbox_event_enabled", "angelia_enabled", "angelia_timer_enabled"}:
+                elif direct_key in {"angelia_enabled", "angelia_timer_enabled"}:
                     data["projects"][pid][direct_key] = args.value.lower() == "true"
                 elif direct_key in {
                     "docker_enabled",
@@ -404,17 +399,13 @@ def cmd_config(args):
                     print(f"❌ Unknown phase key: {parts[1]}")
                     return
             elif parts[0] == "pulse" and len(parts) >= 2:
-                if parts[1] == "idle_heartbeat":
-                    data["projects"][pid]["queue_idle_heartbeat_sec"] = int(args.value)
-                elif parts[1] == "inject_budget":
+                if parts[1] == "inject_budget":
                     data["projects"][pid]["pulse_event_inject_budget"] = int(args.value)
                 elif parts[1] == "interrupt_mode":
                     if args.value != "after_action":
                         print("❌ pulse.interrupt_mode currently only supports: after_action")
                         return
                     data["projects"][pid]["pulse_interrupt_mode"] = args.value
-                elif parts[1] == "inbox_event":
-                    data["projects"][pid]["inbox_event_enabled"] = args.value.lower() == "true"
                 elif parts[1] == "weights":
                     try:
                         payload = json.loads(args.value)
@@ -607,11 +598,9 @@ def cmd_config(args):
                 print("  simulation.min (seconds)")
                 print("  simulation.max (seconds)")
                 print("  simulation.batch (number)")
-                print("  queue_idle_heartbeat_sec (seconds)")
                 print("  pulse_event_inject_budget (number)")
                 print("  pulse_interrupt_mode (after_action)")
-                print("  inbox_event_enabled (true/false)")
-                print("  pulse_priority_weights ({\"inbox_event\":100,...})")
+                print("  pulse_priority_weights ({\"mail_event\":100,...})")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
                 print("  memory.compact_trigger (tokens)")
@@ -627,11 +616,9 @@ def cmd_config(args):
                 print("  context.include_inbox_status_hints (true/false)")
                 print("  context.write_build_report (true/false)")
                 print("  tools.loop_max (number)")
-                print("  pulse.idle_heartbeat (seconds)")
                 print("  pulse.inject_budget (number)")
                 print("  pulse.interrupt_mode (after_action)")
-                print("  pulse.inbox_event (true/false)")
-                print("  pulse.weights ({\"inbox_event\":100,...})")
+                print("  pulse.weights ({\"mail_event\":100,...})")
                 print("  phase.enabled (true/false)")
                 print("  phase.strategy (strict_triad|iterative_action|freeform)")
                 print("  phase.interaction_max (number)")

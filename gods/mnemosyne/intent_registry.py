@@ -8,7 +8,6 @@ TOOL_INTENT_NAMES: list[str] = [
     "check_inbox",
     "check_outbox",
     "send_message",
-    "send_to_human",
     "finalize",
     "read_file",
     "write_file",
@@ -38,4 +37,3 @@ TOOL_INTENT_NAMES: list[str] = [
 
 def tool_intent_names() -> list[str]:
     return sorted(set([str(x).strip() for x in TOOL_INTENT_NAMES if str(x).strip()]))
-

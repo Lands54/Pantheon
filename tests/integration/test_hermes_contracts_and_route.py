@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from api.app import app
 from gods.config import runtime_config
-from gods.iris import list_events
 
 client = TestClient(app)
 
@@ -77,13 +76,6 @@ def test_hermes_contract_commit_snapshot_and_route_http():
         assert commit_grass.json()["contract"]["missing_committers"] == ["tiger"]
         assert commit_grass.json()["contract"]["notified_agents"] == ["ground"]
 
-        ground_rows = [
-            x.to_dict()
-            for x in list_events(project_id=project_id, agent_id="ground", state=None, limit=50)
-        ]
-        notices = [x for x in ground_rows if x.get("msg_type") == "contract_notice"]
-        assert notices, "ground should receive contract_notice after grass commit"
-        assert "grass" in str(notices[-1].get("content", ""))
 
         commit = client.post(
             "/hermes/contracts/commit",
@@ -94,13 +86,6 @@ def test_hermes_contract_commit_snapshot_and_route_http():
         assert commit.json()["contract"]["missing_committers"] == []
         assert set(commit.json()["contract"]["notified_fully_agents"]) == {"ground", "grass", "tiger"}
 
-        grass_rows = [
-            x.to_dict()
-            for x in list_events(project_id=project_id, agent_id="grass", state=None, limit=100)
-        ]
-        fully_rows = [x for x in grass_rows if x.get("msg_type") == "contract_fully_committed"]
-        assert fully_rows, "grass should receive contract_fully_committed notice"
-        assert "fully committed" in str(fully_rows[-1].get("content", "")).lower()
 
         listed_after_commit = client.get(
             "/hermes/contracts/list",

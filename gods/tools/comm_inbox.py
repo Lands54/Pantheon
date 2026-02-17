@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from langchain_core.tools import tool
 
-from gods.iris.facade import ack_handled, list_outbox_receipts, take_deliverable_inbox_events
+from gods.iris.facade import ack_handled, fetch_inbox_context, list_outbox_receipts
 from gods.paths import runtime_dir
 from gods.tools.comm_common import format_comm_error
 
@@ -53,8 +54,8 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
                 )
             )
 
-        events = take_deliverable_inbox_events(project_id=project_id, agent_id=caller_id, budget=50)
-        if not events:
+        text, event_ids = fetch_inbox_context(project_id=project_id, agent_id=caller_id, budget=50)
+        if not event_ids:
             if not guard.get("warned_empty", False):
                 _save_inbox_guard(caller_id, project_id, {"warned_empty": True, "blocked": False})
                 return (
@@ -72,21 +73,30 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
                 )
             )
 
-        event_ids = [item.event_id for item in events]
         ack_handled(project_id, event_ids, caller_id)
         reset_inbox_guard(caller_id, project_id)
+        events = []
+        pat = re.compile(
+            r"^- \[title=(?P<title>.*?)\]\[from=(?P<sender>.*?)\]\[status=(?P<status>.*?)\] at=(?P<at>[-0-9.]+) id=(?P<eid>[a-zA-Z0-9]+): (?P<content>.*)$"
+        )
+        for line in str(text or "").splitlines():
+            m = pat.match(line.strip())
+            if not m:
+                continue
+            events.append(
+                {
+                    "id": m.group("eid"),
+                    "title": m.group("title"),
+                    "from": m.group("sender"),
+                    "to": caller_id,
+                    "status": m.group("status"),
+                    "type": "private",
+                    "content": m.group("content"),
+                    "created_at": float(m.group("at") or 0.0),
+                }
+            )
         payload = [
-            {
-                "id": item.event_id,
-                "title": item.title,
-                "from": item.sender,
-                "to": item.agent_id,
-                "status": item.state.value,
-                "type": item.msg_type,
-                "content": item.content,
-                "created_at": item.created_at,
-            }
-            for item in events
+            x for x in events if str(x.get("id", "")) in set(event_ids)
         ]
         return json.dumps(payload, ensure_ascii=False)
     except Exception as e:

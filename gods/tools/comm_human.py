@@ -1,15 +1,14 @@
 """Human/social communication tools."""
 from __future__ import annotations
 
-import fcntl
 import json
-import time
 
 from langchain_core.tools import tool
 
-from gods.iris.facade import enqueue_message
 from gods.angelia import facade as angelia_facade
-from gods.paths import mnemosyne_dir, project_buffers_dir, project_dir
+from gods.interaction import facade as interaction_facade
+from gods.interaction.contracts import EVENT_MESSAGE_SENT
+from gods.paths import mnemosyne_dir, project_dir
 from gods.tools.comm_common import format_comm_error
 
 
@@ -44,65 +43,29 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
 
         weights = angelia_facade.get_priority_weights(project_id)
         trigger = angelia_facade.is_mail_event_wakeup_enabled(project_id)
-        queued = enqueue_message(
+        queued = interaction_facade.submit_message_event(
             project_id=project_id,
-            agent_id=to_id,
-            sender=caller_id,
+            to_id=to_id,
+            sender_id=caller_id,
             title=title,
             content=message,
             msg_type="private",
             trigger_pulse=trigger,
-            pulse_priority=int(weights.get("mail_event", 100)),
+            priority=int(weights.get("mail_event", 100)),
+            event_type=EVENT_MESSAGE_SENT,
         )
         return (
             f"Revelation sent to {to_id}. "
             f"title={title}, "
-            f"event_id={queued.get('mail_event_id', '')}, "
-            f"outbox_receipt_id={queued.get('outbox_receipt_id', '')}, "
-            f"outbox_status={queued.get('outbox_status', 'pending')}, "
+            f"event_id={queued.get('event_id', '')}, "
             f"wakeup_sent={str(bool(queued.get('wakeup_sent', False))).lower()}, "
-            "initial_state=queued"
+            "initial_state=queued(interaction)"
         )
     except Exception as e:
         return format_comm_error(
             "Communication Error",
             str(e),
             "Retry send_message and verify project buffers are writable.",
-            caller_id,
-            project_id,
-        )
-
-
-@tool
-def send_to_human(message: str, caller_id: str, project_id: str = "default") -> str:
-    """Sacred prayer sent to the human overseer."""
-    try:
-        if not message.strip():
-            return format_comm_error(
-                "Message Error",
-                "Prayer message is empty.",
-                "Provide what you need to report or request from human.",
-                caller_id,
-                project_id,
-            )
-
-        buffer_dir = project_buffers_dir(project_id)
-        buffer_dir.mkdir(parents=True, exist_ok=True)
-        target_buffer = buffer_dir / "human.jsonl"
-        msg_data = {"timestamp": time.time(), "from": caller_id, "type": "prayer", "content": message}
-
-        with open(target_buffer, "a", encoding="utf-8") as f:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(json.dumps(msg_data, ensure_ascii=False) + "\n")
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
-        return "Prayer sent to the High Overseer (Human)."
-    except Exception as e:
-        return format_comm_error(
-            "Communication Error",
-            str(e),
-            "Retry send_to_human and verify project buffers are writable.",
             caller_id,
             project_id,
         )

@@ -292,10 +292,21 @@ const App = () => {
     }));
 
     try {
-      await fetch('/confess', {
+      await fetch('/events/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: selectedAgentId, message: text })
+        body: JSON.stringify({
+          domain: 'interaction',
+          event_type: 'interaction.message.sent',
+          payload: {
+            to_id: selectedAgentId,
+            sender_id: 'human.overseer',
+            title: 'frontend.message',
+            content: text,
+            msg_type: 'confession',
+            trigger_pulse: true
+          }
+        })
       });
     } catch (e) { alert("Confession failed"); }
   };

@@ -9,7 +9,6 @@ from gods.config import runtime_config
 SOCIAL_TOOLS = {
     "check_inbox",
     "send_message",
-    "send_to_human",
     "post_to_synod",
     "abstain_from_synod",
     "list_agents",

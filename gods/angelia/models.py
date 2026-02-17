@@ -10,11 +10,8 @@ class AngeliaEventState(str, Enum):
     QUEUED = "queued"
     PICKED = "picked"
     PROCESSING = "processing"
-    DELIVERED = "delivered"
-    HANDLED = "handled"
     DONE = "done"
     FAILED = "failed"
-    DEFERRED = "deferred"
     DEAD = "dead"
 
 
