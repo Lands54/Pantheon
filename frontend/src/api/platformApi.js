@@ -14,6 +14,10 @@ export function getConfig() {
   return apiGet('/config')
 }
 
+export function getConfigSchema() {
+  return apiGet('/config/schema')
+}
+
 export function saveConfig(config) {
   return apiPost('/config/save', config)
 }
@@ -92,6 +96,14 @@ export function listOutboxReceipts(projectId, fromAgentId, status = '', limit = 
 
 export function getHermesProtocols(projectId) {
   return apiGet(`/hermes/list${qp({ project_id: projectId })}`)
+}
+
+export function getHermesContracts(projectId, includeDisabled = true) {
+  return apiGet(`/hermes/contracts/list${qp({ project_id: projectId, include_disabled: includeDisabled })}`)
+}
+
+export function getHermesPorts(projectId) {
+  return apiGet(`/hermes/ports/list${qp({ project_id: projectId })}`)
 }
 
 export function getHermesInvocations(projectId, limit = 200) {

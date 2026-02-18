@@ -6,6 +6,8 @@ import { MessageCenterPage } from './pages/MessageCenterPage'
 import { AgentDetailPage } from './pages/AgentDetailPage'
 import { ProjectControlPage } from './pages/ProjectControlPage'
 import { MemoryPolicyPage } from './pages/MemoryPolicyPage'
+import { ConfigCenterPage } from './pages/ConfigCenterPage'
+import { ToolPolicyPage } from './pages/ToolPolicyPage'
 import { AppStoreProvider, useAppStore } from './store/AppStore'
 import { getAgentStatus } from './api/platformApi'
 import { usePolling } from './hooks/usePolling'
@@ -21,6 +23,7 @@ function AppInner() {
     switchProject,
     createAndSwitchProject,
     setProjectRunning,
+    updateConfig,
   } = useAppStore()
 
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -91,14 +94,22 @@ function AppInner() {
             isRunning={isRunning}
             onCreateProject={createAndSwitchProject}
             onSetRunning={setProjectRunning}
+            config={config}
+            onSaveConfig={updateConfig}
+            agentRows={agentRows}
+            onRefreshAgents={() => reloadAgentRows(currentProject)}
           />
         )
       case 'memoryPolicy':
         return <MemoryPolicyPage projectId={currentProject} />
+      case 'configCenter':
+        return <ConfigCenterPage projectId={currentProject} config={config} onSaveConfig={updateConfig} />
+      case 'toolPolicy':
+        return <ToolPolicyPage projectId={currentProject} config={config} onSaveConfig={updateConfig} />
       default:
         return null
     }
-  }, [activeTab, currentProject, selectedAgentId, agentRows, isRunning, createAndSwitchProject, setProjectRunning])
+  }, [activeTab, currentProject, selectedAgentId, agentRows, isRunning, createAndSwitchProject, setProjectRunning, config, updateConfig])
 
   return (
     <AppShell

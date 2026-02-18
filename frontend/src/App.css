@@ -364,6 +364,72 @@ tbody tr:hover {
   font-size: 0.82rem;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 24, 30, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: min(1320px, 98vw);
+  max-height: 94vh;
+  overflow: auto;
+  border: 1px solid rgba(30, 41, 53, 0.18);
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 18px;
+  box-shadow: 0 18px 60px rgba(23, 31, 40, 0.25);
+}
+
+.modal-card .json-block {
+  max-height: 62vh;
+}
+
+.inline-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.config-field {
+  border: 1px dashed rgba(30, 41, 53, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.config-label {
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+  color: #33485a;
+  font-weight: 600;
+}
+
+.map-card {
+  padding: 10px;
+}
+
+.tool-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.config-inline-field {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.wrap-row {
+  flex-wrap: wrap;
+}
+
 input,
 select,
 textarea {

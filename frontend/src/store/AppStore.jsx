@@ -45,6 +45,12 @@ export function AppStoreProvider({ children }) {
     await refreshConfig()
   }
 
+  const updateConfig = async (next) => {
+    const res = await saveConfig(next)
+    const fresh = await refreshConfig()
+    return { ...(fresh || {}), warnings: res?.warnings || [] }
+  }
+
   const value = {
     config,
     loading,
@@ -53,6 +59,7 @@ export function AppStoreProvider({ children }) {
     switchProject,
     createAndSwitchProject,
     setProjectRunning,
+    updateConfig,
   }
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>

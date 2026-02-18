@@ -1,4 +1,4 @@
-import { Activity, Bot, MessageSquare, Layers, FolderKanban, RefreshCw, BookText } from 'lucide-react'
+import { Activity, Bot, MessageSquare, Layers, FolderKanban, RefreshCw, BookText, SlidersHorizontal, Wrench } from 'lucide-react'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: Activity },
@@ -7,6 +7,8 @@ const NAV_ITEMS = [
   { id: 'messageCenter', label: 'Message Center', icon: MessageSquare },
   { id: 'projectControl', label: 'Project Control', icon: FolderKanban },
   { id: 'memoryPolicy', label: 'Memory Policy', icon: BookText },
+  { id: 'configCenter', label: 'Config Center', icon: SlidersHorizontal },
+  { id: 'toolPolicy', label: 'Tool Policy', icon: Wrench },
 ]
 
 export function AppShell({
