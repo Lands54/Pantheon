@@ -1,5 +1,5 @@
 """
-Integration test: freeform mode bypasses phase runtime and runs legacy agent<->tool loop.
+Integration test: freeform mode runs on unified LangGraph runtime loop.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class _FakeBrain:
             return AIMessage(
                 content="freeform action",
                 tool_calls=[
-                    {"id": "ff1", "name": "list_dir", "args": {"path": "."}},
+                    {"id": "ff1", "name": "list", "args": {"path": "."}},
                 ],
             )
         self.calls += 1
@@ -32,7 +32,7 @@ class _FakeBrain:
         return "READY_NEXT=YES"
 
 
-def test_freeform_strategy_uses_legacy_loop():
+def test_freeform_strategy_runs_unified_runtime_loop():
     project_id = "it_freeform_mode"
     agent_id = "solo"
     agent_dir = Path("projects") / project_id / "agents" / agent_id
@@ -65,7 +65,7 @@ def test_freeform_strategy_uses_legacy_loop():
         assert out["next_step"] == "finish"
 
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
-        assert "[[ACTION]] list_dir" in mem_text
+        assert "[[ACTION]] list" in mem_text
         runtime_text = (Path("projects") / project_id / "mnemosyne" / "runtime_events" / f"{agent_id}.jsonl").read_text(encoding="utf-8")
         assert "agent.mode.freeform" in runtime_text
         assert not (agent_dir / "runtime_state.json").exists()

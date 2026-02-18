@@ -7,6 +7,7 @@ import json
 import os
 from langchain_core.tools import tool
 
+from gods.mnemosyne import facade as mnemosyne_facade
 from gods.paths import agent_dir
 
 RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_state.json", "state_window.json"}
@@ -126,15 +127,94 @@ def _path_lookup_hint(path: str, caller_id: str, agent_territory: Path) -> str:
         return f"Try one of: {', '.join(suggestions)}."
     if normalized != path:
         return f"Try path '{normalized}' (removed redundant prefix)."
-    return "Check the path with list_dir('.') first, then retry with a relative path."
+    return "Check the path with list('.') first, then retry with a relative path."
 
 
 @tool
-def read_file(path: str, caller_id: str, project_id: str = "default") -> str:
-    """Read a scroll from your library. Only your personal scrolls are accessible."""
+def read(
+    path: str = "",
+    artifact_id: str = "",
+    caller_id: str = "default",
+    project_id: str = "default",
+    start: int = 1,
+    end: int = 0,
+) -> str:
+    """Read local file content or Mnemosyne artifact by id. Supports optional line range with start/end (1-based, inclusive)."""
     try:
-        file_path = validate_path(caller_id, project_id, path)
         agent_territory = _agent_territory(project_id, caller_id)
+        path_val = str(path or "").strip()
+        artifact_val = str(artifact_id or "").strip()
+        if bool(path_val) == bool(artifact_val):
+            return _format_fs_error(
+                agent_territory,
+                "Input Error",
+                "Provide exactly one of path or artifact_id.",
+                "Use read(path='notes.md') for local files, or read(artifact_id='artf_xxx') for attachments.",
+            )
+        if artifact_val:
+            ref = mnemosyne_facade.head_artifact(artifact_val, caller_id, project_id)
+            data = mnemosyne_facade.get_artifact_bytes(artifact_val, caller_id, project_id)
+            s = int(start or 1)
+            e = int(end or 0)
+            if s < 1:
+                return _format_fs_error(
+                    agent_territory,
+                    "Range Error",
+                    "start must be >= 1.",
+                    "Pass start as a 1-based line number (e.g., start=1).",
+                )
+            if e > 0 and e < s:
+                return _format_fs_error(
+                    agent_territory,
+                    "Range Error",
+                    "end must be >= start (or 0 for EOF).",
+                    "Use start/end with 1-based inclusive numbers, or set end=0 to read to EOF.",
+                )
+            try:
+                text = data.decode("utf-8")
+            except Exception:
+                body = (
+                    "[READ_ARTIFACT]\n"
+                    f"artifact_id: {ref.artifact_id}\n"
+                    f"scope: {ref.scope}\n"
+                    f"mime: {ref.mime}\n"
+                    f"size: {ref.size}\n"
+                    f"sha256: {ref.sha256}\n"
+                    "content: <binary; text preview unavailable>"
+                )
+                return _cwd_prefix(agent_territory, body)
+
+            lines = text.splitlines()
+            total = len(lines)
+            if total == 0:
+                selected = ""
+                range_label = f"{s}-0"
+            else:
+                if s > total:
+                    return _format_fs_error(
+                        agent_territory,
+                        "Range Error",
+                        f"start={s} exceeds total lines={total}.",
+                        "Use list() to inspect resources and choose a valid range.",
+                    )
+                end_idx = total if e <= 0 else min(e, total)
+                selected = "\n".join(lines[s - 1 : end_idx])
+                range_label = f"{s}-{end_idx}"
+
+            body = (
+                "[READ_ARTIFACT]\n"
+                f"artifact_id: {ref.artifact_id}\n"
+                f"scope: {ref.scope}\n"
+                f"mime: {ref.mime}\n"
+                f"size: {ref.size}\n"
+                f"line_range: {range_label}\n"
+                f"total_lines: {total}\n"
+                "---\n"
+                f"{selected}"
+            )
+            return _cwd_prefix(agent_territory, body)
+
+        file_path = validate_path(caller_id, project_id, path_val)
         if _is_reserved_path(file_path, agent_territory):
             return _format_fs_error(
                 agent_territory,
@@ -143,16 +223,60 @@ def read_file(path: str, caller_id: str, project_id: str = "default") -> str:
                 "Do not read memory.md/memory_archive.md/agent.md/runtime_state.json directly. Use normal project files only.",
             )
         if not file_path.exists():
-            hint = _missing_read_hint(path, caller_id, agent_territory)
+            hint = _missing_read_hint(path_val, caller_id, agent_territory)
             return _format_fs_error(
                 agent_territory,
                 "Path Error",
-                f"Scroll '{path}' not found.{hint}",
-                _path_lookup_hint(path, caller_id, agent_territory),
+                f"Scroll '{path_val}' not found.{hint}",
+                _path_lookup_hint(path_val, caller_id, agent_territory),
             )
-            
-        with open(file_path, "r", encoding="utf-8") as f:
-            return _cwd_prefix(agent_territory, f.read())
+
+        s = int(start or 1)
+        e = int(end or 0)
+        if s < 1:
+            return _format_fs_error(
+                agent_territory,
+                "Range Error",
+                "start must be >= 1.",
+                "Pass start as a 1-based line number (e.g., start=1).",
+            )
+        if e > 0 and e < s:
+            return _format_fs_error(
+                agent_territory,
+                "Range Error",
+                "end must be >= start (or 0 for EOF).",
+                "Use start/end with 1-based inclusive numbers, or set end=0 to read to EOF.",
+            )
+
+        content = file_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        total = len(lines)
+        if total == 0:
+            selected = ""
+            range_label = f"{s}-0"
+        else:
+            if s > total:
+                return _format_fs_error(
+                    agent_territory,
+                    "Range Error",
+                    f"start={s} exceeds total lines={total}.",
+                    "Use list/read to inspect file and choose a valid range.",
+                )
+            end_idx = total if e <= 0 else min(e, total)
+            selected_lines = lines[s - 1:end_idx]
+            selected = "\n".join(selected_lines)
+            range_label = f"{s}-{end_idx}"
+
+        body = (
+            "[READ]\n"
+            f"path: {path_val}\n"
+            f"resolved_path: {file_path}\n"
+            f"line_range: {range_label}\n"
+            f"total_lines: {total}\n"
+            "---\n"
+            f"{selected}"
+        )
+        return _cwd_prefix(agent_territory, body)
     except Exception as e:
         agent_territory = _agent_territory(project_id, caller_id)
         return _format_fs_error(
@@ -335,8 +459,8 @@ def multi_replace(path: str, replacements_json: str, caller_id: str, project_id:
 
 
 @tool
-def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "default") -> str:
-    """Survey the chambers within your current project territory."""
+def list(path: str = ".", caller_id: str = "default", project_id: str = "default") -> str:
+    """List local directory entries and visible Mnemosyne artifact references."""
     try:
         dir_path = validate_path(caller_id, project_id, path)
         agent_territory = _agent_territory(project_id, caller_id)
@@ -359,7 +483,7 @@ def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "def
                 agent_territory,
                 "Type Error",
                 f"Path {path} is not a directory.",
-                "Use read_file for files, or pass a directory path to list_dir.",
+                "Use read for files/artifacts, or pass a directory path to list.",
             )
 
         items = sorted([
@@ -368,10 +492,33 @@ def list_dir(path: str = ".", caller_id: str = "default", project_id: str = "def
             and (item not in RESERVED_SYSTEM_FILES)
             and (item not in HIDDEN_DIR_NAMES)
         ])
-        if not items:
-            return _cwd_prefix(agent_territory, "[EMPTY] No visible files or directories.")
+        result: list[str] = []
+        if items:
+            result.append("[LOCAL]")
+            result.extend(
+                [f"{'[CHAMBER]' if (dir_path / item).is_dir() else '[SCROLL]'} {item}" for item in items]
+            )
+        else:
+            result.append("[LOCAL]\n[EMPTY] No visible files or directories.")
 
-        result = [f"{'[CHAMBER]' if (dir_path / item).is_dir() else '[SCROLL]'} {item}" for item in items]
+        artifact_lines: list[str] = []
+        for scope in ("agent", "project", "global"):
+            refs = mnemosyne_facade.list_artifacts(
+                scope=scope,
+                project_id=project_id,
+                actor_id=caller_id,
+                limit=10,
+            )
+            if not refs:
+                continue
+            artifact_lines.append(f"[ARTIFACTS:{scope}]")
+            for ref in refs:
+                artifact_lines.append(
+                    f"[ATTACHMENT] id={ref.artifact_id} mime={ref.mime} size={ref.size} owner={ref.owner_agent_id or '-'}"
+                )
+        if artifact_lines:
+            result.append("")
+            result.extend(artifact_lines)
         return _cwd_prefix(agent_territory, "\n".join(result))
     except Exception as e:
         agent_territory = _agent_territory(project_id, caller_id)

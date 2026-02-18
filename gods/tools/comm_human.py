@@ -6,14 +6,23 @@ import json
 from langchain_core.tools import tool
 
 from gods.angelia import facade as angelia_facade
+from gods.identity import is_valid_agent_id
 from gods.interaction import facade as interaction_facade
 from gods.interaction.contracts import EVENT_MESSAGE_SENT
+from gods.mnemosyne import facade as mnemosyne_facade
 from gods.paths import mnemosyne_dir, project_dir
 from gods.tools.comm_common import format_comm_error
 
 
 @tool
-def send_message(to_id: str, title: str, message: str, caller_id: str, project_id: str = "default") -> str:
+def send_message(
+    to_id: str,
+    title: str,
+    message: str,
+    caller_id: str,
+    project_id: str = "default",
+    attachments: str = "[]",
+) -> str:
     """Send a private revelation to another Being within the same project."""
     try:
         if not to_id.strip():
@@ -40,6 +49,65 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
                 caller_id,
                 project_id,
             )
+        try:
+            raw = json.loads(str(attachments or "[]"))
+        except Exception as e:
+            return format_comm_error(
+                "Message Error",
+                f"attachments must be valid JSON array: {e}",
+                'Use attachments like ["artf_xxx","artf_yyy"].',
+                caller_id,
+                project_id,
+            )
+        if not isinstance(raw, list):
+            return format_comm_error(
+                "Message Error",
+                "attachments must be a JSON array.",
+                'Use attachments like ["artf_xxx","artf_yyy"].',
+                caller_id,
+                project_id,
+            )
+        attachment_ids: list[str] = []
+        for item in raw:
+            aid = str(item or "").strip()
+            if not aid:
+                continue
+            if "/" in aid or aid.startswith("."):
+                return format_comm_error(
+                    "Message Error",
+                    f"invalid attachment id '{aid}': path-like values are forbidden.",
+                    "Pass artifact_id only, not file paths.",
+                    caller_id,
+                    project_id,
+                )
+            if not mnemosyne_facade.is_valid_artifact_id(aid):
+                return format_comm_error(
+                    "Message Error",
+                    f"invalid attachment id '{aid}'.",
+                    "Pass artifact_id only, e.g. artf_<sha12>_<ts>.",
+                    caller_id,
+                    project_id,
+                )
+            try:
+                ref = mnemosyne_facade.head_artifact(aid, caller_id, project_id)
+            except Exception as e:
+                return format_comm_error(
+                    "Message Error",
+                    f"attachment '{aid}' is not accessible: {e}",
+                    "Ensure artifact exists and caller has ACL access.",
+                    caller_id,
+                    project_id,
+                )
+            if str(getattr(ref, "scope", "")) != "agent":
+                return format_comm_error(
+                    "Message Error",
+                    f"attachment '{aid}' must be agent-scope artifact.",
+                    "Use upload_artifact tool (default agent scope) to create private attachment first.",
+                    caller_id,
+                    project_id,
+                )
+            attachment_ids.append(aid)
+        attachment_ids = list(dict.fromkeys(attachment_ids))
 
         weights = angelia_facade.get_priority_weights(project_id)
         trigger = angelia_facade.is_mail_event_wakeup_enabled(project_id)
@@ -53,11 +121,13 @@ def send_message(to_id: str, title: str, message: str, caller_id: str, project_i
             trigger_pulse=trigger,
             priority=int(weights.get("mail_event", 100)),
             event_type=EVENT_MESSAGE_SENT,
+            attachments=attachment_ids,
         )
         return (
             f"Revelation sent to {to_id}. "
             f"title={title}, "
             f"event_id={queued.get('event_id', '')}, "
+            f"attachments_count={len(attachment_ids)}, "
             f"wakeup_sent={str(bool(queued.get('wakeup_sent', False))).lower()}, "
             "initial_state=queued(interaction)"
         )
@@ -149,6 +219,8 @@ def list_agents(caller_id: str, project_id: str = "default") -> str:
         results = []
         for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
             agent_id = agent_dir.name
+            if not is_valid_agent_id(agent_id):
+                continue
             md_path = mnemosyne_dir(project_id) / "agent_profiles" / f"{agent_id}.md"
             role = "No role summary."
             if md_path.exists():

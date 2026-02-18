@@ -5,7 +5,7 @@ Expose selected communication tools via stable HTTP endpoints for external agent
 from __future__ import annotations
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.services import tool_gateway_service
 
@@ -23,6 +23,7 @@ class SendMessageRequest(BaseModel):
     to_id: str
     title: str = ""
     message: str
+    attachments: list[str] = Field(default_factory=list)
     project_id: str | None = None
 
 
@@ -63,4 +64,5 @@ async def gw_send_message(req: SendMessageRequest) -> dict:
         to_id=req.to_id,
         title=req.title,
         message=req.message,
+        attachments=req.attachments,
     )

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ from gods.mnemosyne.policy_registry import (
     ensure_memory_policy,
     load_memory_policy as _load_strict_policy,
 )
-from gods.mnemosyne.intent_schema_registry import observe_intent_payload
+from gods.mnemosyne.intent_schema_registry import observe_intent_payload, validate_intent_contract
 from gods.mnemosyne.template_registry import render_memory_template
 from gods.paths import mnemosyne_dir
 from gods.mnemosyne.compaction import ensure_compacted
@@ -95,6 +96,8 @@ def _render_template(intent: MemoryIntent, scope: str, template_key: str) -> str
     if not template_key:
         return str(intent.fallback_text or "")
     render_vars = dict(intent.payload or {})
+    if scope == "chronicle":
+        _apply_chronicle_redaction(intent, render_vars)
     render_vars.setdefault("project_id", intent.project_id)
     render_vars.setdefault("agent_id", intent.agent_id)
     render_vars.setdefault("intent_key", intent.intent_key)
@@ -107,6 +110,38 @@ def _render_template(intent: MemoryIntent, scope: str, template_key: str) -> str
         ) from e
 
 
+def _apply_chronicle_redaction(intent: MemoryIntent, render_vars: dict[str, Any]) -> None:
+    key = str(intent.intent_key or "")
+    if not key.startswith("tool.read."):
+        return
+    args = render_vars.get("args", {}) or {}
+    path = str(args.get("path", "") or "")
+    try:
+        start = int(args.get("start") or 1)
+    except Exception:
+        start = 1
+    try:
+        end = int(args.get("end") or 0)
+    except Exception:
+        end = 0
+    range_label = f"{start}-EOF" if end <= 0 else f"{start}-{end}"
+    result_text = str(render_vars.get("result", "") or "")
+    resolved = ""
+    m_resolved = re.search(r"resolved_path:\s*(.+)", result_text)
+    if m_resolved:
+        resolved = str(m_resolved.group(1) or "").strip()
+    total = ""
+    m_total = re.search(r"total_lines:\s*(\d+)", result_text)
+    if m_total:
+        total = str(m_total.group(1) or "")
+    summary_parts = [f"read path={path}", f"range={range_label}", "content=omitted"]
+    if resolved:
+        summary_parts.append(f"resolved_path={resolved}")
+    if total:
+        summary_parts.append(f"total_lines={total}")
+    render_vars["result_compact"] = " ".join(summary_parts)
+
+
 def _render_runtime_fallback(intent: MemoryIntent) -> str:
     summary = str(intent.fallback_text or f"[{intent.source_kind}] {intent.intent_key}").strip()
     payload = intent.payload or {}
@@ -114,11 +149,11 @@ def _render_runtime_fallback(intent: MemoryIntent) -> str:
         payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     except Exception:
         payload_json = "{}"
-    text = f"{summary}\n\npayload={payload_json}".strip()
-    return text[:12000]
+    return f"{summary}\n\npayload={payload_json}".strip()
 
 
 def record_intent(intent: MemoryIntent) -> dict[str, Any]:
+    validate_intent_contract(intent.intent_key, intent.source_kind, intent.payload or {})
     observe_intent_payload(intent.project_id, intent.intent_key, intent.payload or {})
     sink = _resolve_policy(intent)
     chronicle_text = ""

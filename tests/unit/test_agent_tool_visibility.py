@@ -31,7 +31,7 @@ def test_disabled_tools_are_hidden_and_blocked():
 
         assert "check_inbox" not in visible_tool_names
         assert "send_message" not in visible_tool_names
-        assert "list_dir" in visible_tool_names
+        assert "list" in visible_tool_names
 
         blocked = agent.execute_tool("check_inbox", {})
         assert "Divine Restriction" in blocked

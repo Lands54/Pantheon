@@ -24,7 +24,7 @@ class _ScriptedBrain:
         script = [
             AIMessage(
                 content="先确认工作目录",
-                tool_calls=[{"id": "tc_1", "name": "list_dir", "args": {"path": "."}}],
+                tool_calls=[{"id": "tc_1", "name": "list", "args": {"path": "."}}],
             ),
             AIMessage(
                 content="给对方回信确认",
@@ -72,7 +72,7 @@ def _read_observations(project_id: str, agent_id: str) -> list[dict]:
 
 
 def _capability_metrics(rows: list[dict]) -> dict:
-    tracked = {"list_dir", "send_message", "check_outbox"}
+    tracked = {"list", "send_message", "check_outbox"}
     filtered = [r for r in rows if str(r.get("tool", "")) in tracked]
     total = len(filtered)
     ok = sum(1 for r in filtered if str(r.get("status", "")) == "ok")
@@ -156,7 +156,7 @@ def test_agent_capability_benchmark_inbox_reply_and_tool_accuracy():
         obs = _read_observations(project_id, agent_id)
         metrics = _capability_metrics(obs)
         assert metrics["total_calls"] >= 3
-        assert metrics["by_tool"].get("list_dir", 0) >= 1
+        assert metrics["by_tool"].get("list", 0) >= 1
         assert metrics["by_tool"].get("send_message", 0) >= 1
         assert metrics["by_tool"].get("check_outbox", 0) >= 1
         assert metrics["accuracy"] >= 0.66

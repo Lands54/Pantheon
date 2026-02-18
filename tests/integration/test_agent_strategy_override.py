@@ -19,7 +19,7 @@ class _FakeBrain:
             return AIMessage(
                 content="freeform action",
                 tool_calls=[
-                    {"id": "ff1", "name": "list_dir", "args": {"path": "."}},
+                    {"id": "ff1", "name": "list", "args": {"path": "."}},
                 ],
             )
         self.calls += 1
@@ -65,7 +65,7 @@ def test_agent_level_phase_strategy_override_to_freeform():
         assert out["next_step"] == "finish"
 
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
-        assert "[[ACTION]] list_dir" in mem_text
+        assert "[[ACTION]] list" in mem_text
         runtime_text = (Path("projects") / project_id / "mnemosyne" / "runtime_events" / f"{agent_id}.jsonl").read_text(
             encoding="utf-8"
         )

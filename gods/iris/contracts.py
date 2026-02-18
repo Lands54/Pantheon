@@ -10,4 +10,5 @@ class IrisEnqueueMessageResult:
     title: str
     outbox_receipt_id: str
     outbox_status: str
+    attachments_count: int = 0
     wakeup_sent: bool

@@ -46,7 +46,7 @@ def intent_from_tool_result(
         st = "error"
     tn = str(tool_name or "unknown").strip()
     raw_result = str(result or "")
-    compact = _compact_tool_result(raw_result, max_len=900)
+    compact = _compact_tool_result(raw_result)
     return MemoryIntent(
         intent_key=f"tool.{tn}.{st}",
         project_id=project_id,
@@ -56,7 +56,7 @@ def intent_from_tool_result(
             "tool_name": tn,
             "status": st,
             "args": args or {},
-            "result": raw_result[:2000],
+            "result": raw_result,
             "result_compact": compact,
         },
         fallback_text=f"[[ACTION]] {tn} ({st}) -> {result}",
@@ -64,7 +64,7 @@ def intent_from_tool_result(
     )
 
 
-def _compact_tool_result(text: str, max_len: int = 900) -> str:
+def _compact_tool_result(text: str) -> str:
     s = str(text or "")
     # redact noisy ids in plain text forms: key=value
     s = re.sub(r"\b(event_id|message_id|receipt_id|outbox_receipt_id|job_id)\s*=\s*[A-Za-z0-9_-]{8,}", r"\1=<redacted>", s)
@@ -77,7 +77,7 @@ def _compact_tool_result(text: str, max_len: int = 900) -> str:
         s,
     )
     s = re.sub(r'"id"\s*:\s*"[^"]{8,}"', r'"id":"<redacted>"', s)
-    return s[: max(80, int(max_len))]
+    return s
 
 
 def intent_from_llm_response(project_id: str, agent_id: str, phase: str, content: str) -> MemoryIntent:
@@ -112,6 +112,7 @@ def intent_from_inbox_received(
     sender: str,
     message_id: str,
     content: str = "",
+    attachments: list[str] | None = None,
     payload: dict[str, Any] | None = None,
     msg_type: str = "",
     intent_key: str = "inbox.received.unread",
@@ -127,9 +128,14 @@ def intent_from_inbox_received(
             "message_id": message_id,
             "msg_type": str(msg_type or ""),
             "content": str(content or ""),
+            "attachments": [str(x).strip() for x in list(attachments or []) if str(x).strip()],
             "payload": payload or {},
         },
-        fallback_text=f"[INBOX_UNREAD] title={title} from={sender} id={message_id}\n{str(content or '')[:200]}",
+        fallback_text=(
+            f"[INBOX_UNREAD] title={title} from={sender} id={message_id} "
+            f"attachments={len([str(x).strip() for x in list(attachments or []) if str(x).strip()])}\n"
+            f"{str(content or '')[:200]}"
+        ),
         timestamp=time.time(),
     )
 
@@ -148,6 +154,32 @@ def intent_from_inbox_summary(project_id: str, agent_id: str, summary_data: dict
     )
 
 
+def intent_from_mailbox_section(project_id: str, agent_id: str, section: str, rows: list[str] | None = None) -> MemoryIntent:
+    sec = str(section or "").strip().lower().replace(" ", "_")
+    if sec not in {"summary", "recent_read", "recent_send", "inbox_unread"}:
+        sec = "inbox_unread"
+    lines = [str(x) for x in list(rows or []) if str(x).strip()]
+    if not lines:
+        lines = ["- (none)"]
+    title_map = {
+        "summary": "SUMMARY",
+        "recent_read": "RECENT READ",
+        "recent_send": "RECENT SEND",
+        "inbox_unread": "INBOX UNREAD",
+    }
+    title = title_map[sec]
+    text = "\n".join(lines)
+    return MemoryIntent(
+        intent_key=f"inbox.section.{sec}",
+        project_id=project_id,
+        agent_id=agent_id,
+        source_kind="inbox",
+        payload={"section": sec, "title": title, "rows": text},
+        fallback_text=f"[{title}]\n{text}",
+        timestamp=time.time(),
+    )
+
+
 def intent_from_outbox_status(
     project_id: str,
     agent_id: str,
@@ -156,6 +188,7 @@ def intent_from_outbox_status(
     message_id: str,
     status: str,
     error_message: str = "",
+    attachments_count: int = 0,
 ) -> MemoryIntent:
     st = str(status or "").strip().lower()
     if st not in {"pending", "delivered", "handled", "failed"}:
@@ -166,6 +199,7 @@ def intent_from_outbox_status(
         "message_id": message_id,
         "status": st,
         "error_message": str(error_message or ""),
+        "attachments_count": int(max(0, int(attachments_count or 0))),
     }
     return MemoryIntent(
         intent_key=f"outbox.sent.{st}",
@@ -173,7 +207,10 @@ def intent_from_outbox_status(
         agent_id=agent_id,
         source_kind="inbox",
         payload=payload,
-        fallback_text=f"[OUTBOX] title={title} to={to_agent_id} status={st} mid={message_id}",
+        fallback_text=(
+            f"[OUTBOX] title={title} to={to_agent_id} status={st} "
+            f"mid={message_id} attachments={int(max(0, int(attachments_count or 0)))}"
+        ),
         timestamp=time.time(),
     )
 

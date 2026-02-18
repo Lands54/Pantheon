@@ -62,7 +62,9 @@ def submit_message_event(
     dedupe_key: str = "",
     event_type: str = EVENT_MESSAGE_SENT,
     meta: dict[str, Any] | None = None,
+    attachments: list[str] | None = None,
 ) -> dict[str, Any]:
+    attachment_ids = [str(x).strip() for x in list(attachments or []) if str(x).strip()]
     payload = {
         "agent_id": str(to_id or "").strip(),
         "to_id": str(to_id or "").strip(),
@@ -72,6 +74,7 @@ def submit_message_event(
         "msg_type": str(msg_type or "private"),
         "trigger_pulse": bool(trigger_pulse),
         "mail_priority": int(priority),
+        "attachments": attachment_ids,
     }
     rec = events_bus.EventRecord.create(
         project_id=project_id,

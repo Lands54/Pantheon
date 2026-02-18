@@ -118,6 +118,7 @@ def enqueue_mail_event(
     sender: str = "",
     title: str = "",
     content: str = "",
+    attachments: list[str] | None = None,
     msg_type: str = "private",
     dedupe_key: str = "",
     max_attempts: int = 3,
@@ -160,6 +161,7 @@ def enqueue_mail_event(
             title=title,
             msg_type=msg_type,
             content=content,
+            attachments=[str(x).strip() for x in list(attachments or []) if str(x).strip()],
             dedupe_key=dedupe_key,
             attempt=0,
             max_attempts=max(1, int(max_attempts)),
@@ -182,6 +184,7 @@ def enqueue_mail_event(
                 "sender": event.sender,
                 "title": event.title,
                 "content": event.content,
+                "attachments": list(event.attachments or []),
                 "msg_type": event.msg_type,
                 "reason": str((event.payload or {}).get("reason", "mail_event")),
                 "source": str((event.payload or {}).get("source", "iris")),
@@ -245,13 +248,19 @@ def has_pending_mailbox_events(project_id: str, agent_id: str) -> bool:
     return False
 
 
-def deliver_mailbox_events(project_id: str, agent_id: str, budget: int) -> list[MailEvent]:
+def deliver_mailbox_events(
+    project_id: str,
+    agent_id: str,
+    budget: int,
+    preferred_event_ids: list[str] | None = None,
+) -> list[MailEvent]:
     budget = max(1, int(budget))
     now = time.time()
+    preferred = [str(x).strip() for x in (preferred_event_ids or []) if str(x).strip()]
+    preferred_set = set(preferred)
 
     def _mut(rows: list[dict]):
-        deliverable: list[dict] = []
-        overflow: list[dict] = []
+        candidates: list[dict] = []
         for row in rows:
             if str(row.get("agent_id", "")) != agent_id:
                 continue
@@ -262,10 +271,40 @@ def deliver_mailbox_events(project_id: str, agent_id: str, budget: int) -> list[
                 continue
             if float(row.get("available_at", 0.0) or 0.0) > now:
                 continue
-            if len(deliverable) < budget:
+            candidates.append(row)
+
+        deliverable: list[dict] = []
+        used_ids: set[str] = set()
+        if preferred:
+            by_id = {str(r.get("event_id", "")): r for r in candidates}
+            for eid in preferred:
+                row = by_id.get(eid)
+                if row is None:
+                    continue
                 deliverable.append(row)
-            else:
+                used_ids.add(eid)
+                if len(deliverable) >= budget:
+                    break
+
+        if len(deliverable) < budget and not preferred:
+            for row in sorted(candidates, key=lambda r: float(r.get("created_at", 0.0))):
+                eid = str(row.get("event_id", ""))
+                if eid in used_ids:
+                    continue
+                deliverable.append(row)
+                used_ids.add(eid)
+                if len(deliverable) >= budget:
+                    break
+
+        overflow: list[dict] = []
+        for row in candidates:
+            eid = str(row.get("event_id", ""))
+            if eid in used_ids:
+                continue
+            if preferred_set and eid in preferred_set:
                 overflow.append(row)
+                continue
+            overflow.append(row)
 
         for row in deliverable:
             _update_state_fields(row, MailEventState.DELIVERED, now)

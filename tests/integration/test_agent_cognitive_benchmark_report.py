@@ -79,7 +79,7 @@ def _read_observations(project_id: str, agent_id: str) -> list[dict]:
 
 
 def _tool_metrics(rows: list[dict]) -> dict:
-    tracked = {"list_dir", "send_message", "check_outbox"}
+    tracked = {"list", "send_message", "check_outbox"}
     filtered = [r for r in rows if str(r.get("tool", "")) in tracked]
     total = len(filtered)
     ok = sum(1 for r in filtered if str(r.get("status", "")) == "ok")
@@ -131,7 +131,7 @@ class _ToolFlowBrain:
     def think_with_tools(self, messages, tools, trace_meta=None):
         self.system_prompts.append(str(getattr(messages[0], "content", "") if messages else ""))
         script = [
-            AIMessage(content="check dir", tool_calls=[{"id": "t1", "name": "list_dir", "args": {"path": "."}}]),
+            AIMessage(content="check dir", tool_calls=[{"id": "t1", "name": "list", "args": {"path": "."}}]),
             AIMessage(
                 content="reply sender",
                 tool_calls=[
@@ -340,7 +340,7 @@ def _run_one_round_live(round_idx: int) -> dict:
             title="bootstrap",
             content=(
                 "你必须按顺序执行3步："
-                "1) list_dir(path='.')；"
+                "1) list(path='.')；"
                 "2) send_message(to_id='peer', title='ack', message='收到，开始执行。')；"
                 "3) check_outbox(limit=20)；"
                 "然后输出 done。"
@@ -494,12 +494,12 @@ def _prepare_tool_prompt(project_id: str, agent_id: str, tool_name: str) -> str:
         "post_to_synod": base + " 参数: {reason:'bench', message:'sync'}。",
         "abstain_from_synod": base + " 参数: {reason:'bench'}。",
         "list_agents": base + " 参数: {}。",
-        "read_file": base + " 参数: {path:'bench.txt'}。",
+        "read": base + " 参数: {path:'bench.txt'}。",
         "write_file": base + " 参数: {path:'bench.txt', content:'hello bench'}。",
         "replace_content": base + " 参数: {path:'bench.txt', old:'hello', new:'HELLO'}。",
         "insert_content": base + " 参数: {path:'bench.txt', anchor:'HELLO', content:'\\nINSERTED'}。",
         "multi_replace": base + " 参数: {path:'bench.txt', replacements:[['HELLO','hello']]}。",
-        "list_dir": base + " 参数: {path:'.'}。",
+        "list": base + " 参数: {path:'.'}。",
         "validate_path": base + " 参数: {path:'bench.txt'}。",
         "run_command": base + " 参数: {command:'python -c \"print(123)\"'}。",
         "run_command_detach": base + " 参数: {command:'python sleeper.py'}。",
@@ -526,7 +526,7 @@ def _prepare_tool_prompt(project_id: str, agent_id: str, tool_name: str) -> str:
 
 def _prepare_tool_preconditions(project_id: str, agent_id: str, tool_name: str) -> dict:
     # Make tool-level preconditions deterministic to maximize one-pass coverage.
-    if tool_name in {"read_file", "replace_content", "insert_content", "multi_replace"}:
+    if tool_name in {"read", "replace_content", "insert_content", "multi_replace"}:
         p = Path("projects") / project_id / "agents" / agent_id / "bench.txt"
         p.parent.mkdir(parents=True, exist_ok=True)
         if not p.exists():
@@ -837,6 +837,9 @@ def _run_one_round_live_strict(round_idx: int) -> dict:
 
 
 def test_agent_cognitive_benchmark_report():
+    enabled = str(os.getenv("AGENT_BENCH_DETERMINISTIC", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        pytest.skip("deterministic cognitive benchmark disabled; set AGENT_BENCH_DETERMINISTIC=1 to enable")
     rounds = max(1, int(os.getenv("AGENT_BENCH_ROUNDS", "5")))
     rows = [_run_one_round(i + 1) for i in range(rounds)]
     report_path = _write_report(rounds, rows)

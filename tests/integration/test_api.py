@@ -46,6 +46,27 @@ def test_get_config():
     assert "available_agents" in data
 
 
+def test_get_config_schema():
+    response = client.get("/config/schema")
+    assert response.status_code == 200
+    data = response.json()
+    assert "version" in data
+    assert "scopes" in data
+    assert "fields" in data
+    assert "groups" in data
+    assert "tool_options" in data
+    assert "deprecations" in data
+
+
+def test_get_config_audit():
+    response = client.get("/config/audit")
+    assert response.status_code == 200
+    data = response.json()
+    assert "deprecated" in data
+    assert "unreferenced" in data
+    assert "naming_conflicts" in data
+
+
 def test_list_projects():
     """Test GET /projects endpoint."""
     response = client.get("/projects")
@@ -128,6 +149,19 @@ def test_rebuild_knowledge_graph():
     finally:
         client.delete(f"/projects/{test_project_id}")
 
+
+
+
+def test_create_agent_rejects_invalid_agent_id():
+    response = client.post(
+        "/agents/create",
+        json={
+            "agent_id": "Hign Overseer",
+            "directives": "# Invalid"
+        }
+    )
+    assert response.status_code == 400
+    assert "invalid agent_id" in str(response.json().get("detail", ""))
 
 def test_create_agent():
     """Test POST /agents/create endpoint."""
@@ -244,6 +278,7 @@ def test_mnemosyne_templates_roundtrip():
         payload = res.json()
         assert "runtime_log" in payload
         assert "chronicle" in payload
+        assert "llm_context" in payload
 
         put = client.put(
             "/mnemosyne/templates/runtime_log/memory_custom_case",
@@ -275,6 +310,18 @@ def test_mnemosyne_templates_roundtrip():
         )
         assert up_pol.status_code == 200
         assert up_pol.json()["runtime_log_template_key"] == "memory_custom_case"
+
+        up_pol_ctx = client.put(
+            "/mnemosyne/memory-policy/llm.response",
+            json={
+                "project_id": test_project_id,
+                "to_llm_context": True,
+                "llm_context_template_key": "memory_tool_error",
+            },
+        )
+        assert up_pol_ctx.status_code == 200
+        assert up_pol_ctx.json()["to_llm_context"] is True
+        assert up_pol_ctx.json()["llm_context_template_key"] == "memory_tool_error"
 
         vars_res = client.get(
             "/mnemosyne/template-vars",

@@ -13,12 +13,12 @@ _TOOL_EXPORTS: dict[str, tuple[str, str]] = {
     "post_to_synod": ("gods.tools.comm_human", "post_to_synod"),
     "abstain_from_synod": ("gods.tools.comm_human", "abstain_from_synod"),
     "list_agents": ("gods.tools.comm_human", "list_agents"),
-    "read_file": ("gods.tools.filesystem", "read_file"),
+    "read": ("gods.tools.filesystem", "read"),
     "write_file": ("gods.tools.filesystem", "write_file"),
     "replace_content": ("gods.tools.filesystem", "replace_content"),
     "insert_content": ("gods.tools.filesystem", "insert_content"),
     "multi_replace": ("gods.tools.filesystem", "multi_replace"),
-    "list_dir": ("gods.tools.filesystem", "list_dir"),
+    "list": ("gods.tools.filesystem", "list"),
     "validate_path": ("gods.tools.filesystem", "validate_path"),
     "run_command": ("gods.tools.execution", "run_command"),
     "run_command_detach": ("gods.tools.detach", "run_command_detach"),
@@ -37,6 +37,7 @@ _TOOL_EXPORTS: dict[str, tuple[str, str]] = {
     "mnemo_write_agent": ("gods.tools.mnemosyne", "mnemo_write_agent"),
     "mnemo_list_agent": ("gods.tools.mnemosyne", "mnemo_list_agent"),
     "mnemo_read_agent": ("gods.tools.mnemosyne", "mnemo_read_agent"),
+    "upload_artifact": ("gods.tools.mnemosyne", "upload_artifact"),
 }
 
 # Default agent toolset order.
@@ -45,7 +46,7 @@ _DEFAULT_TOOL_ORDER: list[str] = [
     "check_outbox",
     "send_message",
     "finalize",
-    "read_file",
+    "read",
     "write_file",
     "replace_content",
     "insert_content",
@@ -57,7 +58,7 @@ _DEFAULT_TOOL_ORDER: list[str] = [
     "abstain_from_synod",
     "list_agents",
     "multi_replace",
-    "list_dir",
+    "list",
     "register_contract",
     "commit_contract",
     "list_contracts",
@@ -68,6 +69,7 @@ _DEFAULT_TOOL_ORDER: list[str] = [
     "mnemo_write_agent",
     "mnemo_list_agent",
     "mnemo_read_agent",
+    "upload_artifact",
 ]
 
 _CACHE: dict[str, object] = {}
@@ -106,6 +108,10 @@ class _LazyToolList:
 GODS_TOOLS = _LazyToolList()
 
 
+def available_tool_names() -> list[str]:
+    return list(_DEFAULT_TOOL_ORDER)
+
+
 def __getattr__(name: str):
     if name == "GODS_TOOLS":
         return GODS_TOOLS
@@ -116,6 +122,7 @@ def __getattr__(name: str):
 
 __all__ = [
     "GODS_TOOLS",
+    "available_tool_names",
     "check_inbox",
     "check_outbox",
     "send_message",
@@ -123,12 +130,12 @@ __all__ = [
     "post_to_synod",
     "abstain_from_synod",
     "list_agents",
-    "read_file",
+    "read",
     "write_file",
     "replace_content",
     "insert_content",
     "multi_replace",
-    "list_dir",
+    "list",
     "run_command",
     "run_command_detach",
     "detach_list",
@@ -147,4 +154,5 @@ __all__ = [
     "mnemo_write_agent",
     "mnemo_list_agent",
     "mnemo_read_agent",
+    "upload_artifact",
 ]

@@ -12,7 +12,7 @@ def test_structured_v1_uses_dynamic_recent_budget_not_fixed_8(tmp_path, monkeypa
         local_memory="local mem",
         inbox_hint="inbox",
         phase_name="act",
-        tools_desc="- [[list_dir(path)]]",
+        tools_desc="- [[list(path)]]",
         context_cfg={
             "budget_task_state": 1000,
             "budget_observations": 1000,

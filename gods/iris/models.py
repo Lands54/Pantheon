@@ -45,6 +45,7 @@ class MailEvent:
     title: str = ""
     msg_type: str = "private"
     content: str = ""
+    attachments: list[str] | None = None
     dedupe_key: str = ""
     attempt: int = 0
     max_attempts: int = 3
@@ -71,6 +72,7 @@ class MailEvent:
             "title": self.title,
             "msg_type": self.msg_type,
             "content": self.content,
+            "attachments": list(self.attachments or []),
             "dedupe_key": self.dedupe_key,
             "attempt": int(self.attempt),
             "max_attempts": int(self.max_attempts),
@@ -102,6 +104,7 @@ class MailEvent:
             title=str(row.get("title", "(untitled)") or "(untitled)"),
             msg_type=str(row.get("msg_type", "private")),
             content=str(row.get("content", "")),
+            attachments=[str(x).strip() for x in list(row.get("attachments", []) or []) if str(x).strip()],
             dedupe_key=str(row.get("dedupe_key", "")),
             attempt=int(row.get("attempt", 0)),
             max_attempts=int(row.get("max_attempts", 3)),

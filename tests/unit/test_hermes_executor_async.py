@@ -27,7 +27,7 @@ def test_hermes_executor_async_job_lifecycle():
                 "type": "agent_tool",
                 "project_id": project_id,
                 "agent_id": "alpha",
-                "tool_name": "list_dir",
+                "tool_name": "list",
             },
             request_schema={"type": "object"},
             response_schema={"type": "object", "required": ["result"], "properties": {"result": {"type": "string"}}},
@@ -58,4 +58,4 @@ def test_hermes_executor_async_job_lifecycle():
     finally:
         runtime_config.projects.pop(project_id, None)
         if base.exists():
-            shutil.rmtree(base)
+            shutil.rmtree(base, ignore_errors=True)

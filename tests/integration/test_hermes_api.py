@@ -38,7 +38,7 @@ def test_hermes_register_and_invoke_sync_async():
                 "type": "agent_tool",
                 "project_id": project_id,
                 "agent_id": "alpha",
-                "tool_name": "list_dir",
+                "tool_name": "list",
             },
             "request_schema": {"type": "object"},
             "response_schema": {
@@ -95,7 +95,7 @@ def test_hermes_register_and_invoke_sync_async():
         # Re-registering same name replaces executable definition.
         spec_v2 = dict(spec)
         spec_v2["provider"] = dict(spec["provider"])
-        spec_v2["provider"]["tool_name"] = "read_file"
+        spec_v2["provider"]["tool_name"] = "read"
         reg2 = client.post("/hermes/register", json={"project_id": project_id, "spec": spec_v2})
         assert reg2.status_code == 200
         listed = client.get("/hermes/list", params={"project_id": project_id})
@@ -103,7 +103,7 @@ def test_hermes_register_and_invoke_sync_async():
         rows = listed.json().get("protocols", [])
         alpha_rows = [r for r in rows if r.get("name") == "alpha.list"]
         assert len(alpha_rows) == 1
-        assert alpha_rows[0]["provider"]["tool_name"] == "read_file"
+        assert alpha_rows[0]["provider"]["tool_name"] == "read"
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")
@@ -124,7 +124,7 @@ def test_hermes_agent_tool_disabled_by_default():
                 "type": "agent_tool",
                 "project_id": project_id,
                 "agent_id": "alpha",
-                "tool_name": "list_dir",
+                "tool_name": "list",
             },
             "request_schema": {"type": "object"},
             "response_schema": {"type": "object"},

@@ -1,6 +1,7 @@
 """Iris service orchestration for unified mail-event delivery."""
 from __future__ import annotations
 
+from gods import events as events_bus
 from gods.iris.models import MailEventState
 from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
 from gods.iris.outbox_store import create_receipt, list_receipts, update_status_by_message_id
@@ -11,13 +12,38 @@ from gods.iris.store import (
     list_mailbox_events,
     mark_mailbox_events_handled,
 )
-from gods.mnemosyne import load_memory_policy, record_intent, render_intent_for_llm_context, MemoryIntent
+from gods.mnemosyne import load_memory_policy, record_intent, MemoryIntent
 from gods.mnemosyne.facade import (
+    intent_from_mailbox_section,
     intent_from_inbox_read,
     intent_from_inbox_received,
     intent_from_inbox_summary,
     intent_from_outbox_status,
+    record_inbox_digest,
 )
+
+EVENT_AGENT_TRIGGER = "interaction.agent.trigger"
+
+
+def _request_agent_trigger(
+    *,
+    project_id: str,
+    agent_id: str,
+    priority: int,
+    reason: str,
+    dedupe_key: str,
+):
+    rec = events_bus.EventRecord.create(
+        project_id=project_id,
+        domain="interaction",
+        event_type=EVENT_AGENT_TRIGGER,
+        priority=int(priority),
+        payload={"agent_id": str(agent_id or "").strip(), "reason": str(reason or "mail_event")},
+        dedupe_key=str(dedupe_key or ""),
+        max_attempts=3,
+        meta={"source": "iris"},
+    )
+    events_bus.append_event(rec, dedupe_window_sec=1)
 
 
 def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
@@ -47,6 +73,7 @@ def enqueue_message(
     msg_type: str,
     trigger_pulse: bool,
     pulse_priority: int,
+    attachments: list[str] | None = None,
 ) -> dict:
     if not str(title or "").strip():
         raise ValueError("title is required")
@@ -59,6 +86,7 @@ def enqueue_message(
         sender=sender,
         title=title,
         content=content,
+        attachments=attachments,
         msg_type=msg_type,
     )
     receipt = create_receipt(
@@ -78,6 +106,7 @@ def enqueue_message(
             message_id=event.event_id,
             msg_type=msg_type,
             content=content,
+            attachments=list(event.attachments or []),
             payload=event.payload,
             intent_key=_resolve_inbox_received_intent_key(project_id, msg_type),
         )
@@ -90,15 +119,19 @@ def enqueue_message(
             title=title,
             message_id=event.event_id,
             status=receipt.status.value,
+            attachments_count=len(list(event.attachments or [])),
         )
     )
     woke = False
     if trigger_pulse:
         try:
-            # Cross-domain via facade only: wake target worker for newly queued mail event.
-            from gods.angelia import facade as angelia_facade
-
-            angelia_facade.wake_agent(project_id=project_id, agent_id=agent_id)
+            _request_agent_trigger(
+                project_id=project_id,
+                agent_id=agent_id,
+                priority=int(pulse_priority),
+                reason="mail_event",
+                dedupe_key=f"iris_mail_trigger:{agent_id}:{event.event_id}",
+            )
             woke = True
         except Exception as e:
             failed_rows = update_status_by_message_id(
@@ -125,18 +158,25 @@ def enqueue_message(
         "title": title,
         "outbox_receipt_id": receipt.receipt_id,
         "outbox_status": receipt.status.value,
+        "attachments_count": len(list(event.attachments or [])),
         "wakeup_sent": bool(woke),
     }
 
 
-def fetch_mailbox_intents(project_id: str, agent_id: str, budget: int) -> list[MemoryIntent]:
+def fetch_mailbox_intents(
+    project_id: str,
+    agent_id: str,
+    budget: int,
+    preferred_event_ids: list[str] | None = None,
+) -> list[MemoryIntent]:
     """
     Fetches mailbox events (inbox + outbox status) and summaries as structured MemoryIntent objects.
     """
     intents: list[MemoryIntent] = []
     
     # 1. Fetch and Deliver New Events
-    events = deliver_mailbox_events(project_id, agent_id, budget)
+    preferred = [str(x).strip() for x in (preferred_event_ids or []) if str(x).strip()]
+    events = deliver_mailbox_events(project_id, agent_id, budget, preferred_event_ids=preferred or None)
     delivered_ids = []
     
     for item in events:
@@ -157,6 +197,7 @@ def fetch_mailbox_intents(project_id: str, agent_id: str, budget: int) -> list[M
                     title=rec.title,
                     message_id=rec.message_id,
                     status=rec.status.value,
+                    attachments_count=0,
                 )
             )
 
@@ -169,6 +210,7 @@ def fetch_mailbox_intents(project_id: str, agent_id: str, budget: int) -> list[M
                 sender=item.sender,
                 message_id=item.event_id,
                 content=item.content,
+                attachments=list(item.attachments or []),
                 payload=item.payload,
                 msg_type=item.msg_type,
                 intent_key=_resolve_inbox_received_intent_key(project_id, item.msg_type),
@@ -202,6 +244,34 @@ def fetch_mailbox_intents(project_id: str, agent_id: str, budget: int) -> list[M
         "delivered_ids": delivered_ids
     }
     intents.insert(0, intent_from_inbox_summary(project_id, agent_id, summary_data))
+
+    summary_rows = [
+        (
+            f"- unread_count={unread_count} read_recent_count={len(read_recent)} "
+            f"sent_pending={status_count['pending']} sent_delivered={status_count['delivered']} "
+            f"sent_handled={status_count['handled']} sent_failed={status_count['failed']}"
+        )
+    ]
+    read_rows = [
+        f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}"
+        for x in read_recent[-10:]
+    ]
+    send_rows = [
+        f"- [title={r.title}][to={r.to_agent_id}][status={r.status.value}] mid={r.message_id} updated={r.updated_at:.3f}"
+        for r in receipts[:20]
+    ]
+    inbox_unread_rows = [
+        f"- [title={x.title}][from={x.sender}] id={x.event_id} msg_type={x.msg_type} "
+        f"attachments={len(list(x.attachments or []))}"
+        for x in events
+    ]
+    section_intents = [
+        intent_from_mailbox_section(project_id, agent_id, "summary", summary_rows),
+        intent_from_mailbox_section(project_id, agent_id, "recent_read", read_rows),
+        intent_from_mailbox_section(project_id, agent_id, "recent_send", send_rows),
+        intent_from_mailbox_section(project_id, agent_id, "inbox_unread", inbox_unread_rows),
+    ]
+    intents = section_intents + intents
     
     return intents
 
@@ -225,30 +295,20 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
                     title=rec.title,
                     message_id=rec.message_id,
                     status=rec.status.value,
+                    attachments_count=0,
                 )
             )
 
     lines = []
     for item in events:
-        intent = intent_from_inbox_received(
-            project_id=project_id,
-            agent_id=agent_id,
-            title=item.title,
-            sender=item.sender,
-            message_id=item.event_id,
-            content=item.content,
-            payload=item.payload,
-            msg_type=item.msg_type,
-            intent_key=_resolve_inbox_received_intent_key(project_id, item.msg_type),
+        aid_list = list(item.attachments or [])
+        suffix = ""
+        if aid_list:
+            suffix = f" [attachments={len(aid_list)} ids={','.join(aid_list[:5])}]"
+        lines.append(
+            f"- [title={item.title}][from={item.sender}][status={item.state.value}] at={item.created_at:.3f} "
+            f"id={item.event_id}{suffix}: {item.content}"
         )
-        rendered = render_intent_for_llm_context(intent)
-        if rendered:
-            lines.append(str(rendered))
-        else:
-            # Fallback if policy says 'to_llm_context=false' or render failed
-            lines.append(
-                f"- [title={item.title}][from={item.sender}][status={item.state.value}] at={item.created_at:.3f} id={item.event_id}: {item.content}"
-            )
     ids = [item.event_id for item in events]
     read_recent = list_mailbox_events(
         project_id=project_id,
@@ -303,8 +363,6 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
         + "- Avoid repeated confirmation polling; proceed with execution."
     )
     try:
-        from gods.janus import record_inbox_digest
-
         record_inbox_digest(
             project_id=project_id,
             agent_id=agent_id,
@@ -355,24 +413,10 @@ def build_inbox_overview(project_id: str, agent_id: str, budget: int = 20) -> st
 
     unread_lines = []
     for x in unread:
-        intent = intent_from_inbox_received(
-            project_id=project_id,
-            agent_id=agent_id,
-            title=x.title,
-            sender=x.sender,
-            message_id=x.event_id,
-            content=x.content,
-            payload=x.payload,
-            msg_type=x.msg_type,
-            intent_key=_resolve_inbox_received_intent_key(project_id, x.msg_type),
+        unread_lines.append(
+            f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f} "
+            f"[attachments={len(list(x.attachments or []))}]: {x.content}"
         )
-        rendered = render_intent_for_llm_context(intent)
-        if rendered:
-            unread_lines.append(str(rendered))
-        else:
-            unread_lines.append(
-                f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}: {x.content}"
-            )
 
     text += ("\n".join(unread_lines) if unread_lines else "- (none)")
     text += "\n\n[INBOX READ RECENT]\n"
@@ -418,6 +462,7 @@ def ack_handled(project_id: str, event_ids: list[str], agent_id: str = ""):
                     title=rec.title,
                     message_id=rec.message_id,
                     status=rec.status.value,
+                    attachments_count=0,
                 )
             )
     if not agent_id:

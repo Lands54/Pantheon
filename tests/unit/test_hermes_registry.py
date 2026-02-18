@@ -19,7 +19,7 @@ def test_hermes_registry_register_and_get():
                 "type": "agent_tool",
                 "project_id": project_id,
                 "agent_id": "grass",
-                "tool_name": "list_dir",
+                "tool_name": "list",
             },
             request_schema={"type": "object"},
             response_schema={"type": "object", "required": ["result"], "properties": {"result": {"type": "string"}}},

@@ -19,7 +19,7 @@ class _FakeBrain:
             return AIMessage(
                 content="first action",
                 tool_calls=[
-                    {"id": "t1", "name": "list_dir", "args": {"path": "."}},
+                    {"id": "t1", "name": "list", "args": {"path": "."}},
                 ],
             )
         self.calls += 1
@@ -57,7 +57,7 @@ def test_langgraph_react_graph_finish_continue_paths():
         out = agent.process(state)
         assert out["next_step"] == "finish"
         mem_text = (Path("projects") / project_id / "mnemosyne" / "chronicles" / f"{agent_id}.md").read_text(encoding="utf-8")
-        assert "[[ACTION]] list_dir" in mem_text
+        assert "[[ACTION]] list" in mem_text
     finally:
         if old_project is None:
             runtime_config.projects.pop(project_id, None)

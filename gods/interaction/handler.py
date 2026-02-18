@@ -10,6 +10,7 @@ from gods.interaction.contracts import (
 )
 from gods.interaction.errors import InteractionError
 from gods.iris import facade as iris_facade
+from gods.mnemosyne import facade as mnemosyne_facade
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -29,6 +30,18 @@ class _MessageHandler(events_bus.EventHandler):
         msg_type = str(payload.get("msg_type", "private")).strip() or "private"
         trigger_pulse = bool(payload.get("trigger_pulse", True))
         priority = int(payload.get("mail_priority", payload.get("priority", record.priority)))
+        attachments = [str(x).strip() for x in list(payload.get("attachments", []) or []) if str(x).strip()]
+        for aid in attachments:
+            try:
+                ref = mnemosyne_facade.head_artifact(aid, sender_id, record.project_id)
+            except Exception as e:
+                raise InteractionError("INTERACTION_BAD_REQUEST", f"attachment not accessible: {aid}: {e}") from e
+            if str(ref.scope) != "agent":
+                raise InteractionError("INTERACTION_BAD_REQUEST", f"attachment must be agent-scope: {aid}")
+            try:
+                mnemosyne_facade.grant_artifact_access(aid, record.project_id, sender_id, to_id)
+            except Exception as e:
+                raise InteractionError("INTERACTION_BAD_REQUEST", f"attachment grant failed: {aid}: {e}") from e
         out = iris_facade.enqueue_message(
             project_id=record.project_id,
             agent_id=to_id,
@@ -38,6 +51,7 @@ class _MessageHandler(events_bus.EventHandler):
             msg_type=msg_type,
             trigger_pulse=trigger_pulse,
             pulse_priority=priority,
+            attachments=attachments,
         )
         return {"ok": True, "mail_event_id": out.get("mail_event_id", ""), "to_id": to_id}
 
@@ -62,4 +76,3 @@ def register_handlers():
     events_bus.register_handler(EVENT_HERMES_NOTICE, _MESSAGE_HANDLER)
     events_bus.register_handler(EVENT_DETACH_NOTICE, _MESSAGE_HANDLER)
     events_bus.register_handler(EVENT_MESSAGE_READ, _READ_HANDLER)
-

@@ -15,6 +15,7 @@ from api.services import simulation_service
 from gods.config import runtime_config
 from gods.events.migrate import assert_no_legacy_files_all_projects
 from gods.interaction import register_handlers as register_interaction_handlers
+from gods.agents.brain import prewarm_llm_runtime
 from gods.mnemosyne import ensure_memory_policy, validate_memory_policy
 from gods.runtime.detach import startup_mark_lost_all_projects
 
@@ -38,6 +39,11 @@ async def startup_event():
     # Safety-first startup: pause worlds first, then start scheduler loop.
     changed = simulation_service.pause_all_projects_on_startup()
     register_interaction_handlers()
+    ok, detail = prewarm_llm_runtime()
+    if ok:
+        logger.info(f"LLM runtime prewarm: {detail}")
+    else:
+        logger.warning(f"LLM runtime prewarm failed (will lazy-retry on demand): {detail}")
     legacy_guard = assert_no_legacy_files_all_projects()
     lost = startup_mark_lost_all_projects()
     for pid in runtime_config.projects.keys():

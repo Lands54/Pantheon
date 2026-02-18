@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
 
+from gods.mnemosyne.intent_registry import is_registered_intent_key
 from gods.paths import mnemosyne_dir
 
 BASE_VARS = ["project_id", "agent_id", "intent_key"]
@@ -13,11 +15,15 @@ BASE_VARS = ["project_id", "agent_id", "intent_key"]
 _EXPLICIT: dict[str, dict[str, Any]] = {
     "llm.response": {"guaranteed": ["phase", "content"], "optional": []},
     "inbox.read_ack": {"guaranteed": ["event_ids", "count"], "optional": []},
-    "inbox.received.unread": {"guaranteed": ["title", "sender", "message_id", "msg_type"], "optional": []},
-    "outbox.sent.pending": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": []},
-    "outbox.sent.delivered": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": []},
-    "outbox.sent.handled": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": []},
-    "outbox.sent.failed": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": []},
+    "inbox.received.unread": {"guaranteed": ["title", "sender", "message_id", "msg_type"], "optional": ["attachments"]},
+    "inbox.section.summary": {"guaranteed": ["section", "title", "rows"], "optional": []},
+    "inbox.section.recent_read": {"guaranteed": ["section", "title", "rows"], "optional": []},
+    "inbox.section.recent_send": {"guaranteed": ["section", "title", "rows"], "optional": []},
+    "inbox.section.inbox_unread": {"guaranteed": ["section", "title", "rows"], "optional": []},
+    "outbox.sent.pending": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
+    "outbox.sent.delivered": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
+    "outbox.sent.handled": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
+    "outbox.sent.failed": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
     "agent.mode.freeform": {"guaranteed": [], "optional": []},
     "agent.safety.tool_loop_cap": {"guaranteed": ["max_rounds"], "optional": []},
     "agent.event.injected": {"guaranteed": ["count"], "optional": []},
@@ -29,6 +35,11 @@ _EXPLICIT: dict[str, dict[str, Any]] = {
 
 def _mn_root(project_id: str) -> Path:
     p = mnemosyne_dir(project_id)
+    if p.exists() and not p.is_dir():
+        try:
+            p.unlink()
+        except Exception:
+            pass
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -98,7 +109,7 @@ def observe_intent_payload(project_id: str, intent_key: str, payload: dict[str, 
         types = {str(x) for x in list(cur.get("types") or []) if str(x).strip()}
         types.add(_type_name(v))
         cur["types"] = sorted(types)
-        cur["last_seen_value"] = str(v)[:120]
+        cur["last_seen_value"] = str(v)
         fields[fk] = cur
     row["fields"] = fields
     raw[key] = row
@@ -115,6 +126,243 @@ def schema_for_intent(intent_key: str) -> dict[str, list[str]]:
     if k.startswith("event."):
         return {"guaranteed": ["stage", "event_id", "event_type", "priority", "attempt", "max_attempts", "payload"], "optional": []}
     return {"guaranteed": [], "optional": []}
+
+
+_TOOL_INTENT_RE = re.compile(r"^tool\.([a-z][a-z0-9_]{0,63})\.(ok|blocked|error)$")
+_EVENT_INTENT_RE = re.compile(r"^event\.([a-z][a-z0-9_.-]{0,127})$")
+_INBOX_SECTION_RE = re.compile(r"^inbox\.section\.(summary|recent_read|recent_send|inbox_unread)$")
+_INBOX_NOTICE_RE = re.compile(r"^inbox\.notice\.[a-z][a-z0-9_.-]{0,127}$")
+_OUTBOX_SENT_RE = re.compile(r"^outbox\.sent\.(pending|delivered|handled|failed)$")
+_PHASE_RETRY_RE = re.compile(r"^phase\.retry\.(reason|act|observe)$")
+
+
+def _expect_field_type(payload: dict[str, Any], key: str, expected: type, *, where: str) -> Any:
+    if key not in payload:
+        raise ValueError(f"invalid intent '{where}': missing payload.{key}")
+    value = payload.get(key)
+    if not isinstance(value, expected):
+        raise ValueError(
+            f"invalid intent '{where}': payload.{key} expected {expected.__name__}"
+        )
+    return value
+
+
+def validate_intent_contract(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
+    """
+    Phase-1 strict contract:
+    - llm.response
+    - tool.<tool_name>.<ok|blocked|error>
+    Other intents remain permissive for incremental migration.
+    """
+    key = str(intent_key or "").strip()
+    if not key:
+        raise ValueError("invalid intent: intent_key is required")
+    if not is_registered_intent_key(key):
+        raise ValueError(
+            f"invalid intent '{key}': unregistered intent_key under zero-compat strict mode"
+        )
+    data = payload or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"invalid intent '{key}': payload must be object")
+
+    if key == "llm.response":
+        if str(source_kind or "").strip() != "llm":
+            raise ValueError("invalid intent 'llm.response': source_kind must be 'llm'")
+        allowed = {"phase", "content"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent 'llm.response': unsupported payload keys: {', '.join(unknown)}"
+            )
+        _expect_field_type(data, "phase", str, where=key)
+        _expect_field_type(data, "content", str, where=key)
+        return
+
+    if key.startswith("tool."):
+        m = _TOOL_INTENT_RE.match(key)
+        if not m:
+            raise ValueError(
+                f"invalid intent '{key}': expected format tool.<tool_name>.<ok|blocked|error>"
+            )
+        if str(source_kind or "").strip() != "tool":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'tool'")
+        tool_from_key = str(m.group(1))
+        status_from_key = str(m.group(2))
+        allowed = {"tool_name", "status", "args", "result", "result_compact"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent '{key}': unsupported payload keys: {', '.join(unknown)}"
+            )
+        tool_name = _expect_field_type(data, "tool_name", str, where=key)
+        status = _expect_field_type(data, "status", str, where=key)
+        _expect_field_type(data, "args", dict, where=key)
+        _expect_field_type(data, "result", str, where=key)
+        _expect_field_type(data, "result_compact", str, where=key)
+        if str(tool_name).strip() != tool_from_key:
+            raise ValueError(
+                f"invalid intent '{key}': payload.tool_name must equal '{tool_from_key}'"
+            )
+        if str(status).strip().lower() != status_from_key:
+            raise ValueError(
+                f"invalid intent '{key}': payload.status must equal '{status_from_key}'"
+            )
+        return
+
+    if key.startswith("event."):
+        m = _EVENT_INTENT_RE.match(key)
+        if not m:
+            raise ValueError(f"invalid intent '{key}': malformed event intent key")
+        if str(source_kind or "").strip() != "event":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'event'")
+        # Event payload supports extensions (e.g. next_step/error) while enforcing core fields.
+        _expect_field_type(data, "stage", str, where=key)
+        _expect_field_type(data, "event_id", str, where=key)
+        event_type = _expect_field_type(data, "event_type", str, where=key)
+        _expect_field_type(data, "priority", int, where=key)
+        _expect_field_type(data, "attempt", int, where=key)
+        _expect_field_type(data, "max_attempts", int, where=key)
+        _expect_field_type(data, "payload", dict, where=key)
+        if str(event_type).strip() != str(m.group(1)):
+            raise ValueError(
+                f"invalid intent '{key}': payload.event_type must equal '{m.group(1)}'"
+            )
+        return
+
+    if key == "inbox.read_ack":
+        if str(source_kind or "").strip() != "inbox":
+            raise ValueError("invalid intent 'inbox.read_ack': source_kind must be 'inbox'")
+        allowed = {"event_ids", "count"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent 'inbox.read_ack': unsupported payload keys: {', '.join(unknown)}"
+            )
+        event_ids = _expect_field_type(data, "event_ids", list, where=key)
+        if not all(isinstance(x, str) for x in event_ids):
+            raise ValueError("invalid intent 'inbox.read_ack': payload.event_ids must be string array")
+        _expect_field_type(data, "count", int, where=key)
+        return
+
+    if key == "inbox.received.unread" or _INBOX_NOTICE_RE.match(key):
+        if str(source_kind or "").strip() != "inbox":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'inbox'")
+        allowed = {"title", "sender", "message_id", "msg_type", "content", "payload", "attachments"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent '{key}': unsupported payload keys: {', '.join(unknown)}"
+            )
+        _expect_field_type(data, "title", str, where=key)
+        _expect_field_type(data, "sender", str, where=key)
+        _expect_field_type(data, "message_id", str, where=key)
+        _expect_field_type(data, "msg_type", str, where=key)
+        _expect_field_type(data, "content", str, where=key)
+        _expect_field_type(data, "payload", dict, where=key)
+        if "attachments" in data:
+            rows = _expect_field_type(data, "attachments", list, where=key)
+            if not all(isinstance(x, str) for x in rows):
+                raise ValueError(f"invalid intent '{key}': payload.attachments must be string array")
+        return
+
+    if _INBOX_SECTION_RE.match(key):
+        if str(source_kind or "").strip() != "inbox":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'inbox'")
+        allowed = {"section", "title", "rows"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent '{key}': unsupported payload keys: {', '.join(unknown)}"
+            )
+        section = _expect_field_type(data, "section", str, where=key)
+        _expect_field_type(data, "title", str, where=key)
+        _expect_field_type(data, "rows", str, where=key)
+        expect_section = key.split(".")[-1]
+        if str(section).strip() != expect_section:
+            raise ValueError(
+                f"invalid intent '{key}': payload.section must equal '{expect_section}'"
+            )
+        return
+
+    if key.startswith("outbox.sent."):
+        m = _OUTBOX_SENT_RE.match(key)
+        if not m:
+            raise ValueError(f"invalid intent '{key}': malformed outbox status key")
+        if str(source_kind or "").strip() != "inbox":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'inbox'")
+        allowed = {"title", "to_agent_id", "message_id", "status", "error_message", "attachments_count"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent '{key}': unsupported payload keys: {', '.join(unknown)}"
+            )
+        _expect_field_type(data, "title", str, where=key)
+        _expect_field_type(data, "to_agent_id", str, where=key)
+        _expect_field_type(data, "message_id", str, where=key)
+        status = _expect_field_type(data, "status", str, where=key)
+        _expect_field_type(data, "error_message", str, where=key)
+        if "attachments_count" in data:
+            _expect_field_type(data, "attachments_count", int, where=key)
+        if str(status).strip().lower() != str(m.group(1)):
+            raise ValueError(
+                f"invalid intent '{key}': payload.status must equal '{m.group(1)}'"
+            )
+        return
+
+    if key.startswith("agent."):
+        if str(source_kind or "").strip() != "agent":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'agent'")
+        if key == "agent.mode.freeform":
+            allowed = {"project_id", "agent_id"}
+            unknown = sorted(set(data.keys()) - allowed)
+            if unknown:
+                raise ValueError(
+                    "invalid intent 'agent.mode.freeform': unsupported payload keys: "
+                    + ", ".join(unknown)
+                )
+            return
+        if key == "agent.safety.tool_loop_cap":
+            allowed = {"max_rounds"}
+            unknown = sorted(set(data.keys()) - allowed)
+            if unknown:
+                raise ValueError(
+                    "invalid intent 'agent.safety.tool_loop_cap': unsupported payload keys: "
+                    + ", ".join(unknown)
+                )
+            _expect_field_type(data, "max_rounds", int, where=key)
+            return
+        if key == "agent.event.injected":
+            allowed = {"count"}
+            unknown = sorted(set(data.keys()) - allowed)
+            if unknown:
+                raise ValueError(
+                    "invalid intent 'agent.event.injected': unsupported payload keys: "
+                    + ", ".join(unknown)
+                )
+            _expect_field_type(data, "count", int, where=key)
+            return
+        # Keep non-core agent intents permissive for incremental migration.
+        return
+
+    if key.startswith("phase.retry."):
+        m = _PHASE_RETRY_RE.match(key)
+        if not m:
+            raise ValueError(f"invalid intent '{key}': malformed phase retry key")
+        if str(source_kind or "").strip() != "phase":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'phase'")
+        allowed = {"phase", "message"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent '{key}': unsupported payload keys: {', '.join(unknown)}"
+            )
+        phase = _expect_field_type(data, "phase", str, where=key)
+        _expect_field_type(data, "message", str, where=key)
+        if str(phase).strip().lower() != str(m.group(1)):
+            raise ValueError(
+                f"invalid intent '{key}': payload.phase must equal '{m.group(1)}'"
+            )
+        return
 
 
 def template_vars_for_intent(project_id: str, intent_key: str) -> dict[str, Any]:

@@ -6,8 +6,8 @@ from pathlib import Path
 import json
 import shutil
 from gods.tools.filesystem import validate_path
-from gods.tools.filesystem import list_dir
-from gods.tools.filesystem import read_file, write_file
+from gods.tools.filesystem import list
+from gods.tools.filesystem import read, write_file
 from gods.tools.hermes import register_contract, list_contracts
 from gods.config import runtime_config, ProjectConfig
 
@@ -57,9 +57,9 @@ def test_gods_tools_list():
     assert "finalize" in tool_names
     
     # Filesystem tools
-    assert "read_file" in tool_names
+    assert "read" in tool_names
     assert "write_file" in tool_names
-    assert "list_dir" in tool_names
+    assert "list" in tool_names
     
     # Execution tools
     assert "run_command" in tool_names
@@ -69,13 +69,13 @@ def test_gods_tools_list():
 
 
 def test_list_dir_returns_empty_marker_for_empty_directory():
-    """list_dir should not return blank when directory has no visible files."""
+    """list should not return blank when directory has no visible files."""
     project_id = "unit_list_dir_empty"
     caller_id = "tester"
     empty_dir = Path("projects") / project_id / "agents" / caller_id / "empty"
     empty_dir.mkdir(parents=True, exist_ok=True)
 
-    out = list_dir.invoke({"path": "empty", "caller_id": caller_id, "project_id": project_id})
+    out = list.invoke({"path": "empty", "caller_id": caller_id, "project_id": project_id})
     assert "[Current CWD:" in out
     assert "[EMPTY] No visible files or directories." in out
 
@@ -92,7 +92,7 @@ def test_memory_files_are_hidden_and_protected():
     (agent_dir / "normal.txt").write_text("ok", encoding="utf-8")
     (agent_dir / "debug").mkdir(parents=True, exist_ok=True)
 
-    listed = list_dir.invoke({"path": ".", "caller_id": caller_id, "project_id": project_id})
+    listed = list.invoke({"path": ".", "caller_id": caller_id, "project_id": project_id})
     assert "memory.md" not in listed
     assert "memory_archive.md" not in listed
     assert "agent.md" not in listed
@@ -100,11 +100,11 @@ def test_memory_files_are_hidden_and_protected():
     assert "debug" not in listed
     assert "normal.txt" in listed
 
-    read_res = read_file.invoke({"path": "memory.md", "caller_id": caller_id, "project_id": project_id})
+    read_res = read.invoke({"path": "memory.md", "caller_id": caller_id, "project_id": project_id})
     assert "Divine Restriction" in read_res
     assert "[Current CWD:" in read_res
     assert "Suggested next step:" in read_res
-    read_agent_res = read_file.invoke({"path": "agent.md", "caller_id": caller_id, "project_id": project_id})
+    read_agent_res = read.invoke({"path": "agent.md", "caller_id": caller_id, "project_id": project_id})
     assert "Divine Restriction" in read_agent_res
 
     write_res = write_file.invoke({"path": "memory.md", "content": "x", "caller_id": caller_id, "project_id": project_id})
@@ -121,11 +121,39 @@ def test_read_file_missing_has_actionable_hint():
     (src_dir / "models.py").write_text("x=1\n", encoding="utf-8")
 
     bad_path = f"projects/{project_id}/agents/{caller_id}/models.py"
-    out = read_file.invoke({"path": bad_path, "caller_id": caller_id, "project_id": project_id})
+    out = read.invoke({"path": bad_path, "caller_id": caller_id, "project_id": project_id})
     assert "[Current CWD:" in out
     assert "not found" in out
     assert "Suggested next step:" in out
     assert "try 'models.py'" in out or "found similarly named files" in out
+
+
+def test_read_file_supports_range_and_shows_path_metadata():
+    project_id = "unit_read_file_range"
+    caller_id = "tester"
+    agent_home = Path("projects") / project_id / "agents" / caller_id
+    src = agent_home / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "demo.txt").write_text("line1\nline2\nline3\nline4\n", encoding="utf-8")
+
+    out = read.invoke(
+        {
+            "path": "src/demo.txt",
+            "caller_id": caller_id,
+            "project_id": project_id,
+            "start": 2,
+            "end": 3,
+        }
+    )
+    assert "[Current CWD:" in out
+    assert "[READ]" in out
+    assert "path: src/demo.txt" in out
+    assert "resolved_path:" in out
+    assert "line_range: 2-3" in out
+    assert "line2" in out
+    assert "line3" in out
+    assert "line1" not in out
+    assert "line4" not in out
 
 
 def test_list_contracts_shows_title_and_description():

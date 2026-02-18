@@ -27,7 +27,7 @@ class _FakeBrain:
                 tool_calls=[
                     {
                         "id": "tc_mem_1",
-                        "name": "list_dir",
+                        "name": "list",
                         "args": {"path": "."},
                     }
                 ],
@@ -64,7 +64,7 @@ def test_memory_is_delivered_to_next_pulse():
         fake_brain = _FakeBrain()
         agent.brain = fake_brain
 
-        # Pulse 1: execute one list_dir action and persist memory.
+        # Pulse 1: execute one list action and persist memory.
         state1 = {
             "project_id": project_id,
             "messages": [HumanMessage(content="start", name="tester")],

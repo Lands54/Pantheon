@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
 from gods.interaction import facade as interaction_facade
+from gods.mnemosyne import facade as mnemosyne_facade
 from gods.tools import facade as tools_facade
 
 
@@ -69,6 +70,7 @@ class ToolGatewayService:
         to_id: str,
         title: str,
         message: str,
+        attachments: list[str] | None = None,
     ) -> dict[str, Any]:
         pid = resolve_project(project_id)
         from_dir = Path("projects") / pid / "agents" / from_id
@@ -79,6 +81,16 @@ class ToolGatewayService:
             raise HTTPException(status_code=404, detail=f"Target agent '{to_id}' not found in '{pid}'")
         if not str(title or "").strip():
             raise HTTPException(status_code=400, detail="title is required")
+        attachment_ids = [str(x).strip() for x in list(attachments or []) if str(x).strip()]
+        for aid in attachment_ids:
+            if not mnemosyne_facade.is_valid_artifact_id(aid):
+                raise HTTPException(status_code=400, detail=f"invalid attachment id: {aid}")
+            try:
+                ref = mnemosyne_facade.head_artifact(aid, from_id, pid)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"attachment not accessible: {aid}: {e}") from e
+            if str(getattr(ref, "scope", "")) != "agent":
+                raise HTTPException(status_code=400, detail=f"attachment must be agent-scope: {aid}")
         weights = angelia_facade.get_priority_weights(pid)
         trigger = angelia_facade.is_mail_event_wakeup_enabled(pid)
         row = interaction_facade.submit_message_event(
@@ -91,8 +103,15 @@ class ToolGatewayService:
             trigger_pulse=trigger,
             priority=int(weights.get("mail_event", 100)),
             event_type="interaction.message.sent",
+            attachments=attachment_ids,
         )
-        return {"project_id": pid, "from_id": from_id, "to_id": to_id, **row}
+        return {
+            "project_id": pid,
+            "from_id": from_id,
+            "to_id": to_id,
+            "attachments_count": len(attachment_ids),
+            **row,
+        }
 
 
 tool_gateway_service = ToolGatewayService()

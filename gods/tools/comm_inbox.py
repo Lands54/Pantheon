@@ -77,12 +77,15 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
         reset_inbox_guard(caller_id, project_id)
         events = []
         pat = re.compile(
-            r"^- \[title=(?P<title>.*?)\]\[from=(?P<sender>.*?)\]\[status=(?P<status>.*?)\] at=(?P<at>[-0-9.]+) id=(?P<eid>[a-zA-Z0-9]+): (?P<content>.*)$"
+            r"^- \[title=(?P<title>.*?)\]\[from=(?P<sender>.*?)\]\[status=(?P<status>.*?)\] "
+            r"at=(?P<at>[-0-9.]+) id=(?P<eid>[a-zA-Z0-9]+)"
+            r"(?: \[attachments=(?P<ac>\d+) ids=(?P<aids>[a-zA-Z0-9_,.-]*)\])?: (?P<content>.*)$"
         )
         for line in str(text or "").splitlines():
             m = pat.match(line.strip())
             if not m:
                 continue
+            a_rows = [str(x).strip() for x in str(m.group("aids") or "").split(",") if str(x).strip()]
             events.append(
                 {
                     "id": m.group("eid"),
@@ -93,6 +96,8 @@ def check_inbox(caller_id: str, project_id: str = "default") -> str:
                     "type": "private",
                     "content": m.group("content"),
                     "created_at": float(m.group("at") or 0.0),
+                    "attachments": a_rows,
+                    "attachments_count": int(m.group("ac") or 0),
                 }
             )
         payload = [

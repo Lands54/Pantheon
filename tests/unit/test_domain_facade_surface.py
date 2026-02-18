@@ -39,8 +39,8 @@ def test_mnemosyne_facade_surface():
 def test_janus_facade_surface():
     from gods.janus import facade
 
-    assert hasattr(facade, "context_preview")
-    assert hasattr(facade, "context_reports")
+    assert hasattr(facade, "resolve_context_cfg")
+    assert hasattr(facade, "ContextBuildRequest")
 
 
 def test_runtime_facade_surface():

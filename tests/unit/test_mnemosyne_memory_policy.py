@@ -193,34 +193,26 @@ def test_split_templates_chronicle_and_runtime():
         shutil.rmtree(base, ignore_errors=True)
 
 
-def test_unknown_intent_auto_appended_runtime_only():
+def test_unknown_intent_is_rejected_under_zero_compat():
     project_id = f"mn_policy_{uuid.uuid4().hex[:8]}"
     agent_id = "zeta"
     base = Path("projects") / project_id
     try:
         ensure_memory_policy(project_id)
-        result = record_intent(
-            MemoryIntent(
-                intent_key="event.custom_new_signal",
-                project_id=project_id,
-                agent_id=agent_id,
-                source_kind="event",
-                payload={"k": "v"},
-                fallback_text="custom signal",
+        try:
+            record_intent(
+                MemoryIntent(
+                    intent_key="custom.new_signal",
+                    project_id=project_id,
+                    agent_id=agent_id,
+                    source_kind="agent",
+                    payload={"k": "v"},
+                    fallback_text="custom signal",
+                )
             )
-        )
-        assert result["chronicle_written"] is False
-        assert result["runtime_log_written"] is True
-        policy_file = base / "mnemosyne" / "memory_policy.json"
-        policy = json.loads(policy_file.read_text(encoding="utf-8"))
-        rule = policy.get("event.custom_new_signal") or {}
-        assert rule.get("to_chronicle") is False
-        assert rule.get("to_runtime_log") is True
-        assert str(rule.get("chronicle_template_key", "")) == ""
-        assert str(rule.get("runtime_log_template_key", "")) == ""
-        vars_info = template_vars_for_intent(project_id, "event.custom_new_signal")
-        assert "project_id" in vars_info["guaranteed_vars"]
-        assert "k" in vars_info["observed_vars"]
+            assert False, "expected ValueError for unregistered intent key"
+        except ValueError:
+            pass
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

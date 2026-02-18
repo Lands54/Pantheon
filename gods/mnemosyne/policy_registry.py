@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from gods.mnemosyne.intent_registry import tool_intent_names
+from gods.mnemosyne.intent_registry import tool_intent_names, registered_intent_keys, is_registered_intent_key
 from gods.mnemosyne.template_registry import ensure_memory_templates, list_memory_templates
 from gods.paths import mnemosyne_dir
 
@@ -27,6 +27,17 @@ _RULE_KEYS = {
     "llm_context_template_key",
 }
 
+_LEGACY_INTENT_KEY_MAP: dict[str, str] = {
+    "inbox.summary": "inbox.section.summary",
+    "inbox.section.mailbox": "inbox.section.summary",
+    "tool.read_file.ok": "tool.read.ok",
+    "tool.read_file.error": "tool.read.error",
+    "tool.read_file.blocked": "tool.read.blocked",
+    "tool.list_dir.ok": "tool.list.ok",
+    "tool.list_dir.error": "tool.list.error",
+    "tool.list_dir.blocked": "tool.list.blocked",
+}
+
 
 def _mn_root(project_id: str) -> Path:
     p = mnemosyne_dir(project_id)
@@ -39,47 +50,7 @@ def policy_path(project_id: str) -> Path:
 
 
 def required_intent_keys() -> list[str]:
-    keys = [
-        "event.mail_event",
-        "event.timer",
-        "event.manual",
-        "event.system",
-        "event.interaction.message.sent",
-        "event.interaction.message.read",
-        "event.interaction.hermes.notice",
-        "event.interaction.detach.notice",
-        "event.interaction.agent.trigger",
-        "event.hermes_protocol_invoked_event",
-        "event.hermes_job_updated_event",
-        "event.hermes_contract_registered_event",
-        "event.hermes_contract_committed_event",
-        "event.hermes_contract_disabled_event",
-        "event.detach_submitted_event",
-        "event.detach_started_event",
-        "event.detach_stopping_event",
-        "event.detach_stopped_event",
-        "event.detach_failed_event",
-        "event.detach_reconciled_event",
-        "event.detach_lost_event",
-        "inbox.received.unread",
-        "inbox.read_ack",
-        "outbox.sent.pending",
-        "outbox.sent.delivered",
-        "outbox.sent.handled",
-        "outbox.sent.failed",
-        "llm.response",
-        "agent.mode.freeform",
-        "agent.safety.tool_loop_cap",
-        "agent.event.injected",
-        "phase.retry.reason",
-        "phase.retry.act",
-        "phase.retry.observe",
-    ]
-    for tool_name in tool_intent_names():
-        keys.append(f"tool.{tool_name}.ok")
-        keys.append(f"tool.{tool_name}.error")
-        keys.append(f"tool.{tool_name}.blocked")
-    return sorted(set(keys))
+    return registered_intent_keys()
 
 
 def default_memory_policy() -> dict[str, dict[str, Any]]:
@@ -130,6 +101,10 @@ def default_memory_policy() -> dict[str, dict[str, Any]]:
         "outbox.sent.delivered": _rule(False, True),
         "outbox.sent.handled": _rule(False, True),
         "outbox.sent.failed": _rule(False, True),
+        "inbox.section.summary": _rule(False, False, True, "", "", "memory_inbox_section_summary"),
+        "inbox.section.recent_read": _rule(False, False, True, "", "", "memory_inbox_section_recent_read"),
+        "inbox.section.recent_send": _rule(False, False, True, "", "", "memory_inbox_section_recent_send"),
+        "inbox.section.inbox_unread": _rule(False, False, True, "", "", "memory_inbox_section_inbox_unread"),
         "llm.response": _rule(True, False, False, "memory_llm_response", ""),
         "agent.mode.freeform": _rule(False, True),
         "agent.safety.tool_loop_cap": _rule(False, True),
@@ -146,7 +121,43 @@ def default_memory_policy() -> dict[str, dict[str, Any]]:
 
 
 def default_intent_rule(intent_key: str) -> dict[str, Any]:
-    _ = str(intent_key or "").strip()
+    key = str(intent_key or "").strip()
+    if key == "inbox.section.summary":
+        return {
+            "to_chronicle": False,
+            "to_runtime_log": False,
+            "to_llm_context": True,
+            "chronicle_template_key": "",
+            "runtime_log_template_key": "",
+            "llm_context_template_key": "memory_inbox_section_summary",
+        }
+    if key == "inbox.section.recent_read":
+        return {
+            "to_chronicle": False,
+            "to_runtime_log": False,
+            "to_llm_context": True,
+            "chronicle_template_key": "",
+            "runtime_log_template_key": "",
+            "llm_context_template_key": "memory_inbox_section_recent_read",
+        }
+    if key == "inbox.section.recent_send":
+        return {
+            "to_chronicle": False,
+            "to_runtime_log": False,
+            "to_llm_context": True,
+            "chronicle_template_key": "",
+            "runtime_log_template_key": "",
+            "llm_context_template_key": "memory_inbox_section_recent_send",
+        }
+    if key == "inbox.section.inbox_unread":
+        return {
+            "to_chronicle": False,
+            "to_runtime_log": False,
+            "to_llm_context": True,
+            "chronicle_template_key": "",
+            "runtime_log_template_key": "",
+            "llm_context_template_key": "memory_inbox_section_inbox_unread",
+        }
     return {
         "to_chronicle": False,
         "to_runtime_log": True,
@@ -193,6 +204,16 @@ def ensure_memory_policy(project_id: str) -> Path:
         return path
     raw = _load_raw_policy(path, project_id=project_id)
     changed = False
+    # Zero-compat migration: rewrite known legacy intent keys to canonical keys.
+    # Unknown keys are still rejected later by validate_memory_policy.
+    for legacy, canonical in _LEGACY_INTENT_KEY_MAP.items():
+        if legacy not in raw:
+            continue
+        legacy_rule = raw.get(legacy)
+        if canonical not in raw and isinstance(legacy_rule, dict):
+            raw[canonical] = _normalize_rule(legacy_rule, intent_key=legacy, project_id=project_id)
+        del raw[legacy]
+        changed = True
     for k, v in default_payload.items():
         if k not in raw:
             raw[k] = v
@@ -213,14 +234,17 @@ def ensure_intent_policy_rule(project_id: str, intent_key: str) -> dict[str, Any
     key = str(intent_key or "").strip()
     if not key:
         raise MemoryPolicyMissingError("intent_key is required")
+    if not is_registered_intent_key(key):
+        raise MemoryPolicyMissingError(
+            f"unregistered intent_key='{key}' in project={project_id}; register in required_intent_keys first"
+        )
     path = ensure_memory_policy(project_id)
     raw = _load_raw_policy(path, project_id=project_id)
     rule = raw.get(key)
     if rule is None:
-        rule = default_intent_rule(key)
-        raw[key] = rule
-        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-        return dict(rule)
+        raise MemoryPolicyMissingError(
+            f"memory policy missing registered key '{key}' in project={project_id}"
+        )
     if not isinstance(rule, dict):
         raise MemoryPolicyMissingError(f"memory policy key must be object for '{key}' in project={project_id}")
     return _normalize_rule(rule, intent_key=key, project_id=project_id)
@@ -248,6 +272,11 @@ def validate_memory_policy(project_id: str, *, ensure_exists: bool = True) -> di
     if missing:
         raise MemoryPolicyMissingError(
             f"memory policy missing {len(missing)} key(s) in project={project_id}: {', '.join(missing[:20])}"
+        )
+    unknown = [k for k in policy.keys() if k not in set(required)]
+    if unknown:
+        raise MemoryPolicyMissingError(
+            f"memory policy has unregistered key(s) in project={project_id}: {', '.join(sorted(unknown)[:20])}"
         )
 
     runtime_keys = set(list_memory_templates(project_id, "runtime_log").keys())
@@ -295,17 +324,25 @@ def upsert_policy_rule(
     *,
     to_chronicle: bool | None = None,
     to_runtime_log: bool | None = None,
+    to_llm_context: bool | None = None,
     chronicle_template_key: str | None = None,
     runtime_log_template_key: str | None = None,
+    llm_context_template_key: str | None = None,
 ) -> dict[str, Any]:
     key = str(intent_key or "").strip()
     if not key:
         raise MemoryPolicyMissingError("intent_key is required")
+    if not is_registered_intent_key(key):
+        raise MemoryPolicyMissingError(
+            f"unregistered intent_key='{key}' in project={project_id}; register in required_intent_keys first"
+        )
     path = ensure_memory_policy(project_id)
     raw = _load_raw_policy(path, project_id=project_id)
     current = raw.get(key)
     if current is None:
-        current = default_intent_rule(key)
+        raise MemoryPolicyMissingError(
+            f"memory policy missing registered key '{key}' in project={project_id}"
+        )
     if not isinstance(current, dict):
         raise MemoryPolicyMissingError(f"memory policy key must be object for '{key}' in project={project_id}")
     normalized = _normalize_rule(current, intent_key=key, project_id=project_id)
@@ -313,10 +350,14 @@ def upsert_policy_rule(
         normalized["to_chronicle"] = bool(to_chronicle)
     if to_runtime_log is not None:
         normalized["to_runtime_log"] = bool(to_runtime_log)
+    if to_llm_context is not None:
+        normalized["to_llm_context"] = bool(to_llm_context)
     if chronicle_template_key is not None:
         normalized["chronicle_template_key"] = str(chronicle_template_key or "").strip()
     if runtime_log_template_key is not None:
         normalized["runtime_log_template_key"] = str(runtime_log_template_key or "").strip()
+    if llm_context_template_key is not None:
+        normalized["llm_context_template_key"] = str(llm_context_template_key or "").strip()
     raw[key] = normalized
     path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     return normalized
