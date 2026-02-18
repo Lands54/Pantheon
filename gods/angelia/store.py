@@ -10,6 +10,11 @@ from gods.angelia.models import AgentRuntimeStatus, AngeliaEvent
 
 def runtime_dir(project_id: str) -> Path:
     path = Path("projects") / project_id / "runtime"
+    if path.exists() and not path.is_dir():
+        try:
+            path.unlink()
+        except Exception:
+            pass
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -33,7 +38,12 @@ def _load_agent_statuses(project_id: str) -> dict[str, dict]:
 
 def _save_agent_statuses(project_id: str, payload: dict[str, dict]):
     ap = agents_path(project_id)
-    ap.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        ap.parent.mkdir(parents=True, exist_ok=True)
+        ap.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except (FileNotFoundError, FileExistsError, OSError):
+        # Best effort only: runtime may be concurrently torn down during test shutdown.
+        return
 
 
 def list_events(
@@ -209,9 +219,12 @@ def get_agent_status(project_id: str, agent_id: str) -> AgentRuntimeStatus:
 
 
 def set_agent_status(project_id: str, status: AgentRuntimeStatus):
-    raw = _load_agent_statuses(project_id)
-    raw[status.agent_id] = status.to_dict()
-    _save_agent_statuses(project_id, raw)
+    try:
+        raw = _load_agent_statuses(project_id)
+        raw[status.agent_id] = status.to_dict()
+        _save_agent_statuses(project_id, raw)
+    except (FileNotFoundError, FileExistsError, OSError):
+        return
 
 
 def list_agent_status(project_id: str, agent_ids: list[str]) -> list[AgentRuntimeStatus]:

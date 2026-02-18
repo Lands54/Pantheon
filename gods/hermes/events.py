@@ -48,7 +48,7 @@ class HermesEventBus:
                         payload=payload or {},
                         dedupe_key="",
                         max_attempts=3,
-                        meta={"source": "hermes_event_bus", "legacy_type": event_type},
+                        meta={"source": "hermes_event_bus", "origin_type": event_type},
                     )
                     events_bus.append_event(rec)
                 except Exception:

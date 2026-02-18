@@ -4,8 +4,8 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage
 
-from gods.agents.state_window_store import load_state_window, save_state_window
 from gods.config import ProjectConfig, runtime_config
+from gods.mnemosyne.facade import load_state_window, save_state_window
 from gods.paths import runtime_state_window_path
 
 

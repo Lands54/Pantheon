@@ -143,6 +143,7 @@ class EventService:
             title = str(payload.get("title", "")).strip()
             content = str(payload.get("content", ""))
             msg_type = str(payload.get("msg_type", "private")).strip() or "private"
+            attachments = [str(x).strip() for x in list(payload.get("attachments", []) or []) if str(x).strip()]
             if not to_id or not sender_id or not title:
                 raise HTTPException(status_code=400, detail="interaction.message.sent requires payload.to_id, payload.sender_id, payload.title")
             return interaction_facade.submit_message_event(
@@ -156,6 +157,7 @@ class EventService:
                 priority=pri,
                 dedupe_key=dedupe_key,
                 event_type=event_type,
+                attachments=attachments,
             )
 
         # Mail path is removed from public entry in zero-compat mode.

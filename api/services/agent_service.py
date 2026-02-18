@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
 from gods.config import AgentModelConfig, runtime_config
+from gods.identity import HUMAN_AGENT_ID, is_valid_agent_id
 from gods.iris import facade as iris_facade
 
 
@@ -47,6 +48,13 @@ class AgentService:
         aid = str(agent_id or "").strip()
         if not aid:
             raise HTTPException(status_code=400, detail="agent_id is required")
+        if aid == HUMAN_AGENT_ID:
+            raise HTTPException(status_code=400, detail="agent_id is reserved for human identity")
+        if not is_valid_agent_id(aid):
+            raise HTTPException(
+                status_code=400,
+                detail="invalid agent_id; expected ^[a-z][a-z0-9_]{0,63}$",
+            )
         agent_dir = Path("projects") / project_id / "agents" / aid
         if agent_dir.exists():
             raise HTTPException(status_code=400, detail="Agent exists")

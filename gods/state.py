@@ -6,18 +6,15 @@ from langgraph.graph.message import add_messages
 from gods.mnemosyne import MemoryIntent
 
 
-class GodsState(TypedDict):
+class GodsState(TypedDict, total=False):
     """
     Global state definition for the Gods platform, used in the LangGraph runtime.
     """
-    project_id: str  # 当前项目名称
-    messages: Annotated[list, add_messages]  # 消息历史
-    summary: str  # 历史记忆的压缩摘要 (长期记忆)
-    current_speaker: str  # 当前发言的 God
-    debate_round: int  # 辩论轮次
-    inbox: dict  # agent_id -> [messages]
-    context: str  # 当前上下文
-    next_step: str  # 用于控制 ReAct 循环 (continue | finish | escalated | abstained)
-    abstained: list  # list of agent_ids who opted out of this thread
-    triggers: list[MemoryIntent]  # List of primary events that triggered this pulse
-    mailbox: list[MemoryIntent]  # Pre-fetched mailbox content (inbox + outbox status) for this pulse
+    project_id: str
+    messages: Annotated[list, add_messages]
+    context: str
+    next_step: str
+    abstained: list
+    triggers: list[MemoryIntent]
+    # mailbox 是统一消息域上下文，包含 inbox 事件与 outbox 回执。
+    mailbox: list[MemoryIntent]

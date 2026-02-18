@@ -43,3 +43,49 @@ def test_load_rejects_legacy_phase_fields_and_invalid_phase_strategy(tmp_path, m
     Path("config.json").write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(RuntimeError):
         SystemConfig.load()
+
+
+def test_load_rejects_legacy_agent_node_tools_field(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    raw = {
+        "openrouter_api_key": "",
+        "current_project": "default",
+        "projects": {
+            "default": {
+                "phase_strategy": "react_graph",
+                "agent_settings": {
+                    "a": {
+                        "node_tools": {
+                            "llm_think": ["not_a_real_tool"],
+                        }
+                    }
+                },
+            }
+        },
+    }
+    Path("config.json").write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        SystemConfig.load()
+
+
+def test_load_rejects_legacy_agent_node_tools_node_name(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    raw = {
+        "openrouter_api_key": "",
+        "current_project": "default",
+        "projects": {
+            "default": {
+                "phase_strategy": "react_graph",
+                "agent_settings": {
+                    "a": {
+                        "node_tools": {
+                            "LLM-THINK": ["list"],
+                        }
+                    }
+                },
+            }
+        },
+    }
+    Path("config.json").write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        SystemConfig.load()

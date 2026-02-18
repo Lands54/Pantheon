@@ -85,28 +85,6 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "feeds_llm": True,
         "llm_note": "通常触发一次 Agent 执行与 LLM 推理。",
     },
-    # Back-compat aliases still seen in tests/runtime rows (kept explicit for strict resolver)
-    "manual_event": {
-        "domain": "angelia",
-        "title": "手动触发(别名)",
-        "description": "历史别名，语义同 manual。",
-        "feeds_llm": True,
-        "llm_note": "与 manual 等价。",
-    },
-    "timer_event": {
-        "domain": "angelia",
-        "title": "定时触发(别名)",
-        "description": "历史别名，语义同 timer。",
-        "feeds_llm": True,
-        "llm_note": "与 timer 等价。",
-    },
-    "system_event": {
-        "domain": "angelia",
-        "title": "系统触发(别名)",
-        "description": "历史别名，语义同 system。",
-        "feeds_llm": True,
-        "llm_note": "与 system 等价。",
-    },
     # Hermes
     "hermes_protocol_invoked_event": {
         "domain": "hermes",

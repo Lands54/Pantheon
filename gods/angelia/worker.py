@@ -6,14 +6,12 @@ import time
 import uuid
 from dataclasses import dataclass
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from . import policy, store
 from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
-from gods.angelia.models import AgentRunState, AgentRuntimeStatus
+from gods.angelia.models import AgentRunState, AgentRuntimeStatus, AngeliaEvent
 from gods import events as events_bus
-from gods.iris.facade import ack_handled, fetch_inbox_context, fetch_mailbox_intents, has_pending
+from gods.iris.facade import ack_handled, fetch_mailbox_intents, has_pending
 from gods.mnemosyne.facade import intent_from_angelia_event
 from gods.mnemosyne import record_intent
 from gods.angelia.pulse.policy import get_inject_budget
@@ -65,12 +63,12 @@ def _to_record(event) -> events_bus.EventRecord:
     return events_bus.EventRecord.from_dict(row)
 
 
-def _resolve_handler(event_type: str) -> events_bus.EventHandler:
+def _resolve_handler(event_type: str) -> events_bus.EventHandler | None:
     meta = events_bus.event_meta(event_type)
     if meta is None:
         raise ValueError(f"EVENT_CATALOG_MISSING: event_type '{event_type}' is not registered in catalog")
     if meta.get("feeds_llm") is False:
-        raise ValueError(f"EVENT_LLM_DISALLOWED: event_type '{event_type}' is marked feeds_llm=false")
+        return None
     h = events_bus.get_handler(event_type)
     if h is not None:
         return h
@@ -84,37 +82,62 @@ def _run_agent(
     agent_id: str,
     reason: str,
     pulse_id: str,
-    event_records: list[events_bus.EventRecord] | None = None,
+    event_records: list[events_bus.EventRecord],
 ) -> dict:
     from gods.agents.base import GodAgent
 
     agent = GodAgent(agent_id=agent_id, project_id=project_id)
+    claimed_records: list[events_bus.EventRecord] = []
+
+    def _claim_events_for_chaos(limit: int = 10) -> list[dict]:
+        picked = store.pick_batch_events(
+            project_id=project_id,
+            agent_id=agent_id,
+            now=time.time(),
+            cooldown_until=0.0,
+            preempt_types=policy.cooldown_preempt_types(project_id),
+            limit=max(1, min(int(limit or 10), 50)),
+        )
+        out: list[dict] = []
+        for evt in picked:
+            store.mark_processing(project_id, evt.event_id)
+            rec = _to_record(evt)
+            claimed_records.append(rec)
+            out.append(rec.to_dict())
+        return out
     
     # 1. Trigger Events (Batch)
     trigger_intents: list[MemoryIntent] = []
-    if event_records:
-        for rec in event_records:
-            try:
-                trigger_intents.append(intent_from_angelia_event(rec, stage="trigger"))
-            except Exception:
-                # If rendering fails, we try a fallback intent but continue
-                # Actually intent_from_angelia_event shouldn't raise usually, but safeguard
-                pass
-    else:
-        # Fallback for manual/legacy calls without record
-        legacy = intent_from_angelia_event(
-            events_bus.EventRecord(
-                project_id=project_id, 
-                event_type="manual_pulse", 
-                payload={"reason": reason, "agent_id": agent_id}
-            ), 
-            stage="trigger"
-        )
-        trigger_intents.append(legacy)
+    for rec in event_records:
+        try:
+            trigger_intents.append(intent_from_angelia_event(rec, stage="trigger"))
+        except Exception:
+            pass
 
-    # 2. Mailbox Events
+    # 2. Mailbox domain context (mailbox = inbox + outbox receipts)
     budget = get_inject_budget(project_id)
-    mailbox_intents = fetch_mailbox_intents(project_id, agent_id, budget)
+    preferred_mail_event_ids: list[str] = []
+    seen_mail_event_ids: set[str] = set()
+    for rec in event_records:
+        rid = str(getattr(rec, "event_id", "") or "").strip()
+        et = str(getattr(rec, "event_type", "") or "").strip()
+        payload = dict(getattr(rec, "payload", {}) or {})
+        pid = str(payload.get("mail_event_id", "") or "").strip()
+        candidates = [pid]
+        if et == "mail_event":
+            candidates.append(rid)
+        for mid in candidates:
+            if not mid or mid in seen_mail_event_ids:
+                continue
+            seen_mail_event_ids.add(mid)
+            preferred_mail_event_ids.append(mid)
+
+    mailbox_intents = fetch_mailbox_intents(
+        project_id,
+        agent_id,
+        budget,
+        preferred_event_ids=preferred_mail_event_ids or None,
+    )
     
     # Extract IDs for ACK later
     delivered_ids = []
@@ -125,11 +148,10 @@ def _run_agent(
                  delivered_ids.append(mid)
 
     # 3. State Construction
-    # We DO NOT render text here. We pass intents to the agent state.
     state = {
         "project_id": project_id,
-        "messages": [], # Janus will build history. No synthetic SystemMessages!
-        "context": "", # Deprecated legacy context string
+        "messages": [],
+        "context": "",
         "next_step": "",
         "triggers": trigger_intents,
         "mailbox": mailbox_intents,
@@ -139,9 +161,17 @@ def _run_agent(
             "started_at": time.time(),
         },
         "__inbox_delivered_ids": delivered_ids,
+        # Chaos can only consume new events via worker-owned claim callback.
+        "__worker_claim_events": _claim_events_for_chaos,
     }
 
     new_state = agent.process(state)
+    if isinstance(new_state, dict):
+        try:
+            new_state.pop("__worker_claim_events", None)
+        except Exception:
+            pass
+        new_state["__worker_claimed_events"] = [r.to_dict() for r in claimed_records]
     
     # ACK processed messages
     # We re-read from state just in case agent modified it, or we use our local list?
@@ -236,8 +266,8 @@ def worker_loop(ctx: WorkerContext):
         if stop_event.is_set():
             break
         if not woke:
-            # allow pending inbox to trigger when queue event was missed
-            if has_pending(project_id, agent_id):
+            # allow pending inbox or queued events to trigger when direct notify was missed
+            if has_pending(project_id, agent_id) or store.has_queued(project_id, agent_id):
                 angelia_mailbox.notify(project_id, agent_id)
             continue
 
@@ -277,12 +307,20 @@ def worker_loop(ctx: WorkerContext):
             # If not, we should technically group them. 
             # But currently `_resolve_handler` returns DEFAULT_AGENT_RUN_HANDLER for all.
             handler = _resolve_handler(records[0].event_type)
+            if handler is None:
+                for evt in batch:
+                    store.mark_done(project_id, evt.event_id)
+                    record_intent(intent_from_angelia_event(evt, stage="done", extra_payload={"next_step": "skipped"}))
+                _set_idle(st, cooldown_sec=0)
+                angelia_metrics.inc("event_done", len(batch))
+                continue
             
             # on_pick semantics: technically we should call on_pick for each?
             for r in records:
                 handler.on_pick(r)
 
             start = time.time()
+            result: dict = {}
             try:
                 for evt in batch:
                     record_intent(intent_from_angelia_event(evt, stage="processing"))
@@ -326,6 +364,22 @@ def worker_loop(ctx: WorkerContext):
                     pulse_id = uuid.uuid4().hex[:12]
                     result = _run_agent(project_id, agent_id, reason, pulse_id, records)
 
+                extra_events: list[AngeliaEvent] = []
+                seen_ids = {str(evt.event_id) for evt in batch}
+                for row in list(result.get("__worker_claimed_events", []) or []):
+                    if not isinstance(row, dict):
+                        continue
+                    try:
+                        evt = AngeliaEvent.from_dict(row)
+                    except Exception:
+                        continue
+                    eid = str(getattr(evt, "event_id", "") or "")
+                    if not eid or eid in seen_ids:
+                        continue
+                    seen_ids.add(eid)
+                    extra_events.append(evt)
+
+                all_events = list(batch) + extra_events
                 next_step = str(result.get("next_step", "finish"))
                 if next_step == "finish":
                     empty_cycles += 1
@@ -338,7 +392,7 @@ def worker_loop(ctx: WorkerContext):
                     cooldown = max(int(cooldown), int(quiescent_cooldown))
                 
                 # Mark ALL done
-                for evt in batch:
+                for evt in all_events:
                     store.mark_done(project_id, evt.event_id)
                     record_intent(intent_from_angelia_event(evt, stage="done", extra_payload={"next_step": next_step}))
 
@@ -346,13 +400,24 @@ def worker_loop(ctx: WorkerContext):
                 handler.on_success(records[0], result)
                 
                 _set_idle(st, cooldown)
-                angelia_metrics.inc("event_done", len(batch))
+                angelia_metrics.inc("event_done", len(all_events))
 
             except Exception as e:
                 # Batch Failure: Fail ALL.
                 # In future we might want partial success, but for now atomic batch.
                 handler.on_fail(records[0], e)
-                for evt in batch:
+                all_events = list(batch)
+                for row in list((result or {}).get("__worker_claimed_events", []) or []):
+                    if not isinstance(row, dict):
+                        continue
+                    try:
+                        evt = AngeliaEvent.from_dict(row)
+                    except Exception:
+                        continue
+                    if str(evt.event_id) in {str(x.event_id) for x in all_events}:
+                        continue
+                    all_events.append(evt)
+                for evt in all_events:
                     state = store.mark_failed_or_requeue(
                         project_id,
                         evt.event_id,
@@ -366,7 +431,7 @@ def worker_loop(ctx: WorkerContext):
                         pass
                 
                 _set_error_backoff(st, str(e), delay_sec=5)
-                angelia_metrics.inc("event_requeued", len(batch))
+                angelia_metrics.inc("event_requeued", len(all_events))
 
             finally:
                 latency_ms = int((time.time() - start) * 1000)

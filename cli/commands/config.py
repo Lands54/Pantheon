@@ -7,6 +7,45 @@ from pathlib import Path
 from cli.utils import get_base_url, handle_response
 
 
+def _fetch_registry_schema(base_url: str) -> dict:
+    try:
+        res = requests.get(f"{base_url}/config/schema", timeout=5)
+        if res.status_code == 200:
+            return res.json() or {}
+    except Exception:
+        return {}
+    return {}
+
+
+def _project_field_index(schema: dict) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for row in (schema.get("fields", {}) or {}).get("project", []) or []:
+        key = str(row.get("key", "")).strip()
+        if key:
+            out[key] = row
+    return out
+
+
+def _resolve_project_key(raw_key: str) -> str:
+    key = str(raw_key or "").strip()
+    alias = {
+        "simulation.enabled": "simulation_enabled",
+        "simulation.min": "simulation_interval_min",
+        "simulation.max": "simulation_interval_max",
+        "simulation.batch": "autonomous_batch_size",
+        "memory.threshold": "summarize_threshold",
+        "memory.keep": "summarize_keep_count",
+        "memory.compact_trigger": "memory_compact_trigger_tokens",
+        "memory.compact_strategy": "memory_compact_strategy",
+        "phase.strategy": "phase_strategy",
+        "hermes.enabled": "hermes_enabled",
+        "hermes.timeout": "hermes_default_timeout_sec",
+        "hermes.rate": "hermes_default_rate_per_minute",
+        "hermes.concurrency": "hermes_default_max_concurrency",
+    }
+    return alias.get(key, key)
+
+
 def cmd_config(args):
     """Manage system and agent configurations."""
     base_url = get_base_url()
@@ -58,6 +97,7 @@ def cmd_config(args):
             print(f"   Observation Window: {proj.get('context_observation_window', 30)}")
             print(f"   Include Inbox Status Hints: {proj.get('context_include_inbox_status_hints', True)}")
             print(f"   Write Build Report: {proj.get('context_write_build_report', True)}")
+            print(f"   Metis Refresh Mode: {proj.get('metis_refresh_mode', 'pulse')}")
             print(f"\n🧠 Agent Runtime:")
             print(f"   Strategy: {proj.get('phase_strategy', 'react_graph')}")
             print("   Allowed: react_graph, freeform")
@@ -66,7 +106,14 @@ def cmd_config(args):
             print(f"   Max Events Per Pulse: {proj.get('debug_trace_max_events', 200)}")
             print(f"   Full Content: {proj.get('debug_trace_full_content', True)}")
             print(f"   LLM IO Trace Enabled: {proj.get('debug_llm_trace_enabled', True)}")
-            print(f"   LLM Call Delay: {proj.get('llm_call_delay_sec', 1)}s")
+            print(f"\n🧠 LLM Control:")
+            print(f"   Enabled: {proj.get('llm_control_enabled', True)}")
+            print(f"   Global Max Concurrency: {proj.get('llm_global_max_concurrency', 8)}")
+            print(f"   Global Rate Per Minute: {proj.get('llm_global_rate_per_minute', 120)}")
+            print(f"   Project Max Concurrency: {proj.get('llm_project_max_concurrency', 4)}")
+            print(f"   Project Rate Per Minute: {proj.get('llm_project_rate_per_minute', 60)}")
+            print(f"   Acquire Timeout: {proj.get('llm_acquire_timeout_sec', 20)}s")
+            print(f"   Retry Interval: {proj.get('llm_retry_interval_ms', 100)}ms")
             print(f"\n📡 Hermes Bus:")
             print(f"   Enabled: {proj.get('hermes_enabled', True)}")
             print(f"   Default Timeout: {proj.get('hermes_default_timeout_sec', 30)}s")
@@ -111,6 +158,24 @@ def cmd_config(args):
                     print(f"      Disabled Tools: {', '.join(disabled)}")
 
             print("\n💡 Agent runtime status moved to: temple.sh agent status")
+
+            schema = _fetch_registry_schema(base_url)
+            idx = _project_field_index(schema)
+            if idx:
+                print("\n📘 Registry Metadata:")
+                tool_meta = idx.get("tool_policies", {}) if isinstance(idx, dict) else {}
+                spec_source = ((tool_meta.get("ui") or {}) if isinstance(tool_meta, dict) else {}).get("spec_source", "")
+                if spec_source:
+                    print(f"   Strategy Spec Source: {spec_source}")
+                deprecated = [k for k, v in idx.items() if str(v.get("status", "active")) == "deprecated"]
+                if deprecated:
+                    print("   Deprecated keys:")
+                    for k in deprecated:
+                        if k in proj:
+                            desc = idx[k].get("description", "")
+                            print(f"      - {k}: {desc}")
+                else:
+                    print("   Deprecated keys: (none)")
         except Exception as e:
             print(f"❌ Error: {e}")
     
@@ -124,6 +189,14 @@ def cmd_config(args):
             if pid not in data["projects"]:
                 print(f"❌ Project '{pid}' not found.")
                 return
+
+            schema = _fetch_registry_schema(base_url)
+            idx = _project_field_index(schema)
+            resolved_key = _resolve_project_key(args.key)
+            meta = idx.get(resolved_key)
+            if meta and str(meta.get("status", "active")) == "deprecated":
+                print(f"⚠️  DEPRECATED CONFIG: {resolved_key}")
+                print(f"   {meta.get('description', '')}")
             
             # Parse key path (e.g., "simulation.enabled" or "agent.genesis.model")
             parts = args.key.split('.')
@@ -169,7 +242,7 @@ def cmd_config(args):
                 "context_observation_window",
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
-                "llm_call_delay_sec",
+                "metis_refresh_mode",
             }:
                 if direct_key in {
                     "pulse_event_inject_budget",
@@ -196,7 +269,12 @@ def cmd_config(args):
                     "context_budget_state_window",
                     "context_state_window_limit",
                     "context_observation_window",
-                    "llm_call_delay_sec",
+                    "llm_global_max_concurrency",
+                    "llm_global_rate_per_minute",
+                    "llm_project_max_concurrency",
+                    "llm_project_rate_per_minute",
+                    "llm_acquire_timeout_sec",
+                    "llm_retry_interval_ms",
                 }:
                     data["projects"][pid][direct_key] = int(args.value)
                 elif direct_key in {"docker_cpu_limit"}:
@@ -211,6 +289,7 @@ def cmd_config(args):
                     "detach_enabled",
                     "context_include_inbox_status_hints",
                     "context_write_build_report",
+                    "llm_control_enabled",
                 }:
                     data["projects"][pid][direct_key] = args.value.lower() == "true"
                 elif direct_key == "context_strategy":
@@ -221,6 +300,11 @@ def cmd_config(args):
                 elif direct_key == "command_executor":
                     if args.value not in {"docker", "local"}:
                         print("❌ command_executor must be one of: docker, local")
+                        return
+                    data["projects"][pid][direct_key] = args.value
+                elif direct_key == "metis_refresh_mode":
+                    if args.value not in {"pulse", "node"}:
+                        print("❌ metis_refresh_mode must be one of: pulse, node")
                         return
                     data["projects"][pid][direct_key] = args.value
                 elif direct_key == "docker_extra_env":
@@ -381,11 +465,8 @@ def cmd_config(args):
                     print(f"❌ Unknown debug key: {parts[1]}")
                     return
             elif parts[0] == "llm" and len(parts) >= 2:
-                if parts[1] == "call_delay_sec":
-                    data["projects"][pid]["llm_call_delay_sec"] = int(args.value)
-                else:
-                    print(f"❌ Unknown llm key: {parts[1]}")
-                    return
+                print(f"❌ Unknown llm key: {parts[1]}")
+                return
             elif parts[0] == "hermes" and len(parts) >= 2:
                 if parts[1] == "enabled":
                     data["projects"][pid]["hermes_enabled"] = args.value.lower() == "true"
@@ -573,7 +654,6 @@ def cmd_config(args):
                 print("  debug.max_events (number)")
                 print("  debug.full (true/false)")
                 print("  debug.llm_trace (true/false)")
-                print("  llm.call_delay_sec (0-60)")
                 print("  hermes.enabled (true/false)")
                 print("  hermes.timeout (seconds)")
                 print("  hermes.rate (calls/min)")
@@ -607,7 +687,6 @@ def cmd_config(args):
                 print("  context_observation_window (count)")
                 print("  context_include_inbox_status_hints (true/false)")
                 print("  context_write_build_report (true/false)")
-                print("  llm_call_delay_sec (0-60)")
                 print("  executor.command (docker|local)")
                 print("  docker.enabled (true/false)")
                 print("  docker.image (image tag)")
@@ -632,6 +711,7 @@ def cmd_config(args):
                 print("  agent.<agent_id>.disabled_tools (comma-separated, e.g. check_inbox,send_message)")
                 print("  agent.<agent_id>.disable_tool (single tool name, append)")
                 print("  agent.<agent_id>.enable_tool (single tool name, remove)")
+                print("  agent.<agent_id>.tool_policy.<strategy>.<phase>.allow (comma-separated tool names)")
                 print("  all.models (model name) - SETS FOR ALL AGENTS")
                 return
             
@@ -639,6 +719,13 @@ def cmd_config(args):
             res = requests.post(f"{base_url}/config/save", json=data)
             if res.status_code == 200:
                 print(f"✅ Configuration updated: {args.key} = {args.value}")
+                try:
+                    payload = res.json() or {}
+                    warnings = payload.get("warnings", []) if isinstance(payload, dict) else []
+                    for w in warnings:
+                        print(f"⚠️  {w}")
+                except Exception:
+                    pass
             else:
                 print(f"❌ Failed to save configuration")
         
@@ -757,3 +844,30 @@ def cmd_config(args):
         
         print("\n💡 Usage:")
         print("   ./temple.sh config set agent.genesis.model stepfun/step-3.5-flash:free")
+
+    elif args.subcommand == "audit":
+        try:
+            schema = _fetch_registry_schema(base_url)
+            idx = _project_field_index(schema)
+            tool_meta = idx.get("tool_policies", {}) if isinstance(idx, dict) else {}
+            spec_source = ((tool_meta.get("ui") or {}) if isinstance(tool_meta, dict) else {}).get("spec_source", "")
+            res = requests.get(f"{base_url}/config/audit", timeout=5)
+            data = handle_response(res)
+            deprecated = data.get("deprecated", []) if isinstance(data, dict) else []
+            unreferenced = data.get("unreferenced", []) if isinstance(data, dict) else []
+            conflicts = data.get("naming_conflicts", []) if isinstance(data, dict) else []
+
+            print("\n🧪 CONFIG AUDIT")
+            if spec_source:
+                print(f"   Strategy Spec Source: {spec_source}")
+            print(f"   Deprecated: {len(deprecated)}")
+            for row in deprecated:
+                print(f"      - {row.get('scope')}.{row.get('key')}")
+            print(f"   Unreferenced: {len(unreferenced)}")
+            for row in unreferenced:
+                print(f"      - {row.get('scope')}.{row.get('key')}")
+            print(f"   Naming Conflicts: {len(conflicts)}")
+            for row in conflicts:
+                print(f"      - {row.get('topic')}: {row.get('detail')}")
+        except Exception as e:
+            print(f"❌ audit failed: {e}")

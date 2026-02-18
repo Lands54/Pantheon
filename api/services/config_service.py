@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from gods.config import (
+    CONFIG_REGISTRY,
     get_available_agents,
     runtime_config,
     snapshot_runtime_config_payload,
@@ -35,9 +36,19 @@ class ConfigService:
             "all_tools": [t.name for t in GODS_TOOLS],
         }
 
-    def save_config_payload(self, data: dict[str, Any]) -> dict[str, str]:
-        apply_runtime_config_payload(data)
-        return {"status": "success"}
+    def save_config_payload(self, data: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(data or {})
+        for key in ("has_openrouter_api_key", "available_agents", "all_tools"):
+            payload.pop(key, None)
+        warnings = CONFIG_REGISTRY.validate_payload(payload)
+        apply_runtime_config_payload(payload)
+        return {"status": "success", "warnings": warnings}
+
+    def get_config_schema_payload(self) -> dict[str, Any]:
+        return CONFIG_REGISTRY.export_schema(tool_options=[t.name for t in GODS_TOOLS])
+
+    def get_config_audit_payload(self) -> dict[str, Any]:
+        return CONFIG_REGISTRY.audit_usage()
 
 
 config_service = ConfigService()

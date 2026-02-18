@@ -6,7 +6,7 @@ import json
 from langchain_core.tools import tool
 
 from gods.config import runtime_config
-from gods.hermes.policy import allow_agent_tool_provider
+from gods.hermes import facade as hermes_facade
 
 
 def _resolve_project(project_id: str | None) -> str:
@@ -26,21 +26,17 @@ def call_protocol(
 ) -> str:
     """Call protocol via Hermes bus. Payload is JSON string."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-        from gods.hermes.models import InvokeRequest
-
         pid = _resolve_project(project_id)
         payload = json.loads(payload_json) if payload_json.strip() else {}
-        req = InvokeRequest(
+        req = hermes_facade.InvokeRequest(
             project_id=pid,
             caller_id=caller_id,
             name=name,
             mode=("async" if mode == "async" else "sync"),
             payload=payload,
         )
-        spec = hermes_service.registry.get(pid, req.name)
-        if spec.provider.type == "agent_tool" and not allow_agent_tool_provider(pid):
+        spec = hermes_facade.get_protocol(pid, req.name)
+        if spec.provider.type == "agent_tool" and not hermes_facade.allow_agent_tool_provider(pid):
             return json.dumps(
                 {
                     "ok": False,
@@ -51,9 +47,9 @@ def call_protocol(
                 },
                 ensure_ascii=False,
             )
-        result = hermes_service.invoke(req)
+        result = hermes_facade.invoke(req)
         return json.dumps(result.model_dump(), ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -70,12 +66,9 @@ def route_protocol(
 ) -> str:
     """Route invoke by target agent + function id (Hermes(agent,function,payload))."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-
         pid = _resolve_project(project_id)
         payload = json.loads(payload_json) if payload_json.strip() else {}
-        result = hermes_service.route(
+        result = hermes_facade.route(
             project_id=pid,
             caller_id=caller_id,
             target_agent=target_agent,
@@ -84,7 +77,7 @@ def route_protocol(
             mode=("async" if mode == "async" else "sync"),
         )
         return json.dumps(result.model_dump(), ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -94,10 +87,8 @@ def route_protocol(
 def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Check async protocol job status by job id."""
     try:
-        from gods.hermes.service import hermes_service
-
         pid = _resolve_project(project_id)
-        job = hermes_service.get_job(pid, job_id)
+        job = hermes_facade.get_job(pid, job_id)
         if not job:
             return json.dumps({"ok": False, "error": f"job not found: {job_id}"}, ensure_ascii=False)
         return json.dumps({"ok": True, "job": job.model_dump()}, ensure_ascii=False)
@@ -109,16 +100,13 @@ def check_protocol_job(job_id: str, caller_id: str = "default", project_id: str 
 def register_contract(contract_json: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Register structured contract JSON for obligations and committer resolution."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-
         pid = _resolve_project(project_id)
         contract = json.loads(contract_json)
         if isinstance(contract, dict) and not contract.get("submitter"):
             contract["submitter"] = caller_id
-        out = hermes_service.contracts.register(pid, contract)
+        out = hermes_facade.register_contract(pid, contract)
         return json.dumps({"ok": True, "contract": out}, ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -128,13 +116,10 @@ def register_contract(contract_json: str, caller_id: str = "default", project_id
 def commit_contract(title: str, version: str, caller_id: str = "default", project_id: str = "default") -> str:
     """Commit current agent to a contract version."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-
         pid = _resolve_project(project_id)
-        out = hermes_service.contracts.commit(pid, title, version, caller_id)
+        out = hermes_facade.commit_contract(pid, title, version, caller_id)
         return json.dumps({"ok": True, "contract": out}, ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -148,10 +133,8 @@ def list_contracts(
 ) -> str:
     """List contracts with concise human-readable fields (title/description)."""
     try:
-        from gods.hermes.service import hermes_service
-
         pid = _resolve_project(project_id)
-        rows = hermes_service.contracts.list(pid, include_disabled=bool(include_disabled))
+        rows = hermes_facade.list_contracts(pid, include_disabled=bool(include_disabled))
         brief = []
         for row in rows:
             if not isinstance(row, dict):
@@ -183,23 +166,14 @@ def disable_contract(
 ) -> str:
     """Exit current agent from contract committers; contract auto-disables when committers become empty."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-
         pid = _resolve_project(project_id)
-        out = hermes_service.contracts.disable(
-            pid,
-            title=title,
-            version=version,
-            agent_id=caller_id,
-            reason=reason,
-        )
+        out = hermes_facade.disable_contract(pid, title=title, version=version, agent_id=caller_id, reason=reason)
         warning = (
             "Warning: disable_contract exits your commitment immediately. "
             "When no committers remain, this contract becomes disabled."
         )
         return json.dumps({"ok": True, "warning": warning, "contract": out}, ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -217,12 +191,9 @@ def reserve_port(
 ) -> str:
     """Reserve a local port lease in Hermes for service startup."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-
         pid = _resolve_project(project_id)
         oid = owner_id.strip() or caller_id
-        lease = hermes_service.ports.reserve(
+        lease = hermes_facade.reserve_port(
             project_id=pid,
             owner_id=oid,
             preferred_port=(None if int(preferred_port or 0) <= 0 else int(preferred_port)),
@@ -231,7 +202,7 @@ def reserve_port(
             note=note,
         )
         return json.dumps({"ok": True, "lease": lease}, ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -246,18 +217,11 @@ def release_port(
 ) -> str:
     """Release one or all leases for an owner in current project."""
     try:
-        from gods.hermes.service import hermes_service
-        from gods.hermes.errors import HermesError
-
         pid = _resolve_project(project_id)
         oid = owner_id.strip() or caller_id
-        removed = hermes_service.ports.release(
-            project_id=pid,
-            owner_id=oid,
-            port=(None if int(port or 0) <= 0 else int(port)),
-        )
+        removed = hermes_facade.release_port(project_id=pid, owner_id=oid, port=(None if int(port or 0) <= 0 else int(port)))
         return json.dumps({"ok": True, "released": removed}, ensure_ascii=False)
-    except HermesError as e:
+    except hermes_facade.HermesError as e:
         return json.dumps({"ok": False, "error": e.to_dict()}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -267,10 +231,8 @@ def release_port(
 def list_port_leases(caller_id: str = "default", project_id: str = "default") -> str:
     """List current project port leases."""
     try:
-        from gods.hermes.service import hermes_service
-
         pid = _resolve_project(project_id)
-        rows = hermes_service.ports.list(pid)
+        rows = hermes_facade.list_ports(pid)
         return json.dumps({"ok": True, "leases": rows}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)

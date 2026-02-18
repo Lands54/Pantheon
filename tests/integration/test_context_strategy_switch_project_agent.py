@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from gods.agents.base import GodAgent
 from gods.config import AgentModelConfig, ProjectConfig, runtime_config
-from gods.janus.facade import latest_context_report
+from gods.mnemosyne.facade import latest_context_report
 
 
 class _FakeBrain:

@@ -8,7 +8,8 @@ from typing import Any
 from langchain_core.messages import ToolMessage
 
 from gods.angelia.facade import inject_inbox_after_action_if_any
-from gods.janus import ContextBuildRequest, janus_service
+from gods.metis.snapshot import refresh_runtime_envelope, resolve_refresh_mode
+from gods.janus import janus_service
 from gods.mnemosyne.intent_builders import (
     intent_from_agent_marker,
     intent_from_llm_response,
@@ -17,30 +18,48 @@ from gods.mnemosyne.intent_builders import (
 from .models import RuntimeState
 
 
+def _strategy_envelope(agent, state: RuntimeState, *, node_name: str = ""):
+    env = state.get("__metis_envelope")
+    mode = resolve_refresh_mode(state if isinstance(state, dict) else {})
+    if mode == "pulse" and env is not None:
+        try:
+            mode = "node" if str((getattr(env, "policy", {}) or {}).get("refresh_mode", "pulse")) == "node" else "pulse"
+        except Exception:
+            mode = "pulse"
+    if env is None or mode == "node":
+        env = refresh_runtime_envelope(
+            agent,
+            state,
+            strategy=str(state.get("strategy", "react_graph")),
+            reason=f"before_node:{node_name or 'unknown'}",
+        )
+        env.policy = dict(env.policy or {})
+        env.policy["refresh_mode"] = mode
+    return env
+
+
 def build_context_node(agent, state: RuntimeState) -> RuntimeState:
+    env = _strategy_envelope(agent, state, node_name="build_context")
     inbox_hint = agent._build_inbox_context_hint()
-    req = ContextBuildRequest(
-        project_id=agent.project_id,
-        agent_id=agent.agent_id,
-        state=state,
+    llm_messages, _ = janus_service.build_llm_messages_from_envelope(
+        envelope=env,
         directives=agent._build_behavior_directives(),
         local_memory=agent._load_local_memory(),
         inbox_hint=inbox_hint,
-        phase_name=str(state.get("strategy", "react_graph")),
+        tools_desc=agent._render_tools_desc("llm_think"),
         phase_block="",
-        tools_desc=agent._render_tools_desc(),
     )
-    llm_messages, _ = janus_service.build_llm_messages(req)
     state["llm_messages_buffer"] = list(llm_messages)
     return state
 
 
 def llm_think_node(agent, state: RuntimeState) -> RuntimeState:
+    env = _strategy_envelope(agent, state, node_name="llm_think")
     llm_messages = list(state.get("llm_messages_buffer", []) or [])
     response = agent.brain.think_with_tools(
         llm_messages,
-        agent.get_tools(),
-        trace_meta=state.get("pulse_meta", {}) if isinstance(state, dict) else {},
+        agent.get_tools_for_node("llm_think"),
+        trace_meta=(env.resource_snapshot.runtime_meta or {}).get("pulse_meta", {}) if isinstance(state, dict) else {},
     )
     state.setdefault("messages", []).append(response)
     content_text = response.content or "[No textual response]"
@@ -49,7 +68,7 @@ def llm_think_node(agent, state: RuntimeState) -> RuntimeState:
             intent_from_llm_response(
                 project_id=agent.project_id,
                 agent_id=agent.agent_id,
-                phase=str(state.get("strategy", "react_graph")),
+                phase=str(env.strategy or state.get("strategy", "react_graph")),
                 content=content_text,
             )
         )
@@ -58,13 +77,14 @@ def llm_think_node(agent, state: RuntimeState) -> RuntimeState:
 
 
 def dispatch_tools_node(agent, state: RuntimeState) -> RuntimeState:
+    _ = _strategy_envelope(agent, state, node_name="dispatch_tools")
     calls = list(state.get("tool_calls", []) or [])
     results: list[str] = []
     for call in calls:
         tool_name = str(call.get("name", "") or "")
         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
         tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
-        obs = agent.execute_tool(tool_name, args)
+        obs = agent.execute_tool(tool_name, args, node_name="dispatch_tools")
         results.append(str(obs))
         state.setdefault("messages", []).append(
             ToolMessage(content=str(obs), tool_call_id=tool_call_id, name=tool_name)
@@ -98,6 +118,7 @@ def dispatch_tools_node(agent, state: RuntimeState) -> RuntimeState:
 
 
 def decide_next_node(agent, state: RuntimeState) -> RuntimeState:
+    _ = _strategy_envelope(agent, state, node_name="decide_next")
     step = str(state.get("next_step", "") or "")
     if step in {"finish", "escalated", "abstained", "continue"}:
         state["route"] = "done"

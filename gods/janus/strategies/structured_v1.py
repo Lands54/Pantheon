@@ -3,11 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from gods.mnemosyne import render_intent_for_llm_context
-from gods.janus.journal import list_observations, read_profile, read_task_state
-from gods.janus.models import ContextBuildRequest, ContextBuildResult
+from gods.janus.models import ContextBuildRequest, ContextBuildResult, TaskStateCard
 from gods.janus.strategy_base import ContextStrategy
-from gods.mnemosyne.facade import load_chronicle_for_context
 
 
 def _tok_len(text: str) -> int:
@@ -129,27 +126,39 @@ class StructuredV1ContextStrategy(ContextStrategy):
         obs_window = int(cfg.get("observation_window", 30))
         include_inbox_hints = bool(cfg.get("include_inbox_status_hints", True))
 
-        profile = read_profile(req.project_id, req.agent_id)
-        chronicle = load_chronicle_for_context(req.project_id, req.agent_id, fallback=req.local_memory or "")
-        task_state = read_task_state(req.project_id, req.agent_id, objective_fallback=str(req.state.get("context", "")))
+        materials = dict(req.context_materials or req.state.get("__context_materials", {}) or {})
+        if "triggers_rendered" not in materials:
+            materials["triggers_rendered"] = [
+                str(getattr(x, "fallback_text", "") or "").strip()
+                for x in list(req.state.get("triggers", []) or [])
+                if str(getattr(x, "fallback_text", "") or "").strip()
+            ]
+        if "mailbox_rendered" not in materials:
+            materials["mailbox_rendered"] = [
+                str(getattr(x, "fallback_text", "") or "").strip()
+                for x in list(req.state.get("mailbox", []) or [])
+                if str(getattr(x, "fallback_text", "") or "").strip()
+            ]
+        if "state_window_messages" not in materials:
+            materials["state_window_messages"] = list(req.state.get("messages", []) or [])
+        profile = str(materials.get("profile", "") or "")
+        chronicle = str(materials.get("chronicle", "") or req.local_memory or "")
+        ts = dict(materials.get("task_state", {}) or {})
+        task_state = TaskStateCard(
+            objective=str(ts.get("objective", str(req.state.get("context", "")))),
+            plan=list(ts.get("plan", []) or []),
+            progress=list(ts.get("progress", []) or []),
+            blockers=list(ts.get("blockers", []) or []),
+            next_actions=list(ts.get("next_actions", []) or []),
+        )
 
-        obs_rows = list_observations(req.project_id, req.agent_id, limit=max(obs_window * 3, 30))
+        obs_rows = list(materials.get("observations", []) or [])
         selected = _pick_observations(obs_rows, obs_window)
 
-        triggers = req.state.get("triggers", [])
-        trigger_text_lines = []
-        for t in triggers:
-            rendered = render_intent_for_llm_context(t)
-            if rendered:
-                trigger_text_lines.append(f"- {rendered}")
-        trigger_text = "\n".join(trigger_text_lines) if trigger_text_lines else "(no specific trigger events)"
+        trigger_lines = [f"- {str(x)}" for x in list(materials.get("triggers_rendered", []) or []) if str(x).strip()]
+        trigger_text = "\n".join(trigger_lines) if trigger_lines else "(no specific trigger events)"
 
-        mailbox_intents = req.state.get("mailbox", [])
-        mailbox_lines = []
-        for intent in mailbox_intents:
-            rendered = render_intent_for_llm_context(intent)
-            if rendered:
-                mailbox_lines.append(str(rendered))
+        mailbox_lines = [str(x) for x in list(materials.get("mailbox_rendered", []) or []) if str(x).strip()]
         mailbox_block = "\n".join(mailbox_lines) if mailbox_lines else "(no mailbox updates in this pulse)"
 
         task_block = _clip_by_tokens(_render_task_state(task_state), b_task)
@@ -159,7 +168,7 @@ class StructuredV1ContextStrategy(ContextStrategy):
 
 
         state_window_block, state_window_count, state_window_tokens = _render_state_window(
-            req.state.get("messages", []) or [],
+            list(materials.get("state_window_messages", []) or []),
             recent_limit=state_window_limit,
             token_budget=b_state_window,
         )

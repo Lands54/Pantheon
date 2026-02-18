@@ -15,6 +15,7 @@ class RuntimeState(TypedDict, total=False):
     abstained: list[str]
     context: str
     triggers: list[MemoryIntent]
+    # mailbox is unified message-domain context and includes inbox + outbox intents.
     mailbox: list[MemoryIntent]
     tool_calls: list[dict[str, Any]]
     tool_results: list[str]
@@ -24,3 +25,7 @@ class RuntimeState(TypedDict, total=False):
     llm_messages_buffer: list[Any]
     finalize_control: dict[str, Any]
     route: str
+    # Metis envelope is canonical strategy material source.
+    __metis_envelope: Any
+    __metis_refresh_mode: str
+    __metis_refresh_seq: int

@@ -1,4 +1,4 @@
-"""Runtime strategy registry."""
+"""Metis strategy graph registry."""
 from __future__ import annotations
 
 from typing import Callable
@@ -26,3 +26,4 @@ def get_strategy_builder(name: str) -> GraphBuilder:
 
 def list_strategies() -> list[str]:
     return sorted(_REGISTRY.keys())
+

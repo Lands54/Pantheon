@@ -48,6 +48,10 @@ _DEFAULT_LLM_CONTEXT_TEMPLATES: dict[str, str] = {
     "agent_phase_reason": "[PHASE:REASON]\nOrder: $phase_order\nConstraints: Planning only, do not call tools.\nAllowed Tools: $allowed_tools",
     "agent_phase_act": "[PHASE:ACT]\nOrder: $phase_order\nGoal: Execute concrete actions via tools.\nAllowed Tools: $allowed_tools",
     "agent_phase_observe": "[PHASE:OBSERVE]\nOrder: $phase_order\nGoal: Evaluate completion and finalize only when done.\nAllowed Tools: $allowed_tools",
+    "memory_inbox_section_summary": "[SUMMARY]\n$rows",
+    "memory_inbox_section_recent_read": "[RECENT READ]\n$rows",
+    "memory_inbox_section_recent_send": "[RECENT SEND]\n$rows",
+    "memory_inbox_section_inbox_unread": "[INBOX UNREAD]\n$rows",
     "memory_inbox_notice_contract_commit": "[SYSTEM NOTICE]\nEvent: Contract Committed\nContract ID: $title\nStatus: LIVE\nAction Required: Acknowledge and execute terms immediately.",
     "memory_inbox_notice_contract_fully_committed": "[SYSTEM NOTICE]\nEvent: Contract Fully Committed\nContract ID: $title\nStatus: FULLY COMMITTED\nInfo: All parties have agreed. Execution is mandatory.",
     "memory_tool_error": "[TOOL ERROR]\nTool: $tool_name\nStatus: Error\nDetails: $result_compact\nSuggestion: Check arguments and retry.",
@@ -129,6 +133,12 @@ def list_memory_templates(project_id: str, scope: TemplateScope) -> dict[str, st
     path = _scope_path(project_id, scope)
     raw = _read_json_obj(path)
     out: dict[str, str] = {}
+    for k, v in _scope_defaults(scope).items():
+        try:
+            key = _validate_key(str(k))
+            out[key] = _validate_body(str(v))
+        except Exception:
+            continue
     for k, v in raw.items():
         try:
             key = _validate_key(str(k))

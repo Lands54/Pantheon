@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from gods.config.models import ProjectConfig, SystemConfig
+from gods.identity import is_valid_agent_id
 
 logger = logging.getLogger("GodsConfig")
 
@@ -14,6 +16,9 @@ _ALLOWED_EXECUTORS = {"docker", "local"}
 _ALLOWED_DOCKER_NET = {"bridge_local_only", "none"}
 _ALLOWED_PULSE_INTERRUPT = {"after_action"}
 _ALLOWED_TOOL_HINTS = {"mail_event", "manual", "system", "timer"}
+_ALLOWED_METIS_REFRESH_MODE = {"pulse", "node"}
+_STRATEGY_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_PHASE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def _clamp_int(value: int, low: int, high: int) -> int:
@@ -41,7 +46,67 @@ def _require_allowed_str(raw: str, allowed: set[str], field: str, project_id: st
     )
 
 
+def _normalize_tool_policies(
+    raw: dict | None,
+    *,
+    project_id: str,
+    owner: str,
+    known_tools: set[str],
+) -> dict[str, dict[str, list[str]]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"invalid {owner}.tool_policies in project '{project_id}': must be object")
+    out: dict[str, dict[str, list[str]]] = {}
+    for strategy_name, phase_map in raw.items():
+        strategy = str(strategy_name or "").strip()
+        if not _STRATEGY_NAME_RE.match(strategy):
+            raise ValueError(
+                f"invalid {owner}.tool_policies strategy '{strategy}' in project '{project_id}': "
+                "must match ^[a-z][a-z0-9_]{0,63}$"
+            )
+        if not isinstance(phase_map, dict):
+            raise ValueError(
+                f"invalid {owner}.tool_policies.{strategy} in project '{project_id}': must be object"
+            )
+        phases: dict[str, list[str]] = {}
+        for phase_name, tools in phase_map.items():
+            phase = str(phase_name or "").strip()
+            if not _PHASE_NAME_RE.match(phase):
+                raise ValueError(
+                    f"invalid {owner}.tool_policies.{strategy} phase '{phase}' in project '{project_id}': "
+                    "must match ^[a-z][a-z0-9_]{0,63}$"
+                )
+            if not isinstance(tools, list):
+                raise ValueError(
+                    f"invalid {owner}.tool_policies.{strategy}.{phase} in project '{project_id}': "
+                    "must be array of tool names"
+                )
+            seen: set[str] = set()
+            normalized: list[str] = []
+            for item in tools:
+                tn = str(item or "").strip()
+                if not tn:
+                    continue
+                if tn not in known_tools:
+                    raise ValueError(
+                        f"invalid {owner}.tool_policies.{strategy}.{phase} tool '{tn}' in "
+                        f"project '{project_id}': unknown tool"
+                    )
+                if tn in seen:
+                    continue
+                seen.add(tn)
+                normalized.append(tn)
+            phases[phase] = normalized
+        out[strategy] = phases
+    return out
+
+
 def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectConfig:
+    from gods.tools import available_tool_names
+
+    known_tools = set(available_tool_names())
+
     proj.phase_strategy = _require_allowed_str(proj.phase_strategy, _ALLOWED_PHASE_STRATEGIES, "phase_strategy", project_id)
     proj.context_strategy = _fallback_str(
         proj.context_strategy,
@@ -99,8 +164,37 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.context_budget_state_window = _clamp_int(proj.context_budget_state_window, 200, 128000)
     proj.context_state_window_limit = _clamp_int(proj.context_state_window_limit, 1, 500)
     proj.context_observation_window = _clamp_int(proj.context_observation_window, 1, 500)
+    proj.metis_refresh_mode = _fallback_str(
+        proj.metis_refresh_mode,
+        _ALLOWED_METIS_REFRESH_MODE,
+        "pulse",
+        "metis_refresh_mode",
+        project_id,
+    )
 
     proj.tool_loop_max = _clamp_int(proj.tool_loop_max, 1, 64)
+    proj.tool_policies = _normalize_tool_policies(
+        proj.tool_policies,
+        project_id=project_id,
+        owner="project",
+        known_tools=known_tools,
+    )
+
+    # Strict agent id hygiene: avoid invalid folders/identities leaking into runtime.
+    normalized_active: list[str] = []
+    seen_active: set[str] = set()
+    for aid in list(proj.active_agents or []):
+        aa = str(aid or "").strip()
+        if not is_valid_agent_id(aa):
+            raise ValueError(
+                f"invalid active_agents item '{aa}' in project '{project_id}': "
+                "expected ^[a-z][a-z0-9_]{0,63}$ and not reserved human identity"
+            )
+        if aa in seen_active:
+            continue
+        seen_active.add(aa)
+        normalized_active.append(aa)
+    proj.active_agents = normalized_active
 
     proj.finalize_sleep_min_sec = _clamp_int(proj.finalize_sleep_min_sec, 5, 3600)
     proj.finalize_sleep_max_sec = _clamp_int(proj.finalize_sleep_max_sec, proj.finalize_sleep_min_sec, 86400)
@@ -111,7 +205,12 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     )
 
     proj.debug_trace_max_events = _clamp_int(proj.debug_trace_max_events, 10, 2000)
-    proj.llm_call_delay_sec = _clamp_int(proj.llm_call_delay_sec, 0, 60)
+    proj.llm_global_max_concurrency = _clamp_int(proj.llm_global_max_concurrency, 1, 256)
+    proj.llm_global_rate_per_minute = _clamp_int(proj.llm_global_rate_per_minute, 1, 200000)
+    proj.llm_project_max_concurrency = _clamp_int(proj.llm_project_max_concurrency, 1, 256)
+    proj.llm_project_rate_per_minute = _clamp_int(proj.llm_project_rate_per_minute, 1, 200000)
+    proj.llm_acquire_timeout_sec = _clamp_int(proj.llm_acquire_timeout_sec, 1, 300)
+    proj.llm_retry_interval_ms = _clamp_int(proj.llm_retry_interval_ms, 10, 5000)
 
     proj.command_max_parallel = _clamp_int(proj.command_max_parallel, 1, 64)
     proj.command_timeout_sec = _clamp_int(proj.command_timeout_sec, 1, 3600)
@@ -149,6 +248,11 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     }
 
     for aid, settings in list((proj.agent_settings or {}).items()):
+        if not is_valid_agent_id(aid):
+            raise ValueError(
+                f"invalid agent_settings key '{aid}' in project '{project_id}': "
+                "expected ^[a-z][a-z0-9_]{0,63}$ and not reserved human identity"
+            )
         if settings.context_strategy:
             settings.context_strategy = _fallback_str(
                 settings.context_strategy,
@@ -166,6 +270,20 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
             )
         if settings.context_token_budget_total is not None:
             settings.context_token_budget_total = _clamp_int(settings.context_token_budget_total, 4000, 256000)
+        if settings.metis_refresh_mode:
+            settings.metis_refresh_mode = _fallback_str(
+                settings.metis_refresh_mode,
+                _ALLOWED_METIS_REFRESH_MODE,
+                "pulse",
+                f"agent.{aid}.metis_refresh_mode",
+                project_id,
+            )
+        settings.tool_policies = _normalize_tool_policies(
+            settings.tool_policies,
+            project_id=project_id,
+            owner=f"agent.{aid}",
+            known_tools=known_tools,
+        )
 
     return proj
 

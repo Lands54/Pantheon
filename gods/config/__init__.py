@@ -7,6 +7,7 @@ from gods.config.runtime import (
     snapshot_runtime_config_payload,
     apply_runtime_config_payload,
 )
+from gods.config.registry_catalog import CONFIG_REGISTRY
 
 __all__ = [
     "CONFIG_FILE",
@@ -18,4 +19,5 @@ __all__ = [
     "get_available_agents",
     "snapshot_runtime_config_payload",
     "apply_runtime_config_payload",
+    "CONFIG_REGISTRY",
 ]

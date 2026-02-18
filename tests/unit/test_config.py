@@ -28,7 +28,6 @@ def test_project_config_defaults():
     assert config.phase_strategy == "react_graph"
     assert config.context_strategy == "structured_v1"
     assert config.context_token_budget_total == 32000
-    assert config.llm_call_delay_sec == 1
 
 
 def test_project_config_custom():

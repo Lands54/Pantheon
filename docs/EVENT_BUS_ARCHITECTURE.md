@@ -19,9 +19,14 @@
 ## 4. 域事件映射
 - Interaction: `interaction.message.sent/interaction.message.read/interaction.hermes.notice/interaction.detach.notice/interaction.agent.trigger`
 - Iris: `mail_event/mail_deliver_event/mail_ack_event`
-- Angelia: `timer_event/manual_event/system_event`
+- Angelia: `timer/manual/system`
 - Hermes: `hermes_protocol_invoked_event/hermes_job_updated_event/hermes_contract_*`
 - Runtime(Detach): `detach_submitted_event/detach_started_event/detach_stopping_event/detach_stopped_event/detach_failed_event/detach_reconciled_event/detach_lost_event`
+
+## 4.1 术语约定（避免混淆）
+- `inbox`: 当前 agent 收到的待处理消息。
+- `outbox`: 当前 agent 发出的消息回执视图。
+- `mailbox`: 统一语义容器，包含 `inbox + outbox` 上下文片段。
 
 ## 5. 约束
 - 旧 `/angelia/events*` 与 `/projects/{project_id}/detach/*` 已移除。

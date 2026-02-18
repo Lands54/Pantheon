@@ -48,7 +48,7 @@ def test_llm_trace_writer_persists_request_and_response():
         shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
 
 
-def test_think_with_tools_applies_configured_llm_delay(monkeypatch):
+def test_think_with_tools_no_longer_applies_configured_llm_delay(monkeypatch):
     project_id = "unit_brain_delay"
     agent_id = "tester"
     old_projects = runtime_config.projects.copy()
@@ -56,7 +56,6 @@ def test_think_with_tools_applies_configured_llm_delay(monkeypatch):
         name="delay",
         active_agents=[agent_id],
         agent_settings={agent_id: AgentModelConfig()},
-        llm_call_delay_sec=2,
     )
     old_key = runtime_config.openrouter_api_key
     runtime_config.openrouter_api_key = "test-key"
@@ -79,7 +78,7 @@ def test_think_with_tools_applies_configured_llm_delay(monkeypatch):
         response = brain.think_with_tools([HumanMessage(content="hi")], tools=[])
 
         assert response.content == "ok"
-        assert sleep_calls == [2.0]
+        assert sleep_calls == []
     finally:
         runtime_config.openrouter_api_key = old_key
         runtime_config.projects = old_projects

@@ -6,17 +6,6 @@ from typing import Any
 
 
 @dataclass
-class ObservationRecord:
-    project_id: str
-    agent_id: str
-    tool_name: str
-    args_summary: str
-    result_summary: str
-    status: str
-    timestamp: float
-
-
-@dataclass
 class TaskStateCard:
     objective: str
     plan: list[str] = field(default_factory=list)
@@ -36,6 +25,7 @@ class ContextBuildRequest:
     phase_block: str = ""
     phase_name: str = ""
     tools_desc: str = ""
+    context_materials: dict[str, Any] = field(default_factory=dict)
     context_cfg: dict[str, Any] = field(default_factory=dict)
 
 

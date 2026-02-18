@@ -37,14 +37,24 @@ _FORBIDDEN_BUSINESS_FIELDS = {
 
 def events_path(project_id: str) -> Path:
     p = runtime_dir(project_id)
-    p.mkdir(parents=True, exist_ok=True)
+    _ensure_dir(p)
     return p / "events.jsonl"
 
 
 def lock_path(project_id: str) -> Path:
     d = runtime_locks_dir(project_id)
-    d.mkdir(parents=True, exist_ok=True)
+    _ensure_dir(d)
     return d / "events.lock"
+
+
+def _ensure_dir(path: Path) -> None:
+    # Best-effort healing for rare teardown races where a file exists at directory path.
+    if path.exists() and not path.is_dir():
+        try:
+            path.unlink()
+        except Exception:
+            pass
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def _read_rows(path: Path) -> list[dict[str, Any]]:
@@ -71,18 +81,28 @@ def _write_rows(path: Path, rows: list[dict[str, Any]]):
 
 
 def _with_lock(project_id: str, mutator):
-    lp = lock_path(project_id)
-    lp.touch(exist_ok=True)
-    ep = events_path(project_id)
-    with open(lp, "r+", encoding="utf-8") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+    last_err: Exception | None = None
+    for _ in range(3):
         try:
-            rows = _read_rows(ep)
-            rows2, result = mutator(rows)
-            _write_rows(ep, rows2)
-            return result
-        finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            lp = lock_path(project_id)
+            lp.touch(exist_ok=True)
+            ep = events_path(project_id)
+            with open(lp, "r+", encoding="utf-8") as lf:
+                fcntl.flock(lf, fcntl.LOCK_EX)
+                try:
+                    rows = _read_rows(ep)
+                    rows2, result = mutator(rows)
+                    _write_rows(ep, rows2)
+                    return result
+                finally:
+                    fcntl.flock(lf, fcntl.LOCK_UN)
+        except (FileNotFoundError, FileExistsError, OSError) as e:
+            last_err = e
+            time.sleep(0.01)
+            continue
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("events lock failed unexpectedly")
 
 
 def append_event(record: EventRecord, dedupe_window_sec: int = 0) -> EventRecord:

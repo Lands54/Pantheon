@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,6 @@ from fastapi import HTTPException
 from gods.angelia import facade as angelia_facade
 from gods.config import ProjectConfig, runtime_config
 from gods.iris import facade as iris_facade
-from gods.janus import facade as janus_facade
 from gods.mnemosyne import facade as mnemosyne_facade
 from gods.mnemosyne import template_registry as mnemosyne_templates
 from gods.project import build_project_report, load_project_report
@@ -119,7 +119,18 @@ class ProjectService:
 
         proj_dir = Path("projects") / project_id
         if proj_dir.exists():
-            shutil.rmtree(proj_dir)
+            # Runtime/worker threads may still flush final files; retry briefly.
+            last_err: Exception | None = None
+            for _ in range(5):
+                try:
+                    shutil.rmtree(proj_dir)
+                    last_err = None
+                    break
+                except OSError as e:
+                    last_err = e
+                    time.sleep(0.05)
+            if last_err is not None and proj_dir.exists():
+                raise HTTPException(status_code=500, detail=f"failed to delete project directory: {last_err}")
         return {"status": "success"}
 
     def ensure_exists(self, project_id: str):
@@ -298,7 +309,7 @@ class ProjectService:
 
     def context_preview(self, project_id: str, agent_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        row = janus_facade.context_preview(project_id, agent_id)
+        row = mnemosyne_facade.latest_context_report(project_id, agent_id)
         return {
             "project_id": project_id,
             "agent_id": agent_id,
@@ -307,7 +318,7 @@ class ProjectService:
 
     def context_reports(self, project_id: str, agent_id: str, limit: int) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        rows = janus_facade.context_reports(project_id, agent_id, limit=max(1, min(limit, 500)))
+        rows = mnemosyne_facade.list_context_reports(project_id, agent_id, limit=max(1, min(limit, 500)))
         return {
             "project_id": project_id,
             "agent_id": agent_id,

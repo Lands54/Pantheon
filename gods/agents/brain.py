@@ -3,12 +3,44 @@ Gods Platform - Brain Module (Dynamic API Version)
 Manages LLM instances using runtime configuration.
 """
 import json
+import os
+import threading
 import time
 
 from gods.config import runtime_config
 from langchain_core.messages import AIMessage
+from gods.agents.llm_control import LLMControlAcquireTimeout, llm_control_plane
 from gods.mnemosyne.compaction import note_llm_token_io
 from gods.paths import runtime_debug_dir
+
+_LLM_IMPORT_LOCK = threading.Lock()
+_CHAT_OPENAI_CLS = None
+_CHAT_OPENAI_IMPORT_ERROR: Exception | None = None
+
+
+def prewarm_llm_runtime() -> tuple[bool, str]:
+    """
+    Try to load ChatOpenAI class in a single-threaded context.
+    Returns (ok, detail).
+    """
+    global _CHAT_OPENAI_CLS, _CHAT_OPENAI_IMPORT_ERROR
+    if _CHAT_OPENAI_CLS is not None:
+        return True, "already_loaded"
+    if _CHAT_OPENAI_IMPORT_ERROR is not None:
+        return False, str(_CHAT_OPENAI_IMPORT_ERROR)
+    with _LLM_IMPORT_LOCK:
+        if _CHAT_OPENAI_CLS is not None:
+            return True, "already_loaded"
+        if _CHAT_OPENAI_IMPORT_ERROR is not None:
+            return False, str(_CHAT_OPENAI_IMPORT_ERROR)
+        try:
+            from langchain_openai import ChatOpenAI as _ChatOpenAI
+
+            _CHAT_OPENAI_CLS = _ChatOpenAI
+            return True, "loaded"
+        except Exception as e:
+            _CHAT_OPENAI_IMPORT_ERROR = e
+            return False, str(e)
 
 
 class GodBrain:
@@ -42,20 +74,39 @@ class GodBrain:
         proj = getattr(runtime_config, "projects", {}).get(current_project)
         return bool(getattr(proj, "debug_llm_trace_enabled", True) if proj else True)
 
-    def _llm_call_delay_sec(self) -> float:
-        current_project = self.project_id or getattr(runtime_config, "current_project", "default")
-        proj = getattr(runtime_config, "projects", {}).get(current_project)
-        raw = getattr(proj, "llm_call_delay_sec", 1) if proj else 1
-        try:
-            delay = float(raw)
-        except Exception:
-            delay = 1.0
-        return max(0.0, min(delay, 60.0))
+    @staticmethod
+    def _llm_disabled_in_pytest() -> bool:
+        if not os.getenv("PYTEST_CURRENT_TEST"):
+            return False
+        if str(os.getenv("GODS_ENABLE_LLM_UNDER_PYTEST", "")).strip() == "1":
+            return False
+        if str(os.getenv("AGENT_BENCH_LIVE", "")).strip() == "1":
+            return False
+        if str(os.getenv("AGENT_BENCH_LIVE_STRICT", "")).strip() == "1":
+            return False
+        return True
 
-    def _sleep_before_llm_invoke(self):
-        delay = self._llm_call_delay_sec()
-        if delay > 0:
-            time.sleep(delay)
+    @staticmethod
+    def _resolve_chat_openai_class():
+        global _CHAT_OPENAI_CLS, _CHAT_OPENAI_IMPORT_ERROR
+        if _CHAT_OPENAI_CLS is not None:
+            return _CHAT_OPENAI_CLS
+        if _CHAT_OPENAI_IMPORT_ERROR is not None:
+            raise RuntimeError(f"ChatOpenAI import failed: {_CHAT_OPENAI_IMPORT_ERROR}")
+        with _LLM_IMPORT_LOCK:
+            if _CHAT_OPENAI_CLS is not None:
+                return _CHAT_OPENAI_CLS
+            if _CHAT_OPENAI_IMPORT_ERROR is not None:
+                raise RuntimeError(f"ChatOpenAI import failed: {_CHAT_OPENAI_IMPORT_ERROR}")
+            try:
+                # Delay import to avoid heavy optional deps at module import time.
+                from langchain_openai import ChatOpenAI as _ChatOpenAI
+
+                _CHAT_OPENAI_CLS = _ChatOpenAI
+                return _CHAT_OPENAI_CLS
+            except Exception as e:
+                _CHAT_OPENAI_IMPORT_ERROR = e
+                raise
 
     def _serialize_message(self, msg):
         """
@@ -151,8 +202,12 @@ class GodBrain:
         """
         Dynamically initializes the LangChain ChatOpenAI instance based on configuration.
         """
-        # Delay import to avoid heavy optional deps at module import time.
-        from langchain_openai import ChatOpenAI
+        if self._llm_disabled_in_pytest():
+            raise RuntimeError(
+                "LLM import is disabled under pytest by default. "
+                "Set GODS_ENABLE_LLM_UNDER_PYTEST=1 to force-enable."
+            )
+        ChatOpenAI = self._resolve_chat_openai_class()
         
         model = self._resolve_model()
         
@@ -178,7 +233,10 @@ class GodBrain:
         if not runtime_config.openrouter_api_key:
             return "❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings."
 
+        ticket = None
         try:
+            current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+            ticket = llm_control_plane.acquire(current_project)
             llm, model = self.get_llm()
             self._write_llm_trace(
                 mode="plain",
@@ -188,7 +246,6 @@ class GodBrain:
                 response_message=None,
                 trace_meta=trace_meta,
             )
-            self._sleep_before_llm_invoke()
             response = llm.invoke(context)
             if isinstance(response, AIMessage):
                 self._write_llm_trace(
@@ -200,11 +257,10 @@ class GodBrain:
                     trace_meta=trace_meta,
                 )
             return response.content
+        except LLMControlAcquireTimeout as e:
+            return f"Error in reasoning: {str(e)}"
         except Exception as e:
-            try:
-                _, model = self.get_llm()
-            except Exception:
-                model = self._resolve_model()
+            model = self._resolve_model()
             self._write_llm_trace(
                 mode="plain",
                 model=model,
@@ -215,6 +271,9 @@ class GodBrain:
                 trace_meta=trace_meta,
             )
             return f"Error in reasoning: {str(e)}"
+        finally:
+            if ticket is not None:
+                ticket.release()
 
     def think_with_tools(self, messages: list, tools: list, trace_meta: dict | None = None) -> AIMessage:
         """
@@ -223,7 +282,10 @@ class GodBrain:
         if not runtime_config.openrouter_api_key:
             return AIMessage(content="❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings.")
 
+        ticket = None
         try:
+            current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+            ticket = llm_control_plane.acquire(current_project)
             llm_raw, model = self.get_llm()
             self._write_llm_trace(
                 mode="tools",
@@ -235,7 +297,6 @@ class GodBrain:
                 trace_meta=trace_meta,
             )
             llm = llm_raw.bind_tools(tools)
-            self._sleep_before_llm_invoke()
             response = llm.invoke(messages)
             if isinstance(response, AIMessage):
                 self._write_llm_trace(
@@ -259,6 +320,8 @@ class GodBrain:
                 trace_meta=trace_meta,
             )
             return wrapped
+        except LLMControlAcquireTimeout as e:
+            return AIMessage(content=f"Error in reasoning: {str(e)}")
         except Exception as e:
             self._write_llm_trace(
                 mode="tools",
@@ -271,6 +334,9 @@ class GodBrain:
                 trace_meta=trace_meta,
             )
             return AIMessage(content=f"Error in reasoning: {str(e)}")
+        finally:
+            if ticket is not None:
+                ticket.release()
     
     def __repr__(self):
         """

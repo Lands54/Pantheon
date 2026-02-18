@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from gods.config.loader import load_system_config
-from gods.config.models import ProjectConfig
+from gods.config.models import ProjectConfig, SystemConfig
+from gods.identity import is_valid_agent_id
 
 
 runtime_config = load_system_config()
@@ -20,7 +21,14 @@ def get_available_agents(project_id: str | None = None) -> list[str]:
     agents_dir = Path("projects") / pid / "agents"
     if not agents_dir.exists():
         return []
-    return [d.name for d in agents_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    out: list[str] = []
+    for d in agents_dir.iterdir():
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        if not is_valid_agent_id(d.name):
+            continue
+        out.append(d.name)
+    return out
 
 
 def snapshot_runtime_config_payload() -> dict[str, Any]:
@@ -35,14 +43,22 @@ def snapshot_runtime_config_payload() -> dict[str, Any]:
 
 
 def apply_runtime_config_payload(data: dict[str, Any]) -> None:
+    # Build a candidate config first to keep runtime_config immutable on save failure.
+    candidate = SystemConfig(**runtime_config.model_dump())
     if "openrouter_api_key" in data:
         incoming = str(data["openrouter_api_key"] or "")
         if "*" not in incoming:
-            runtime_config.openrouter_api_key = incoming
+            candidate.openrouter_api_key = incoming
     if "current_project" in data:
-        runtime_config.current_project = str(data["current_project"])
+        candidate.current_project = str(data["current_project"])
     if "projects" in data:
         for pid, pdata in data["projects"].items():
-            runtime_config.projects[str(pid)] = ProjectConfig(**pdata)
+            candidate.projects[str(pid)] = ProjectConfig(**pdata)
 
-    runtime_config.save()
+    # Persist candidate (strict normalize happens in save path).
+    candidate.save()
+
+    # Commit in-memory singleton only after successful save.
+    runtime_config.openrouter_api_key = candidate.openrouter_api_key
+    runtime_config.current_project = candidate.current_project
+    runtime_config.projects = candidate.projects

@@ -1,4 +1,4 @@
-"""Persistent cross-pulse state window store."""
+"""Persistent cross-pulse state window store (Mnemosyne-owned)."""
 from __future__ import annotations
 
 import json
@@ -48,3 +48,4 @@ def save_state_window(project_id: str, agent_id: str, messages: list[Any]):
     }
     p = _state_window_path(project_id, agent_id)
     p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+

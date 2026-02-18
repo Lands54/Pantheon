@@ -26,6 +26,11 @@ class AgentModelConfig(BaseModel):
     # Optional agent-level context strategy overrides (fallback to project defaults when None).
     context_strategy: Optional[str] = None
     context_token_budget_total: Optional[int] = None
+    metis_refresh_mode: Optional[str] = None
+    # Strategy-level phase tool policies.
+    # Key: strategy (react_graph/freeform/...), value: {phase: [tool_name,...]}.
+    # "global" is a reserved phase for single-phase strategies.
+    tool_policies: Dict[str, Dict[str, List[str]]] = Field(default_factory=dict)
 
 
 class ProjectConfig(BaseModel):
@@ -74,8 +79,11 @@ class ProjectConfig(BaseModel):
     context_observation_window: int = 30
     context_include_inbox_status_hints: bool = True
     context_write_build_report: bool = True
+    metis_refresh_mode: str = "pulse"
 
     tool_loop_max: int = 8
+    # Project-level strategy phase tool policies.
+    tool_policies: Dict[str, Dict[str, List[str]]] = Field(default_factory=dict)
 
     finalize_quiescent_enabled: bool = True
     finalize_sleep_min_sec: int = 15
@@ -88,7 +96,13 @@ class ProjectConfig(BaseModel):
     debug_trace_max_events: int = 200
     debug_trace_full_content: bool = True
     debug_llm_trace_enabled: bool = True
-    llm_call_delay_sec: int = 1
+    llm_control_enabled: bool = True
+    llm_global_max_concurrency: int = 8
+    llm_global_rate_per_minute: int = 120
+    llm_project_max_concurrency: int = 4
+    llm_project_rate_per_minute: int = 60
+    llm_acquire_timeout_sec: int = 20
+    llm_retry_interval_ms: int = 100
 
     command_max_parallel: int = 2
     command_timeout_sec: int = 60

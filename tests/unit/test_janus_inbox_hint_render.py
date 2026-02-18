@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 
 from gods.iris.facade import enqueue_message, fetch_inbox_context
-from gods.janus.facade import inbox_digest_path
+from gods.mnemosyne.facade import inbox_digest_path
 
 
 def test_inbox_context_contains_handled_hint_and_writes_digest():
