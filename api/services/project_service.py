@@ -193,7 +193,14 @@ class ProjectService:
         runtime_config.save()
         try:
             for aid in proj.active_agents:
-                angelia_facade.wake_agent(project_id, aid)
+                angelia_facade.enqueue_event(
+                    project_id=project_id,
+                    agent_id=aid,
+                    event_type="system",
+                    payload={"agent_id": aid, "reason": "project_started"},
+                    priority=angelia_facade.get_priority_weights(project_id).get("system", 60),
+                    dedupe_key=f"project_started:{aid}",
+                )
         except Exception:
             pass
         return {

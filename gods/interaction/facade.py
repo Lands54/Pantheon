@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 from gods import events as events_bus
-from gods.angelia import facade as angelia_facade
 from gods.interaction.contracts import (
     EVENT_DETACH_NOTICE,
     EVENT_HERMES_NOTICE,
@@ -12,15 +11,6 @@ from gods.interaction.contracts import (
     EVENT_MESSAGE_SENT,
 )
 from gods.interaction.handler import register_handlers
-
-
-def _wake(project_id: str, agent_id: str) -> bool:
-    try:
-        angelia_facade.wake_agent(project_id, agent_id)
-        return True
-    except Exception:
-        return False
-
 
 def _dispatch_inline(record: events_bus.EventRecord) -> tuple[bool, dict[str, Any]]:
     register_handlers()
@@ -87,14 +77,12 @@ def submit_message_event(
     )
     rec = events_bus.append_event(rec)
     ok, result = _dispatch_inline(rec)
-    wake_sent = _wake(project_id, payload["agent_id"]) if (not ok) and bool(trigger_pulse) and payload["agent_id"] else False
     return {
         "event_id": rec.event_id,
         "event_type": rec.event_type,
         "state": ("done" if ok else rec.state.value),
         "project_id": project_id,
         "agent_id": payload["agent_id"],
-        "wakeup_sent": bool(wake_sent),
         "meta": {**payload, **result},
     }
 
@@ -129,7 +117,6 @@ def submit_read_event(
         "state": "done",
         "project_id": project_id,
         "agent_id": payload["agent_id"],
-        "wakeup_sent": False,
         "meta": payload,
     }
 
@@ -192,4 +179,3 @@ def submit_detach_notice(
         event_type=EVENT_DETACH_NOTICE,
         meta={"source": "detach"},
     )
-

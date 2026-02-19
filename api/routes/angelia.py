@@ -1,16 +1,12 @@
-"""Angelia event/wakeup API routes."""
+"""Angelia event API routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from api.services import angelia_service
 
 router = APIRouter(prefix="/angelia", tags=["angelia"])
-
-
-class WakeAgentRequest(BaseModel):
-    project_id: str | None = None
 
 
 class TickTimerRequest(BaseModel):
@@ -20,13 +16,6 @@ class TickTimerRequest(BaseModel):
 @router.get("/agents/status")
 async def agents_status(project_id: str | None = None):
     return angelia_service.agents_status(project_id=project_id)
-
-
-@router.post("/agents/{agent_id}/wake")
-async def wake_agent(agent_id: str, req: WakeAgentRequest):
-    if not str(agent_id or "").strip():
-        raise HTTPException(status_code=400, detail="agent_id is required")
-    return angelia_service.wake_agent(agent_id=agent_id, project_id=req.project_id)
 
 
 @router.post("/timer/tick")

@@ -64,10 +64,6 @@ def list_agent_status(project_id: str, active_agents: list[str]) -> list[dict[st
     return angelia_supervisor.list_agent_status(project_id, active_agents)
 
 
-def wake_agent(project_id: str, agent_id: str) -> dict[str, Any]:
-    return angelia_supervisor.wake_agent(project_id, agent_id)
-
-
 def tick_timer_once(project_id: str) -> dict[str, Any]:
     return angelia_supervisor.tick_timer_once(project_id)
 
@@ -97,7 +93,6 @@ __all__ = [
     "list_events",
     "retry_event",
     "list_agent_status",
-    "wake_agent",
     "tick_timer_once",
     "metrics_snapshot",
     "start_supervisor",

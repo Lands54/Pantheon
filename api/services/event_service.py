@@ -111,7 +111,6 @@ class EventService:
                         "state": "queued",
                         "project_id": pid,
                         "agent_id": "",
-                        "wakeup_sent": bool(sent),
                         "meta": {"sent_targets": sent},
                     }
             if event_type == EVENT_DETACH_NOTICE:
@@ -177,7 +176,6 @@ class EventService:
                 "event_id": row.get("event_id", ""),
                 "state": row.get("state", "queued"),
                 "agent_id": agent_id,
-                "wakeup_sent": True,
                 "meta": row,
             }
 
@@ -210,7 +208,6 @@ class EventService:
                 "event_id": rec.event_id,
                 "state": "done",
                 "agent_id": agent_id,
-                "wakeup_sent": False,
                 "meta": row,
             }
 
@@ -227,13 +224,6 @@ class EventService:
         )
         rec = events_bus.append_event(rec)
         aid = str((payload or {}).get("agent_id", "")).strip()
-        woke = False
-        if domain in {"iris", "angelia"} and aid:
-            try:
-                angelia_facade.wake_agent(pid, aid)
-                woke = True
-            except Exception:
-                woke = False
         return {
             "project_id": pid,
             "domain": domain,
@@ -241,7 +231,6 @@ class EventService:
             "event_id": rec.event_id,
             "state": rec.state.value,
             "agent_id": aid,
-            "wakeup_sent": woke,
             "meta": {"queued_at": rec.created_at},
         }
 

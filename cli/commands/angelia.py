@@ -56,14 +56,6 @@ def cmd_angelia(args):
         res = requests.get(f"{base}/angelia/agents/status", params={"project_id": pid}, timeout=10)
         print(json.dumps(res.json(), ensure_ascii=False, indent=2))
 
-    elif args.subcommand == "wake":
-        res = requests.post(
-            f"{base}/angelia/agents/{args.agent}/wake",
-            json={"project_id": pid},
-            timeout=10,
-        )
-        print(json.dumps(res.json(), ensure_ascii=False, indent=2))
-
     elif args.subcommand == "retry":
         res = requests.post(
             f"{base}/events/{args.event_id}/retry",

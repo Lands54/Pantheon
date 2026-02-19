@@ -137,7 +137,6 @@ def send_message(
             f"title={title}, "
             f"event_id={queued.get('event_id', '')}, "
             f"attachments_count={len(attachment_ids)}, "
-            f"wakeup_sent={str(bool(queued.get('wakeup_sent', False))).lower()}, "
             "initial_state=queued(interaction)"
         )
     except Exception as e:

@@ -1,7 +1,6 @@
 """Iris service orchestration for unified mail-event delivery."""
 from __future__ import annotations
 
-from gods.angelia import facade as angelia_facade
 from gods.iris.models import MailEventState
 from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
 from gods.iris.outbox_store import create_receipt, list_receipts, update_status_by_message_id
@@ -98,38 +97,12 @@ def enqueue_message(
             attachments_count=len(list(event.attachments or [])),
         )
     )
-    woke = False
-    if trigger_pulse:
-        try:
-            angelia_facade.wake_agent(project_id, str(agent_id or "").strip())
-            woke = True
-        except Exception as e:
-            failed_rows = update_status_by_message_id(
-                project_id=project_id,
-                message_id=event.event_id,
-                status=OutboxReceiptStatus.FAILED,
-                error_message=str(e),
-            )
-            for item in failed_rows:
-                record_intent(
-                    intent_from_outbox_status(
-                        project_id=project_id,
-                        agent_id=item.from_agent_id,
-                        to_agent_id=item.to_agent_id,
-                        title=item.title,
-                        message_id=item.message_id,
-                        status=item.status.value,
-                        error_message=item.error_message,
-                    )
-                )
-            raise
     return {
         "mail_event_id": event.event_id,
         "title": title,
         "outbox_receipt_id": receipt.receipt_id,
         "outbox_status": receipt.status.value,
         "attachments_count": len(list(event.attachments or [])),
-        "wakeup_sent": bool(woke),
     }
 
 

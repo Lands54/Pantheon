@@ -361,7 +361,7 @@ def main():
     p_inbox_outbox.add_argument("--limit", type=int, default=50)
 
     # angelia event loop operations
-    p_ang = subparsers.add_parser("angelia", help="Angelia event queue and wakeup operations")
+    p_ang = subparsers.add_parser("angelia", help="Angelia event queue operations")
     ang_sub = p_ang.add_subparsers(dest="subcommand")
     p_ang_enqueue = ang_sub.add_parser("enqueue", help="Enqueue one event")
     p_ang_enqueue.add_argument("agent")
@@ -375,8 +375,6 @@ def main():
     p_ang_events.add_argument("--type", default="")
     p_ang_events.add_argument("--limit", type=int, default=50)
     ang_sub.add_parser("agents", help="Show agent runtime statuses")
-    p_ang_wake = ang_sub.add_parser("wake", help="Wake one agent")
-    p_ang_wake.add_argument("agent")
     p_ang_retry = ang_sub.add_parser("retry", help="Retry dead/failed event")
     p_ang_retry.add_argument("event_id")
     ang_sub.add_parser("timer-tick", help="Run one timer injection pass")
