@@ -29,17 +29,20 @@ export function AppStoreProvider({ children }) {
   }
 
   const switchProject = async (projectId) => {
+    if (!projectId || projectId === 'null' || projectId === 'undefined') return
     const next = { ...config, current_project: projectId }
     await saveConfig(next)
     await refreshConfig()
   }
 
   const createAndSwitchProject = async (projectId) => {
+    if (!projectId || projectId === 'null' || projectId === 'undefined') return
     await createProject(projectId)
     await switchProject(projectId)
   }
 
   const setProjectRunning = async (projectId, running) => {
+    if (!projectId || projectId === 'null' || projectId === 'undefined') return
     if (running) await startProject(projectId)
     else await stopProject(projectId)
     await refreshConfig()

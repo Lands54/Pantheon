@@ -15,6 +15,7 @@ export default defineConfig({
       '/tool-gateway': 'http://localhost:8000',
       '/mnemosyne': 'http://localhost:8000',
       '/angelia': 'http://localhost:8000',
+      '/hestia': 'http://localhost:8000',
       '/oracle': 'http://localhost:8000',
       '/chat': 'http://localhost:8000',
     }

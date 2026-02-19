@@ -57,6 +57,10 @@ export function MemoryPolicyPage({ projectId }) {
       runtime_log_template_key: String(rule.runtime_log_template_key || ''),
     }
     setRuleDraft(nextDraft)
+    if (!selectedIntentKey || !projectId) {
+      setVarsInfo({ guaranteed_vars: [], optional_vars: [], observed_vars: [] })
+      return
+    }
     getTemplateVars(projectId, selectedIntentKey || '').then((d) => {
       setVarsInfo({
         guaranteed_vars: d.guaranteed_vars || [],

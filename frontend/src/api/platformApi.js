@@ -143,3 +143,16 @@ export function updateMemoryPolicyRule(projectId, intentKey, patch) {
 export function getTemplateVars(projectId, intentKey) {
   return apiGet(`/mnemosyne/template-vars${qp({ project_id: projectId, intent_key: intentKey })}`)
 }
+
+export function getSocialGraph(projectId) {
+  return apiGet(`/hestia/graph${qp({ project_id: projectId })}`)
+}
+
+export function updateSocialEdge(projectId, fromId, toId, allowed) {
+  return apiPost(`/hestia/edge`, {
+    project_id: projectId,
+    from_id: fromId,
+    to_id: toId,
+    allowed
+  })
+}

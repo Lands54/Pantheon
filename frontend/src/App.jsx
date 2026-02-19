@@ -5,6 +5,7 @@ import { EventsPage } from './pages/EventsPage'
 import { MessageCenterPage } from './pages/MessageCenterPage'
 import { AgentDetailPage } from './pages/AgentDetailPage'
 import { ProjectControlPage } from './pages/ProjectControlPage'
+import { AgentGalaxyPage } from './pages/AgentGalaxyPage'
 import { MemoryPolicyPage } from './pages/MemoryPolicyPage'
 import { ConfigCenterPage } from './pages/ConfigCenterPage'
 import { ToolPolicyPage } from './pages/ToolPolicyPage'
@@ -37,7 +38,7 @@ function AppInner() {
   const isRunning = !!currentProjectConfig.simulation_enabled
 
   useEffect(() => {
-    refreshConfig().catch(() => {})
+    refreshConfig().catch(() => { })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -87,6 +88,8 @@ function AppInner() {
         )
       case 'agentDetail':
         return <AgentDetailPage projectId={currentProject} agentId={selectedAgentId} />
+      case 'galaxy':
+        return <AgentGalaxyPage projectId={currentProject} config={config} onSaveConfig={updateConfig} />
       case 'projectControl':
         return (
           <ProjectControlPage
