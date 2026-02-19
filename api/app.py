@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import agents, angelia, config, events, hermes, mnemosyne, projects, tool_gateway
+from api.routes import agents, angelia, config, events, hermes, hestia, mnemosyne, projects, tool_gateway
 from api.services import simulation_service
 from gods.config import runtime_config
 from gods.events.migrate import assert_no_legacy_files_all_projects
@@ -18,6 +18,7 @@ from gods.interaction import register_handlers as register_interaction_handlers
 from gods.agents.brain import prewarm_llm_runtime
 from gods.mnemosyne import ensure_memory_policy, validate_memory_policy
 from gods.runtime.detach import startup_mark_lost_all_projects
+from gods.angelia import facade as angelia_facade
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GodsServer")
@@ -28,6 +29,7 @@ app.include_router(config.router)
 app.include_router(projects.router)
 app.include_router(agents.router)
 app.include_router(tool_gateway.router)
+app.include_router(hestia.router)
 app.include_router(hermes.router)
 app.include_router(mnemosyne.router)
 app.include_router(angelia.router)
@@ -39,6 +41,7 @@ async def startup_event():
     # Safety-first startup: pause worlds first, then start scheduler loop.
     changed = simulation_service.pause_all_projects_on_startup()
     register_interaction_handlers()
+    angelia_facade.install_event_enqueue_wakeup_bridge()
     ok, detail = prewarm_llm_runtime()
     if ok:
         logger.info(f"LLM runtime prewarm: {detail}")

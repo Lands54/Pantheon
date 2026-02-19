@@ -6,6 +6,7 @@ import json
 from langchain_core.tools import tool
 
 from gods.angelia import facade as angelia_facade
+from gods.hestia import facade as hestia_facade
 from gods.identity import is_valid_agent_id
 from gods.interaction import facade as interaction_facade
 from gods.interaction.contracts import EVENT_MESSAGE_SENT
@@ -108,6 +109,14 @@ def send_message(
                 )
             attachment_ids.append(aid)
         attachment_ids = list(dict.fromkeys(attachment_ids))
+        if not hestia_facade.can_message(project_id=project_id, from_id=caller_id, to_id=to_id):
+            return format_comm_error(
+                "Message Blocked",
+                f"social graph denies route {caller_id} -> {to_id}.",
+                "Use Hestia API/CLI to update adjacency matrix before sending.",
+                caller_id,
+                project_id,
+            )
 
         weights = angelia_facade.get_priority_weights(project_id)
         trigger = angelia_facade.is_mail_event_wakeup_enabled(project_id)
@@ -216,10 +225,14 @@ def list_agents(caller_id: str, project_id: str = "default") -> str:
         if not agents_root.exists():
             return "No agents found in this project."
 
+        visible = set(hestia_facade.list_reachable_agents(project_id=project_id, caller_id=caller_id))
+        restrict_by_graph = bool(is_valid_agent_id(caller_id))
         results = []
         for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
             agent_id = agent_dir.name
             if not is_valid_agent_id(agent_id):
+                continue
+            if restrict_by_graph and agent_id not in visible:
                 continue
             md_path = mnemosyne_dir(project_id) / "agent_profiles" / f"{agent_id}.md"
             role = "No role summary."
@@ -244,6 +257,10 @@ def list_agents(caller_id: str, project_id: str = "default") -> str:
                                 break
             results.append(f"- {agent_id}: {role}")
 
+        if not results:
+            if restrict_by_graph:
+                return "No reachable agents in Hestia social graph."
+            return "No agents found in this project."
         return "\n".join(results)
     except Exception as e:
         return format_comm_error(

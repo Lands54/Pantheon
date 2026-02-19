@@ -1,7 +1,7 @@
 """Iris service orchestration for unified mail-event delivery."""
 from __future__ import annotations
 
-from gods import events as events_bus
+from gods.angelia import facade as angelia_facade
 from gods.iris.models import MailEventState
 from gods.iris.outbox_models import OutboxReceipt, OutboxReceiptStatus
 from gods.iris.outbox_store import create_receipt, list_receipts, update_status_by_message_id
@@ -21,30 +21,6 @@ from gods.mnemosyne.facade import (
     intent_from_outbox_status,
     record_inbox_digest,
 )
-
-EVENT_AGENT_TRIGGER = "interaction.agent.trigger"
-
-
-def _request_agent_trigger(
-    *,
-    project_id: str,
-    agent_id: str,
-    priority: int,
-    reason: str,
-    dedupe_key: str,
-):
-    rec = events_bus.EventRecord.create(
-        project_id=project_id,
-        domain="interaction",
-        event_type=EVENT_AGENT_TRIGGER,
-        priority=int(priority),
-        payload={"agent_id": str(agent_id or "").strip(), "reason": str(reason or "mail_event")},
-        dedupe_key=str(dedupe_key or ""),
-        max_attempts=3,
-        meta={"source": "iris"},
-    )
-    events_bus.append_event(rec, dedupe_window_sec=1)
-
 
 def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
     mt = str(msg_type or "").strip().lower()
@@ -125,13 +101,7 @@ def enqueue_message(
     woke = False
     if trigger_pulse:
         try:
-            _request_agent_trigger(
-                project_id=project_id,
-                agent_id=agent_id,
-                priority=int(pulse_priority),
-                reason="mail_event",
-                dedupe_key=f"iris_mail_trigger:{agent_id}:{event.event_id}",
-            )
+            angelia_facade.wake_agent(project_id, str(agent_id or "").strip())
             woke = True
         except Exception as e:
             failed_rows = update_status_by_message_id(

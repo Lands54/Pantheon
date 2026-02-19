@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
+from gods.hestia import facade as hestia_facade
 from gods.interaction import facade as interaction_facade
 from gods.mnemosyne import facade as mnemosyne_facade
 from gods.tools import facade as tools_facade
@@ -81,6 +82,8 @@ class ToolGatewayService:
             raise HTTPException(status_code=404, detail=f"Target agent '{to_id}' not found in '{pid}'")
         if not str(title or "").strip():
             raise HTTPException(status_code=400, detail="title is required")
+        if not hestia_facade.can_message(project_id=pid, from_id=from_id, to_id=to_id):
+            raise HTTPException(status_code=403, detail=f"social graph denies route {from_id} -> {to_id}")
         attachment_ids = [str(x).strip() for x in list(attachments or []) if str(x).strip()]
         for aid in attachment_ids:
             if not mnemosyne_facade.is_valid_artifact_id(aid):

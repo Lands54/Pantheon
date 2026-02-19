@@ -8,7 +8,6 @@ from gods.interaction.contracts import (
     INTERACTION_EVENT_TYPES,
 )
 from gods.interaction.facade import (
-    submit_agent_trigger,
     submit_detach_notice,
     submit_hermes_notice,
     submit_message_event,
@@ -27,7 +26,5 @@ __all__ = [
     "submit_read_event",
     "submit_hermes_notice",
     "submit_detach_notice",
-    "submit_agent_trigger",
     "register_handlers",
 ]
-

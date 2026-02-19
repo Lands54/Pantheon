@@ -6,7 +6,6 @@ from typing import Any
 from gods import events as events_bus
 from gods.angelia import facade as angelia_facade
 from gods.interaction.contracts import (
-    EVENT_AGENT_TRIGGER,
     EVENT_DETACH_NOTICE,
     EVENT_HERMES_NOTICE,
     EVENT_MESSAGE_READ,
@@ -194,33 +193,3 @@ def submit_detach_notice(
         meta={"source": "detach"},
     )
 
-
-def submit_agent_trigger(
-    *,
-    project_id: str,
-    agent_id: str,
-    reason: str,
-    priority: int = 70,
-    dedupe_key: str = "",
-) -> dict[str, Any]:
-    rec = events_bus.EventRecord.create(
-        project_id=project_id,
-        domain="interaction",
-        event_type=EVENT_AGENT_TRIGGER,
-        priority=int(priority),
-        payload={"agent_id": str(agent_id or "").strip(), "reason": str(reason or "interaction_trigger")},
-        dedupe_key=str(dedupe_key or ""),
-        max_attempts=3,
-        meta={"source": "interaction_facade"},
-    )
-    rec = events_bus.append_event(rec)
-    wake_sent = _wake(project_id, str(agent_id or "").strip())
-    return {
-        "event_id": rec.event_id,
-        "event_type": rec.event_type,
-        "state": rec.state.value,
-        "project_id": project_id,
-        "agent_id": str(agent_id or "").strip(),
-        "wakeup_sent": bool(wake_sent),
-        "meta": rec.payload,
-    }

@@ -5,6 +5,7 @@ from api.services.agent_service import agent_service
 from api.services.angelia_service import angelia_service
 from api.services.event_service import event_service
 from api.services.hermes_service import hermes_service
+from api.services.hestia_service import hestia_service
 from api.services.mnemosyne_service import mnemosyne_service
 from api.services.project_service import project_service
 from api.services.simulation_service import simulation_service
@@ -16,6 +17,7 @@ __all__ = [
     "angelia_service",
     "event_service",
     "hermes_service",
+    "hestia_service",
     "mnemosyne_service",
     "project_service",
     "simulation_service",

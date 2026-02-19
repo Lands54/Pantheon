@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from gods.events.models import EventRecord, EventState
+from gods.events.enqueue_hooks import dispatch_enqueue_hooks
 from gods.paths import runtime_dir, runtime_locks_dir
 
 _ALLOWED_TRANSITIONS: dict[EventState, set[EventState]] = {
@@ -132,7 +133,9 @@ def append_event(record: EventRecord, dedupe_window_sec: int = 0) -> EventRecord
         rows.append(record.to_dict())
         return rows, record
 
-    return _with_lock(record.project_id, _mut)
+    out = _with_lock(record.project_id, _mut)
+    dispatch_enqueue_hooks(out)
+    return out
 
 
 def list_events(

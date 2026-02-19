@@ -47,11 +47,32 @@ def timer_enabled(project_id: str) -> bool:
 
 def cooldown_preempt_types(project_id: str) -> set[str]:
     proj = _project(project_id)
-    raw = getattr(proj, "angelia_cooldown_preempt_types", ["mail_event", "manual"]) if proj else ["mail_event", "manual"]
+    raw = (
+        getattr(
+            proj,
+            "angelia_cooldown_preempt_types",
+            ["mail_event", "manual", "detach_failed_event", "detach_lost_event"],
+        )
+        if proj
+        else ["mail_event", "manual", "detach_failed_event", "detach_lost_event"]
+    )
     out = {str(x).strip() for x in (raw or []) if str(x).strip()}
     if not out:
-        out = {"mail_event", "manual"}
+        out = {"mail_event", "manual", "detach_failed_event", "detach_lost_event"}
     return out
+
+
+def force_pick_after_sec(project_id: str) -> int:
+    """
+    Anti-starvation SLA:
+    if one queued event waits too long, allow it to pass cooldown gate.
+    """
+    proj = _project(project_id)
+    min_interval = int(getattr(proj, "simulation_interval_min", 10) if proj else 10)
+    max_interval = int(getattr(proj, "simulation_interval_max", 40) if proj else 40)
+    # Mature but simple heuristic: ~3 cycles or 30s minimum.
+    v = max(30, max(min_interval * 3, max_interval * 3))
+    return min(v, 600)
 
 
 def priority_weights(project_id: str) -> dict[str, int]:

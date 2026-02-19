@@ -132,6 +132,7 @@ def pick_next_event(
     now: float,
     cooldown_until: float,
     preempt_types: set[str],
+    force_after_sec: float = 0.0,
 ) -> AngeliaEvent | None:
     rows = events_bus.list_events(
         project_id=project_id,
@@ -142,7 +143,9 @@ def pick_next_event(
     cand = None
     for row in rows:
         if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
-            continue
+            waited = float(now) - float(getattr(row, "created_at", 0.0) or 0.0)
+            if waited < float(force_after_sec or 0.0):
+                continue
         cand = row
         break
     if cand is None:
@@ -163,6 +166,7 @@ def pick_batch_events(
     cooldown_until: float,
     preempt_types: set[str],
     limit: int = 10,
+    force_after_sec: float = 0.0,
 ) -> list[AngeliaEvent]:
     rows = events_bus.list_events(
         project_id=project_id,
@@ -177,7 +181,9 @@ def pick_batch_events(
     
     for row in rows:
         if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
-            continue
+            waited = float(now) - float(getattr(row, "created_at", 0.0) or 0.0)
+            if waited < float(force_after_sec or 0.0):
+                continue
         
         ok = events_bus.transition_state(project_id, row.event_id, events_bus.EventState.PICKED)
         if ok:

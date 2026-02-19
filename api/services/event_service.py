@@ -83,16 +83,9 @@ class EventService:
                     dedupe_key=dedupe_key,
                 )
             if event_type == EVENT_AGENT_TRIGGER:
-                agent_id = str(payload.get("agent_id", "")).strip()
-                reason = str(payload.get("reason", "interaction_trigger")).strip()
-                if not agent_id:
-                    raise HTTPException(status_code=400, detail="interaction.agent.trigger requires payload.agent_id")
-                return interaction_facade.submit_agent_trigger(
-                    project_id=pid,
-                    agent_id=agent_id,
-                    reason=reason,
-                    priority=pri,
-                    dedupe_key=dedupe_key,
+                raise HTTPException(
+                    status_code=410,
+                    detail="interaction.agent.trigger is restricted; use angelia timer/manual/system events",
                 )
             if event_type == EVENT_HERMES_NOTICE:
                 targets = [str(x).strip() for x in (payload.get("targets", []) or []) if str(x).strip()]

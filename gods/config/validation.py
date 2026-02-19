@@ -16,6 +16,14 @@ _ALLOWED_EXECUTORS = {"docker", "local"}
 _ALLOWED_DOCKER_NET = {"bridge_local_only", "none"}
 _ALLOWED_PULSE_INTERRUPT = {"after_action"}
 _ALLOWED_TOOL_HINTS = {"mail_event", "manual", "system", "timer"}
+_ALLOWED_ANGELIA_PREEMPT_TYPES = {
+    "mail_event",
+    "manual",
+    "system",
+    "timer",
+    "detach_failed_event",
+    "detach_lost_event",
+}
 _ALLOWED_METIS_REFRESH_MODE = {"pulse", "node"}
 _STRATEGY_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PHASE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -149,8 +157,17 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.angelia_processing_timeout_sec = _clamp_int(proj.angelia_processing_timeout_sec, 5, 3600)
     proj.angelia_timer_idle_sec = _clamp_int(proj.angelia_timer_idle_sec, 5, 3600)
     proj.angelia_dedupe_window_sec = _clamp_int(proj.angelia_dedupe_window_sec, 0, 300)
-    normalized_types = [str(x).strip() for x in proj.angelia_cooldown_preempt_types if str(x).strip() in _ALLOWED_TOOL_HINTS]
-    proj.angelia_cooldown_preempt_types = normalized_types or ["mail_event", "manual"]
+    normalized_types = [
+        str(x).strip()
+        for x in proj.angelia_cooldown_preempt_types
+        if str(x).strip() in _ALLOWED_ANGELIA_PREEMPT_TYPES
+    ]
+    proj.angelia_cooldown_preempt_types = normalized_types or [
+        "mail_event",
+        "manual",
+        "detach_failed_event",
+        "detach_lost_event",
+    ]
 
     proj.memory_compact_trigger_tokens = _clamp_int(proj.memory_compact_trigger_tokens, 2000, 256000)
 

@@ -37,9 +37,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "interaction.agent.trigger": {
         "domain": "interaction",
         "title": "Agent 触发执行",
-        "description": "触发指定 Agent 执行一次调度处理。",
-        "feeds_llm": True,
-        "llm_note": "会驱动 worker 执行，通常触发一次 LLM 调用。",
+        "description": "历史触发事件（已收敛，禁止模块常规产出）。",
+        "feeds_llm": False,
+        "llm_note": "保留兼容读取；新触发请使用 angelia.timer/manual/system。",
     },
     # Iris mailbox
     "mail_event": {

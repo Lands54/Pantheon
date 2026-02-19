@@ -97,6 +97,7 @@ def _run_agent(
             cooldown_until=0.0,
             preempt_types=policy.cooldown_preempt_types(project_id),
             limit=max(1, min(int(limit or 10), 50)),
+            force_after_sec=policy.force_pick_after_sec(project_id),
         )
         out: list[dict] = []
         for evt in picked:
@@ -284,6 +285,7 @@ def worker_loop(ctx: WorkerContext):
                 cooldown_until=cooldown_until,
                 preempt_types=preempt_types,
                 limit=10,
+                force_after_sec=policy.force_pick_after_sec(project_id),
             )
 
             if not batch:

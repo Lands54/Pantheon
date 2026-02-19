@@ -7,6 +7,7 @@ from gods.angelia import store
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.models import AngeliaEventState
 from gods.angelia.scheduler import angelia_supervisor
+from gods.angelia.wakeup_bridge import install_wakeup_bridge
 from gods.angelia.pulse.policy import (
     get_inject_budget,
     get_interrupt_mode,
@@ -87,6 +88,10 @@ def stop_project_workers(project_id: str):
     angelia_supervisor.stop_project_workers(project_id)
 
 
+def install_event_enqueue_wakeup_bridge() -> None:
+    install_wakeup_bridge()
+
+
 __all__ = [
     "enqueue_event",
     "list_events",
@@ -98,6 +103,7 @@ __all__ = [
     "start_supervisor",
     "stop_supervisor",
     "stop_project_workers",
+    "install_event_enqueue_wakeup_bridge",
     "get_priority_weights",
     "is_mail_event_wakeup_enabled",
     "get_inject_budget",

@@ -55,7 +55,14 @@ class ProjectConfig(BaseModel):
     angelia_worker_per_agent: int = 1
     angelia_event_max_attempts: int = 3
     angelia_processing_timeout_sec: int = 60
-    angelia_cooldown_preempt_types: List[str] = Field(default_factory=lambda: ["mail_event", "manual"])
+    angelia_cooldown_preempt_types: List[str] = Field(
+        default_factory=lambda: [
+            "mail_event",
+            "manual",
+            "detach_failed_event",
+            "detach_lost_event",
+        ]
+    )
     angelia_timer_enabled: bool = True
     angelia_timer_idle_sec: int = 60
     angelia_dedupe_window_sec: int = 5

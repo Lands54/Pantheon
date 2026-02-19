@@ -215,6 +215,13 @@ def main():
     p_proj_report.add_argument("id")
     p_proj_report_show = proj_sub.add_parser("report-show", help="Show latest built project report JSON")
     p_proj_report_show.add_argument("id")
+    p_proj_social = proj_sub.add_parser("social-graph", help="Show Hestia social graph")
+    p_proj_social.add_argument("id")
+    p_proj_social_edge = proj_sub.add_parser("social-edge", help="Set one directed edge in Hestia social graph")
+    p_proj_social_edge.add_argument("id")
+    p_proj_social_edge.add_argument("--from-id", required=True)
+    p_proj_social_edge.add_argument("--to-id", required=True)
+    p_proj_social_edge.add_argument("--allow", choices=["true", "false"], required=True)
 
     # protocol (Hermes bus)
     p_protocol = subparsers.add_parser("protocol", help="Hermes protocol bus operations")

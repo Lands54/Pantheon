@@ -174,3 +174,29 @@ def cmd_project(args):
                 print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
         except Exception:
             print("❌ Server error.")
+
+    elif args.subcommand == "social-graph":
+        try:
+            res = requests.get(f"{base_url}/hestia/graph", params={"project_id": args.id})
+            if res.status_code == 200:
+                print(json.dumps(res.json(), ensure_ascii=False, indent=2))
+            else:
+                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
+        except Exception:
+            print("❌ Server error.")
+
+    elif args.subcommand == "social-edge":
+        try:
+            payload = {
+                "project_id": args.id,
+                "from_id": args.from_id,
+                "to_id": args.to_id,
+                "allowed": str(args.allow).strip().lower() == "true",
+            }
+            res = requests.post(f"{base_url}/hestia/edge", json=payload)
+            if res.status_code == 200:
+                print(json.dumps(res.json(), ensure_ascii=False, indent=2))
+            else:
+                print(f"❌ Failed: {res.json().get('detail', 'Unknown error')}")
+        except Exception:
+            print("❌ Server error.")
