@@ -87,6 +87,42 @@ async def get_context_llm_latest(project_id: str, agent_id: str):
     return project_service.context_llm_latest(project_id, str(agent_id).strip())
 
 
+@router.get("/{project_id}/context/snapshot")
+async def get_context_snapshot(project_id: str, agent_id: str, since_intent_seq: int = 0):
+    """Get Janus card snapshot (full or incremental delta)."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_snapshot(
+        project_id,
+        str(agent_id).strip(),
+        since_intent_seq=max(0, int(since_intent_seq or 0)),
+    )
+
+
+@router.get("/{project_id}/context/snapshot/compressions")
+async def get_context_snapshot_compressions(project_id: str, agent_id: str, limit: int = 50):
+    """List Janus snapshot compression records (derived lineage + dropped)."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_snapshot_compressions(
+        project_id,
+        str(agent_id).strip(),
+        limit=max(1, min(int(limit or 50), 500)),
+    )
+
+
+@router.get("/{project_id}/context/snapshot/derived")
+async def get_context_snapshot_derived(project_id: str, agent_id: str, limit: int = 100):
+    """List Janus derived-card ledger rows (one row per derived card)."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_snapshot_derived(
+        project_id,
+        str(agent_id).strip(),
+        limit=max(1, min(int(limit or 100), 2000)),
+    )
+
+
 @router.get("/{project_id}/inbox/outbox")
 async def get_outbox_receipts(
     project_id: str,

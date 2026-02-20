@@ -26,6 +26,10 @@ export function createProject(id) {
   return apiPost('/projects/create', { id })
 }
 
+export function deleteProject(projectId) {
+  return apiDelete(`/projects/${encodeURIComponent(projectId)}`)
+}
+
 export function startProject(projectId) {
   return apiPost(`/projects/${encodeURIComponent(projectId)}/start`, {})
 }
@@ -88,6 +92,33 @@ export function getContextReports(projectId, agentId, limit = 20) {
 
 export function getLatestLlmContext(projectId, agentId) {
   return apiGet(`/projects/${encodeURIComponent(projectId)}/context/llm-latest${qp({ agent_id: agentId })}`)
+}
+
+export function getContextSnapshot(projectId, agentId, sinceIntentSeq = 0) {
+  return apiGet(
+    `/projects/${encodeURIComponent(projectId)}/context/snapshot${qp({
+      agent_id: agentId,
+      since_intent_seq: sinceIntentSeq,
+    })}`
+  )
+}
+
+export function getContextSnapshotCompressions(projectId, agentId, limit = 50) {
+  return apiGet(
+    `/projects/${encodeURIComponent(projectId)}/context/snapshot/compressions${qp({
+      agent_id: agentId,
+      limit,
+    })}`
+  )
+}
+
+export function getContextSnapshotDerived(projectId, agentId, limit = 100) {
+  return apiGet(
+    `/projects/${encodeURIComponent(projectId)}/context/snapshot/derived${qp({
+      agent_id: agentId,
+      limit,
+    })}`
+  )
 }
 
 export function listOutboxReceipts(projectId, fromAgentId, status = '', limit = 50) {

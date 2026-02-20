@@ -9,6 +9,7 @@ import { AgentGalaxyPage } from './pages/AgentGalaxyPage'
 import { MemoryPolicyPage } from './pages/MemoryPolicyPage'
 import { ConfigCenterPage } from './pages/ConfigCenterPage'
 import { ToolPolicyPage } from './pages/ToolPolicyPage'
+import { DebugPage } from './pages/DebugPage'
 import { AppStoreProvider, useAppStore } from './store/AppStore'
 import { getAgentStatus } from './api/platformApi'
 import { usePolling } from './hooks/usePolling'
@@ -109,6 +110,14 @@ function AppInner() {
         return <ConfigCenterPage projectId={currentProject} config={config} onSaveConfig={updateConfig} />
       case 'toolPolicy':
         return <ToolPolicyPage projectId={currentProject} config={config} onSaveConfig={updateConfig} />
+      case 'debug':
+        return (
+          <DebugPage
+            config={config}
+            onCreateProject={createAndSwitchProject}
+            onSaveConfig={updateConfig}
+          />
+        )
       default:
         return null
     }

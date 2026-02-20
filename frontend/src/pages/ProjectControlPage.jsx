@@ -303,6 +303,7 @@ export function ProjectControlPage({
   const [showSocial, setShowSocial] = useState(false)
   const [socialLoading, setSocialLoading] = useState(false)
   const [socialData, setSocialData] = useState(null)
+  const [projectToggleBusy, setProjectToggleBusy] = useState(false)
 
   // Derived State
   const currentProject = useMemo(() => (config?.projects || {})[projectId] || {}, [config, projectId])
@@ -466,6 +467,21 @@ export function ProjectControlPage({
     }
   }
 
+  const handleToggleProjectRunning = async (running) => {
+    setStatus('')
+    setError('')
+    setProjectToggleBusy(true)
+    try {
+      await onSetRunning(projectId, running)
+      setStatus(running ? 'Project started' : 'Project stopped')
+      await onRefreshAgents?.()
+    } catch (err) {
+      setError(String(err?.message || err))
+    } finally {
+      setProjectToggleBusy(false)
+    }
+  }
+
   // Load deployment info on demand
   useEffect(() => {
     if (showDeployment) {
@@ -509,11 +525,20 @@ export function ProjectControlPage({
             {isRunning ? 'SYSTEM RUNNING' : 'SYSTEM HALTED'}
           </div>
           {isRunning ? (
-            <button className="primary-btn" onClick={() => onSetRunning(false)} style={{ background: '#ef4444' }}>
+            <button
+              className="primary-btn"
+              onClick={() => handleToggleProjectRunning(false)}
+              style={{ background: '#ef4444' }}
+              disabled={projectToggleBusy}
+            >
               SHUTDOWN
             </button>
           ) : (
-            <button className="primary-btn" onClick={() => onSetRunning(true)}>
+            <button
+              className="primary-btn"
+              onClick={() => handleToggleProjectRunning(true)}
+              disabled={projectToggleBusy}
+            >
               BOOT SYSTEM
             </button>
           )}

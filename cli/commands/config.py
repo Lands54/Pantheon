@@ -90,11 +90,12 @@ def cmd_config(args):
             print(f"   Strategy: {proj.get('context_strategy', 'structured_v1')}")
             print(f"   Token Budget Total: {proj.get('context_token_budget_total', 32000)}")
             print(f"   Budget Task State: {proj.get('context_budget_task_state', 4000)}")
-            print(f"   Budget Observations: {proj.get('context_budget_observations', 12000)}")
+
             print(f"   Budget Inbox: {proj.get('context_budget_inbox', 4000)}")
-            print(f"   Budget State Window: {proj.get('context_budget_state_window', 12000)}")
-            print(f"   State Window Limit: {proj.get('context_state_window_limit', 50)}")
-            print(f"   Observation Window: {proj.get('context_observation_window', 30)}")
+            print(f"   Short Window Intents: {proj.get('context_short_window_intents', 120)}")
+            print(f"   N Recent Cards: {proj.get('context_n_recent', 12)}")
+            print(f"   Chronicle Compress Trigger: {proj.get('context_token_budget_chronicle_trigger', 8000)}")
+
             print(f"   Include Inbox Status Hints: {proj.get('context_include_inbox_status_hints', True)}")
             print(f"   Write Build Report: {proj.get('context_write_build_report', True)}")
             print(f"   Metis Refresh Mode: {proj.get('metis_refresh_mode', 'pulse')}")
@@ -235,11 +236,9 @@ def cmd_config(args):
                 "context_strategy",
                 "context_token_budget_total",
                 "context_budget_task_state",
-                "context_budget_observations",
                 "context_budget_inbox",
-                "context_budget_state_window",
-                "context_state_window_limit",
-                "context_observation_window",
+                "context_n_recent",
+                "context_token_budget_chronicle_trigger",
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
                 "metis_refresh_mode",
@@ -264,11 +263,9 @@ def cmd_config(args):
                     "detach_log_tail_chars",
                     "context_token_budget_total",
                     "context_budget_task_state",
-                    "context_budget_observations",
                     "context_budget_inbox",
-                    "context_budget_state_window",
-                    "context_state_window_limit",
-                    "context_observation_window",
+                    "context_n_recent",
+                    "context_token_budget_chronicle_trigger",
                     "llm_global_max_concurrency",
                     "llm_global_rate_per_minute",
                     "llm_project_max_concurrency",
@@ -383,10 +380,13 @@ def cmd_config(args):
                     data["projects"][pid]["context_strategy"] = args.value
                 elif parts[1] == "token_budget_total":
                     data["projects"][pid]["context_token_budget_total"] = int(args.value)
-                elif parts[1] == "state_window_limit":
-                    data["projects"][pid]["context_state_window_limit"] = int(args.value)
-                elif parts[1] == "observation_window":
-                    data["projects"][pid]["context_observation_window"] = int(args.value)
+                elif parts[1] == "short_window_intents":
+                    data["projects"][pid]["context_short_window_intents"] = int(args.value)
+                elif parts[1] == "n_recent":
+                    data["projects"][pid]["context_n_recent"] = int(args.value)
+                elif parts[1] == "token_budget_chronicle_trigger":
+                    data["projects"][pid]["context_token_budget_chronicle_trigger"] = int(args.value)
+
                 elif parts[1] == "include_inbox_status_hints":
                     data["projects"][pid]["context_include_inbox_status_hints"] = args.value.lower() == "true"
                 elif parts[1] == "write_build_report":
@@ -394,12 +394,15 @@ def cmd_config(args):
                 elif parts[1] == "budget" and len(parts) >= 3:
                     if parts[2] == "task_state":
                         data["projects"][pid]["context_budget_task_state"] = int(args.value)
-                    elif parts[2] == "observations":
-                        data["projects"][pid]["context_budget_observations"] = int(args.value)
+
                     elif parts[2] == "inbox":
                         data["projects"][pid]["context_budget_inbox"] = int(args.value)
-                    elif parts[2] == "state_window":
-                        data["projects"][pid]["context_budget_state_window"] = int(args.value)
+                    elif parts[2] == "short_window_intents":
+                        data["projects"][pid]["context_short_window_intents"] = int(args.value)
+                    elif parts[2] == "n_recent":
+                        data["projects"][pid]["context_n_recent"] = int(args.value)
+                    elif parts[2] == "token_budget_chronicle_trigger":
+                        data["projects"][pid]["context_token_budget_chronicle_trigger"] = int(args.value)
                     else:
                         print(f"❌ Unknown context budget key: {parts[2]}")
                         return
@@ -638,11 +641,15 @@ def cmd_config(args):
                 print("  context.strategy (structured_v1)")
                 print("  context.token_budget_total (tokens)")
                 print("  context.budget.task_state (tokens)")
-                print("  context.budget.observations (tokens)")
+
                 print("  context.budget.inbox (tokens)")
-                print("  context.budget.state_window (tokens)")
-                print("  context.state_window_limit (count)")
-                print("  context.observation_window (count)")
+                print("  context.short_window_intents (count)")
+                print("  context.n_recent (count)")
+                print("  context.token_budget_chronicle_trigger (tokens)")
+                print("  context.budget.short_window_intents (count)")
+                print("  context.budget.n_recent (count)")
+                print("  context.budget.token_budget_chronicle_trigger (tokens)")
+
                 print("  context.include_inbox_status_hints (true/false)")
                 print("  context.write_build_report (true/false)")
                 print("  tools.loop_max (number)")
@@ -680,11 +687,12 @@ def cmd_config(args):
                 print("  context_strategy (structured_v1)")
                 print("  context_token_budget_total (tokens)")
                 print("  context_budget_task_state (tokens)")
-                print("  context_budget_observations (tokens)")
+
                 print("  context_budget_inbox (tokens)")
-                print("  context_budget_state_window (tokens)")
-                print("  context_state_window_limit (count)")
-                print("  context_observation_window (count)")
+                print("  context_short_window_intents (count)")
+                print("  context_n_recent (count)")
+                print("  context_token_budget_chronicle_trigger (tokens)")
+
                 print("  context_include_inbox_status_hints (true/false)")
                 print("  context_write_build_report (true/false)")
                 print("  executor.command (docker|local)")

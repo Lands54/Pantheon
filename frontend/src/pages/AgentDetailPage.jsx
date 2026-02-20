@@ -1,9 +1,23 @@
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { getContextPreview, getContextReports, getLatestLlmContext, listEvents, listOutboxReceipts } from '../api/platformApi'
+import {
+  getContextPreview,
+  getContextReports,
+  getLatestLlmContext,
+  getContextSnapshot,
+  getContextSnapshotCompressions,
+  getContextSnapshotDerived,
+  listEvents,
+  listOutboxReceipts,
+} from '../api/platformApi'
 
 export function AgentDetailPage({ projectId, agentId }) {
   const [preview, setPreview] = useState(null)
+  const [snapshotMeta, setSnapshotMeta] = useState({ available: false, base_intent_seq: 0, token_estimate: 0, snapshot_id: '' })
+  const [snapshotCards, setSnapshotCards] = useState([])
+  const [snapshotCursor, setSnapshotCursor] = useState(0)
+  const [snapshotCompressLogs, setSnapshotCompressLogs] = useState([])
+  const [snapshotDerivedLogs, setSnapshotDerivedLogs] = useState([])
   const [reports, setReports] = useState([])
   const [events, setEvents] = useState([])
   const [receipts, setReceipts] = useState([])
@@ -35,14 +49,27 @@ export function AgentDetailPage({ projectId, agentId }) {
   const load = async () => {
     if (!agentId) return
     try {
-      const [p, r, e, out, llm] = await Promise.all([
+      const [p, r, e, out, llm, snap, comp, derived] = await Promise.all([
         getContextPreview(projectId, agentId),
         getContextReports(projectId, agentId, 20),
         listEvents({ project_id: projectId, agent_id: agentId, limit: 50 }),
         listOutboxReceipts(projectId, agentId, receiptStatus, 50),
         getLatestLlmContext(projectId, agentId),
+        getContextSnapshot(projectId, agentId, 0),
+        getContextSnapshotCompressions(projectId, agentId, 20),
+        getContextSnapshotDerived(projectId, agentId, 50),
       ])
       setPreview(p.preview || p)
+      setSnapshotMeta({
+        available: !!snap.available,
+        base_intent_seq: Number(snap.base_intent_seq || 0),
+        token_estimate: Number(snap.token_estimate || 0),
+        snapshot_id: snap.snapshot_id || '',
+      })
+      setSnapshotCards(Array.isArray(snap.upsert_cards) ? snap.upsert_cards : [])
+      setSnapshotCursor(Number(snap.base_intent_seq || 0))
+      setSnapshotCompressLogs(Array.isArray(comp.items) ? comp.items : [])
+      setSnapshotDerivedLogs(Array.isArray(derived.items) ? derived.items : [])
       setReports(r.reports || [])
       setEvents(e.items || [])
       setReceipts(out.items || [])
@@ -58,6 +85,54 @@ export function AgentDetailPage({ projectId, agentId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, agentId, receiptStatus])
 
+  useEffect(() => {
+    if (!projectId || !agentId) return undefined
+    const timer = setInterval(async () => {
+      try {
+        const delta = await getContextSnapshot(projectId, agentId, snapshotCursor)
+        if (!delta || !delta.available) return
+        const upserts = Array.isArray(delta.upsert_cards) ? delta.upsert_cards : []
+        const removes = new Set(Array.isArray(delta.remove_card_ids) ? delta.remove_card_ids.map((x) => `${x}`) : [])
+        setSnapshotCards((prev) => {
+          const map = new Map()
+          ;(Array.isArray(prev) ? prev : []).forEach((c) => {
+            const id = `${c?.card_id || ''}`
+            if (!id || removes.has(id)) return
+            map.set(id, c)
+          })
+          upserts.forEach((c) => {
+            const id = `${c?.card_id || ''}`
+            if (!id) return
+            map.set(id, c)
+          })
+          return Array.from(map.values()).sort((a, b) => {
+            const pa = Number(a?.priority || 0)
+            const pb = Number(b?.priority || 0)
+            if (pa !== pb) return pb - pa
+            const sa = Number(a?.source_intent_seq_max || 0)
+            const sb = Number(b?.source_intent_seq_max || 0)
+            return sb - sa
+          })
+        })
+        const nextSeq = Number(delta.base_intent_seq || 0)
+        if (nextSeq > snapshotCursor) setSnapshotCursor(nextSeq)
+        setSnapshotMeta({
+          available: !!delta.available,
+          base_intent_seq: Number(delta.base_intent_seq || 0),
+          token_estimate: Number(delta.token_estimate || 0),
+          snapshot_id: delta.snapshot_id || '',
+        })
+        const comp = await getContextSnapshotCompressions(projectId, agentId, 20)
+        setSnapshotCompressLogs(Array.isArray(comp.items) ? comp.items : [])
+        const derived = await getContextSnapshotDerived(projectId, agentId, 50)
+        setSnapshotDerivedLogs(Array.isArray(derived.items) ? derived.items : [])
+      } catch (e) {
+        // ignore polling errors; full reload path still available
+      }
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [projectId, agentId, snapshotCursor])
+
   if (!agentId) {
     return <div className="panel">Pick an agent from Dashboard/Message Center first.</div>
   }
@@ -68,10 +143,100 @@ export function AgentDetailPage({ projectId, agentId }) {
 
       <div className="panel">
         <div className="row-between">
-          <h3>Live Context - {agentId}</h3>
+          <h3>Card Context Feed - {agentId}</h3>
           <button className="ghost-btn" onClick={load}>Reload</button>
         </div>
         <pre className="json-block">{JSON.stringify(preview || {}, null, 2)}</pre>
+      </div>
+
+      <div className="panel">
+        <div className="row-between">
+          <h3>Janus Snapshot (Incremental)</h3>
+          <div className="mono dim">
+            base_intent_seq={snapshotMeta.base_intent_seq} | cards={snapshotCards.length} | tokens~{snapshotMeta.token_estimate}
+          </div>
+        </div>
+        {!snapshotMeta.available && <div className="dim">No snapshot yet. Trigger at least one LLM pulse.</div>}
+        {!!snapshotMeta.available && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>card_id</th>
+                  <th>kind</th>
+                  <th>priority</th>
+                  <th>source_seq</th>
+                  <th>text</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshotCards.map((c) => (
+                  <tr key={c.card_id}>
+                    <td className="mono">{c.card_id}</td>
+                    <td>{c.kind}</td>
+                    <td>{c.priority}</td>
+                    <td>{c.source_intent_seq_max}</td>
+                    <td className="mono">{String(c.text || '')}</td>
+                  </tr>
+                ))}
+                {!snapshotCards.length && (
+                  <tr><td colSpan={5}>No cards</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Janus Compression Records</h3>
+        {!snapshotCompressLogs.length && <div className="dim">No compression records yet.</div>}
+        {!!snapshotCompressLogs.length && (
+          <div className="log-list">
+            {snapshotCompressLogs.slice().reverse().map((r, idx) => (
+              <div key={`cmp-${idx}`} className="log-row">
+                <span className="mono">{new Date((r.timestamp || 0) * 1000).toLocaleString()}</span>
+                <span>snapshot={r.snapshot_id || '-'}</span>
+                <span className="mono">tokens {r.before_tokens || 0} {"->"} {r.after_tokens || 0}</span>
+                <span>derived={r.derived_count || 0}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Janus Derived Card Ledger</h3>
+        {!snapshotDerivedLogs.length && <div className="dim">No derived card records yet.</div>}
+        {!!snapshotDerivedLogs.length && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>time</th>
+                  <th>snapshot</th>
+                  <th>derived_card</th>
+                  <th>from</th>
+                  <th>supersedes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshotDerivedLogs.slice().reverse().map((r, idx) => {
+                  const d = r.derived_card || {}
+                  return (
+                    <tr key={`d-${idx}`}>
+                      <td className="mono">{new Date((r.timestamp || 0) * 1000).toLocaleString()}</td>
+                      <td className="mono">{r.snapshot_id || '-'}</td>
+                      <td className="mono">{d.card_id || '-'}</td>
+                      <td className="mono">{Array.isArray(d.derived_from_card_ids) ? d.derived_from_card_ids.length : 0}</td>
+                      <td className="mono">{Array.isArray(d.supersedes_card_ids) ? d.supersedes_card_ids.length : 0}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="panel">

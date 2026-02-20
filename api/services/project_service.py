@@ -350,6 +350,84 @@ class ProjectService:
             "trace": row,
         }
 
+    def context_snapshot(self, project_id: str, agent_id: str, since_intent_seq: int = 0) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        since = max(0, int(since_intent_seq or 0))
+        snap = mnemosyne_facade.load_janus_snapshot(project_id, agent_id)
+        if not isinstance(snap, dict):
+            return {
+                "project_id": project_id,
+                "agent_id": agent_id,
+                "available": False,
+                "mode": "none",
+                "snapshot_id": "",
+                "base_intent_seq": 0,
+                "token_estimate": 0,
+                "upsert_cards": [],
+                "remove_card_ids": [],
+                "stats": {"cards_total": 0, "delta_cards": 0, "since_intent_seq": since},
+            }
+
+        cards = [dict(x) for x in list(snap.get("cards", []) or []) if isinstance(x, dict)]
+        base_intent_seq = int(snap.get("base_intent_seq", 0) or 0)
+        token_estimate = int(snap.get("token_estimate", 0) or 0)
+        snapshot_id = str(snap.get("snapshot_id", "") or "")
+
+        if since <= 0:
+            return {
+                "project_id": project_id,
+                "agent_id": agent_id,
+                "available": True,
+                "mode": "full",
+                "snapshot_id": snapshot_id,
+                "base_intent_seq": base_intent_seq,
+                "token_estimate": token_estimate,
+                "upsert_cards": cards,
+                "remove_card_ids": [],
+                "stats": {"cards_total": len(cards), "delta_cards": len(cards), "since_intent_seq": since},
+            }
+
+        upsert_cards = [c for c in cards if int(c.get("source_intent_seq_max", 0) or 0) > since]
+        remove_ids: list[str] = []
+        for c in upsert_cards:
+            for rid in list(c.get("supersedes_card_ids", []) or []):
+                rs = str(rid or "").strip()
+                if rs:
+                    remove_ids.append(rs)
+        remove_card_ids = sorted(set(remove_ids))
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "available": True,
+            "mode": "delta",
+            "snapshot_id": snapshot_id,
+            "base_intent_seq": base_intent_seq,
+            "token_estimate": token_estimate,
+            "upsert_cards": upsert_cards,
+            "remove_card_ids": remove_card_ids,
+            "stats": {"cards_total": len(cards), "delta_cards": len(upsert_cards), "since_intent_seq": since},
+        }
+
+    def context_snapshot_compressions(self, project_id: str, agent_id: str, limit: int = 50) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = mnemosyne_facade.list_snapshot_compressions(project_id, agent_id, limit=max(1, min(int(limit or 50), 500)))
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "items": rows,
+            "count": len(rows),
+        }
+
+    def context_snapshot_derived(self, project_id: str, agent_id: str, limit: int = 100) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = mnemosyne_facade.list_derived_cards(project_id, agent_id, limit=max(1, min(int(limit or 100), 2000)))
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "items": rows,
+            "count": len(rows),
+        }
+
     def outbox_receipts(
         self,
         project_id: str,

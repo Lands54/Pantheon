@@ -151,6 +151,11 @@ class EventService:
                 event_type=event_type,
                 attachments=attachments,
             )
+        if domain == "interaction":
+            raise HTTPException(
+                status_code=400,
+                detail="unsupported interaction event_type; allowed: interaction.message.sent, interaction.message.read, interaction.hermes.notice, interaction.detach.notice",
+            )
 
         # Mail path is removed from public entry in zero-compat mode.
         if domain == "iris" and event_type in {"mail_event", "mail_deliver_event", "mail_ack_event"}:
