@@ -413,19 +413,19 @@
     "chronicle_template_key": "",
     "runtime_log_template_key": ""
   },
-  "tool.list_dir.ok": {
+  "tool.list.ok": {
     "to_chronicle": true,
     "to_runtime_log": false,
     "chronicle_template_key": "memory_tool_ok",
     "runtime_log_template_key": ""
   },
-  "tool.list_dir.error": {
+  "tool.list.error": {
     "to_chronicle": true,
     "to_runtime_log": true,
     "chronicle_template_key": "memory_tool_error",
     "runtime_log_template_key": ""
   },
-  "tool.list_dir.blocked": {
+  "tool.list.blocked": {
     "to_chronicle": false,
     "to_runtime_log": true,
     "chronicle_template_key": "",
@@ -539,19 +539,19 @@
     "chronicle_template_key": "",
     "runtime_log_template_key": ""
   },
-  "tool.read_file.ok": {
+  "tool.read.ok": {
     "to_chronicle": true,
     "to_runtime_log": false,
     "chronicle_template_key": "memory_tool_ok",
     "runtime_log_template_key": ""
   },
-  "tool.read_file.error": {
+  "tool.read.error": {
     "to_chronicle": true,
     "to_runtime_log": true,
     "chronicle_template_key": "memory_tool_error",
     "runtime_log_template_key": ""
   },
-  "tool.read_file.blocked": {
+  "tool.read.blocked": {
     "to_chronicle": false,
     "to_runtime_log": true,
     "chronicle_template_key": "",
@@ -700,5 +700,13 @@
     "to_runtime_log": true,
     "chronicle_template_key": "",
     "runtime_log_template_key": ""
+  },
+  "janus.compaction.base": {
+    "to_chronicle": true,
+    "to_runtime_log": false,
+    "to_llm_context": true,
+    "chronicle_template_key": "memory_janus_compaction_base",
+    "runtime_log_template_key": "",
+    "llm_context_template_key": "memory_janus_compaction_base"
   }
 }
