@@ -184,6 +184,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.context_budget_inbox_receipts = _clamp_int(proj.context_budget_inbox_receipts, 100, 64000)
     proj.context_short_window_intents = _clamp_int(proj.context_short_window_intents, 10, 5000)
     proj.context_n_recent = _clamp_int(proj.context_n_recent, 1, 5000)
+    proj.context_recent_token_budget = _clamp_int(proj.context_recent_token_budget, 0, 256000)
     proj.context_token_budget_chronicle_trigger = _clamp_int(
         proj.context_token_budget_chronicle_trigger, 1000, 512000
     )

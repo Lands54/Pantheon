@@ -116,3 +116,71 @@ def test_tools_desc_not_duplicated_when_material_tools_exists():
     blob = "\n".join(out.system_blocks)
     assert blob.count("[[send_message(...)]]") == 1
     assert "## AVAILABLE TOOLS" not in blob
+
+
+def test_compression_records_are_written_when_triggered(monkeypatch):
+    strategy = SequentialV1Strategy()
+
+    class _Brain:
+        def think(self, prompt: str, trace_meta=None):
+            return "compressed-summary"
+
+    req = ContextBuildRequest(
+        project_id="unit_seq_summary",
+        agent_id="alpha",
+        state={},
+        directives="",
+        local_memory="",
+        inbox_hint="",
+        tools_desc="",
+        context_cfg={"n_recent": 1, "token_budget_chronicle_trigger": 1},
+        agent=SimpleNamespace(brain=_Brain()),
+        context_materials=SimpleNamespace(
+            cards=[
+                _card("intent:10", "event-10 " * 50, 10),
+                _card("intent:11", "event-11 " * 50, 11),
+                _card("intent:12", "recent-12", 12),
+            ]
+        ),
+    )
+
+    called = {"n": 0, "row": None}
+
+    monkeypatch.setattr(
+        "gods.janus.strategies.sequential_v1.record_janus_compaction_base_intent",
+        lambda *_args, **_kwargs: {"intent_id": "alpha:99", "intent_seq": 99},
+    )
+    monkeypatch.setattr(
+        "gods.janus.strategies.sequential_v1.save_janus_snapshot",
+        lambda *_args, **_kwargs: {"ok": True},
+    )
+
+    def _record(*_args, **_kwargs):
+        called["n"] += 1
+        called["row"] = _args[2] if len(_args) >= 3 else None
+        return {"ok": True}
+
+    monkeypatch.setattr("gods.janus.strategies.sequential_v1.record_snapshot_compression", _record)
+
+    out = strategy.build(req)
+    assert out.preview.get("compression", {}).get("triggered") is True
+    assert called["n"] == 1
+    assert isinstance(called["row"], dict)
+    assert int(called["row"].get("derived_count", 0) or 0) == 1
+
+
+def test_recent_window_can_be_token_budget_driven():
+    strategy = SequentialV1Strategy()
+    cards = [
+        _card("intent:1", "a" * 40, 1),   # ~10 tok
+        _card("intent:2", "b" * 40, 2),   # ~10 tok
+        _card("intent:3", "c" * 40, 3),   # ~10 tok
+    ]
+    # budget=15 should keep only the latest card by token, regardless of n_recent fallback.
+    chronicle, recents = strategy._split_recent_by_token_budget(
+        cards,
+        recent_count_fallback=3,
+        recent_token_budget=15,
+    )
+    assert [c["card_id"] for c in recents] == ["intent:3"]
+    assert [c["card_id"] for c in chronicle] == ["intent:1", "intent:2"]

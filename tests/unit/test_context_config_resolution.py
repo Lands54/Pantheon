@@ -21,6 +21,7 @@ def test_context_config_resolution_project_and_agent_override():
         assert cfg["strategy"] == "sequential_v1"
         assert cfg["token_budget_total"] == 16000
         assert cfg["budget_task_state"] == 4000
+        assert "recent_token_budget" in cfg
     finally:
         if old is None:
             runtime_config.projects.pop(pid, None)

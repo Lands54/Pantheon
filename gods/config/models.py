@@ -92,6 +92,7 @@ class ProjectConfig(BaseModel):
     context_budget_inbox_receipts: int = 1000
     context_short_window_intents: int = 120
     context_n_recent: int = 12
+    context_recent_token_budget: int = 6000
     context_token_budget_chronicle_trigger: int = 8000
 
     context_include_inbox_status_hints: bool = True

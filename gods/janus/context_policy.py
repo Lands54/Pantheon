@@ -66,6 +66,7 @@ def resolve_context_cfg(project_id: str, agent_id: str) -> dict:
         "include_inbox_status_hints": bool(getattr(proj, "context_include_inbox_status_hints", True) if proj else True),
         "write_build_report": bool(getattr(proj, "context_write_build_report", True) if proj else True),
         "n_recent": int(getattr(proj, "context_n_recent", 12) if proj else 12),
+        "recent_token_budget": int(getattr(proj, "context_recent_token_budget", 6000) if proj else 6000),
         "token_budget_chronicle_trigger": int(getattr(proj, "context_token_budget_chronicle_trigger", 8000) if proj else 8000),
     }
     s = _agent_settings(project_id, agent_id)

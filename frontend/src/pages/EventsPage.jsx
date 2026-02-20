@@ -72,6 +72,38 @@ export function EventsPage({ projectId }) {
     await load()
   }
 
+  const setMailOnly = () => {
+    setFilters((x) => ({
+      ...x,
+      domain: 'iris',
+      event_type: 'mail_event',
+      state: '',
+    }))
+  }
+
+  const setInteractionOnly = () => {
+    setFilters((x) => ({
+      ...x,
+      domain: 'interaction',
+      event_type: 'interaction.message.sent',
+      state: '',
+    }))
+  }
+
+  const hideInteractionSent = () => {
+    setFilters((x) => ({
+      ...x,
+      domain: 'iris',
+      event_type: '',
+    }))
+  }
+
+  const resetFilters = () => {
+    setFilters(INITIAL_FILTER)
+    setHideDone(true)
+    setHideFeedsLlmFalse(false)
+  }
+
   return (
     <div className="stack-lg">
       <div className="panel">
@@ -83,6 +115,12 @@ export function EventsPage({ projectId }) {
           <input placeholder="agent_id" value={filters.agent_id} onChange={(e) => setFilters((x) => ({ ...x, agent_id: e.target.value }))} />
           <input type="number" placeholder="limit" value={filters.limit} onChange={(e) => setFilters((x) => ({ ...x, limit: Math.max(1, Number(e.target.value) || 50) }))} />
           <button className="ghost-btn" onClick={load}>Apply</button>
+        </div>
+        <div className="action-row top-gap">
+          <button className="ghost-btn" onClick={setMailOnly}>Only mail_event</button>
+          <button className="ghost-btn" onClick={setInteractionOnly}>Only interaction.sent</button>
+          <button className="ghost-btn" onClick={hideInteractionSent}>Hide interaction.*</button>
+          <button className="ghost-btn" onClick={resetFilters}>Reset filters</button>
         </div>
         <label className="checkbox-row top-gap">
           <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} />

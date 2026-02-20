@@ -238,14 +238,6 @@ class GodBrain:
             current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
             ticket = llm_control_plane.acquire(current_project)
             llm, model = self.get_llm()
-            self._write_llm_trace(
-                mode="plain",
-                model=model,
-                request_messages=[],
-                request_raw=context,
-                response_message=None,
-                trace_meta=trace_meta,
-            )
             response = llm.invoke(context)
             if isinstance(response, AIMessage):
                 self._write_llm_trace(
@@ -287,15 +279,6 @@ class GodBrain:
             current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
             ticket = llm_control_plane.acquire(current_project)
             llm_raw, model = self.get_llm()
-            self._write_llm_trace(
-                mode="tools",
-                model=model,
-                request_messages=messages,
-                request_raw=None,
-                tools=tools,
-                response_message=None,
-                trace_meta=trace_meta,
-            )
             llm = llm_raw.bind_tools(tools)
             response = llm.invoke(messages)
             if isinstance(response, AIMessage):

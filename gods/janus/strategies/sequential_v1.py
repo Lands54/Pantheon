@@ -8,6 +8,7 @@ from gods.janus.models import ContextBuildRequest, ContextBuildResult
 from gods.mnemosyne.facade import (
     estimate_cards_tokens,
     record_janus_compaction_base_intent,
+    record_snapshot_compression,
     save_janus_snapshot,
 )
 
@@ -116,36 +117,41 @@ class SequentialV1Strategy:
         }
 
     @staticmethod
-    def _persist_arranged_cards(req: ContextBuildRequest, cards: list[dict[str, Any]]) -> None:
+    def _persist_arranged_cards(req: ContextBuildRequest, cards: list[dict[str, Any]]) -> dict[str, Any]:
         normalized = [SequentialV1Strategy._to_snapshot_card(c) for c in list(cards or []) if isinstance(c, dict)]
         if not normalized:
-            return
+            return {"ok": False, "snapshot_id": "", "base_intent_seq": 0, "token_estimate": 0}
         base_seq = max([int(c.get("source_intent_seq_max", 0) or 0) for c in normalized] or [0])
         now = time.time()
+        snapshot_id = f"snap_{req.agent_id}_{int(now)}"
+        payload = {
+            "snapshot_id": snapshot_id,
+            "project_id": req.project_id,
+            "agent_id": req.agent_id,
+            "base_intent_seq": int(max(0, base_seq)),
+            "token_estimate": int(estimate_cards_tokens(normalized)),
+            "cards": normalized,
+            "dropped": [],
+            "created_at": now,
+            "updated_at": now,
+        }
         try:
-            save_janus_snapshot(
-                req.project_id,
-                req.agent_id,
-                {
-                    "snapshot_id": f"snap_{req.agent_id}_{int(now)}",
-                    "project_id": req.project_id,
-                    "agent_id": req.agent_id,
-                    "base_intent_seq": int(max(0, base_seq)),
-                    "token_estimate": int(estimate_cards_tokens(normalized)),
-                    "cards": normalized,
-                    "dropped": [],
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
+            save_janus_snapshot(req.project_id, req.agent_id, payload)
+            return {
+                "ok": True,
+                "snapshot_id": snapshot_id,
+                "base_intent_seq": int(payload["base_intent_seq"]),
+                "token_estimate": int(payload["token_estimate"]),
+            }
         except Exception:
-            return
+            return {"ok": False, "snapshot_id": snapshot_id, "base_intent_seq": int(base_seq), "token_estimate": 0}
 
     def build(self, req: ContextBuildRequest) -> ContextBuildResult:
         materials = req.context_materials
         
         # Determine N from config or default to 10
         n_recent = int(req.context_cfg.get("n_recent", 10))
+        recent_token_budget = int(req.context_cfg.get("recent_token_budget", 0) or 0)
         token_limit = int(req.context_cfg.get("token_budget_chronicle_trigger", 8000))
         
         # 1. Use our smart recomposer to get the core cards grouped by role
@@ -183,23 +189,23 @@ class SequentialV1Strategy:
             non_summary_cards.append(c)
         non_summary_cards.sort(key=self._card_seq)
         
-        # Split into chronicle and recents
-        n = max(0, n_recent)
-        if len(non_summary_cards) <= n:
-            chronicle = []
-            recents = non_summary_cards
-        else:
-            chronicle = non_summary_cards[:-n]
-            recents = non_summary_cards[-n:]
+        # Split into chronicle/recent by token budget (preferred) or by count fallback.
+        chronicle, recents = self._split_recent_by_token_budget(
+            non_summary_cards,
+            recent_count_fallback=n_recent,
+            recent_token_budget=recent_token_budget,
+        )
 
         # 2. Check and Perform Compression on Chronicle
         chronicle_tokens = self._estimate_tokens(chronicle)
         compress_meta = {"triggered": False}
+        compressed_summary_card: dict[str, Any] | None = None
         
         if chronicle and chronicle_tokens > token_limit:
             summary_card = self._compress_chronicle(req, chronicle)
             if summary_card:
                 latest_summary = summary_card
+                compressed_summary_card = dict(summary_card)
                 chronicle = []
                 compress_meta = {
                     "triggered": True, 
@@ -233,7 +239,31 @@ class SequentialV1Strategy:
         if (not has_tools_card) and req.tools_desc:
             blocks.append(f"## AVAILABLE TOOLS\n{req.tools_desc}")
 
-        self._persist_arranged_cards(req, ordered_cards)
+        persist_meta = self._persist_arranged_cards(req, ordered_cards)
+        if bool(compress_meta.get("triggered", False)) and compressed_summary_card is not None:
+            try:
+                record_snapshot_compression(
+                    req.project_id,
+                    req.agent_id,
+                    {
+                        "snapshot_id": str(persist_meta.get("snapshot_id", "") or ""),
+                        "base_intent_seq": int(persist_meta.get("base_intent_seq", 0) or 0),
+                        "before_tokens": int(compress_meta.get("before_tokens", 0) or 0),
+                        "after_tokens": int(compress_meta.get("after_tokens", 0) or 0),
+                        "derived_count": 1,
+                        "derived": [
+                            {
+                                "card_id": str(compressed_summary_card.get("card_id", "") or ""),
+                                "derived_from_card_ids": list(compressed_summary_card.get("derived_from_card_ids", []) or []),
+                                "supersedes_card_ids": list(compressed_summary_card.get("supersedes_card_ids", []) or []),
+                                "source_intent_ids": list(compressed_summary_card.get("source_intent_ids", []) or []),
+                            }
+                        ],
+                        "timestamp": time.time(),
+                    },
+                )
+            except Exception:
+                pass
 
         return ContextBuildResult(
             strategy_used="sequential_v1",
@@ -244,6 +274,34 @@ class SequentialV1Strategy:
 
     def _estimate_tokens(self, cards: list[dict[str, Any]]) -> int:
         return sum(len(str(c.get("text", ""))) // 4 for c in cards)
+
+    def _split_recent_by_token_budget(
+        self,
+        cards: list[dict[str, Any]],
+        *,
+        recent_count_fallback: int,
+        recent_token_budget: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        if recent_token_budget <= 0:
+            n = max(0, int(recent_count_fallback))
+            if len(cards) <= n:
+                return [], list(cards)
+            return list(cards[:-n]), list(cards[-n:])
+
+        budget = max(1, int(recent_token_budget))
+        picked: list[dict[str, Any]] = []
+        used = 0
+        for c in reversed(list(cards)):
+            c_tokens = max(1, len(str(c.get("text", ""))) // 4)
+            if picked and (used + c_tokens) > budget:
+                break
+            picked.append(c)
+            used += c_tokens
+        picked.reverse()
+        if not picked and cards:
+            picked = [cards[-1]]
+        split_at = max(0, len(cards) - len(picked))
+        return list(cards[:split_at]), list(picked)
 
     def _compress_chronicle(self, req: ContextBuildRequest, cards: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Call LLM to summarize a chunk of history cards."""
@@ -262,13 +320,65 @@ class SequentialV1Strategy:
             
         text_to_summarize = "\n\n".join([f"[{c.get('kind','event')}] {c.get('text','')}" for c in cards])
         
-        prompt = (
-            "You are a memory consolidation module. Below is a detailed log of past events and actions. "
-            "Compress them into a single, high-density summary. Keep technical decisions, key results, and major blockers. "
-            "Discard minor details or repetitive logs. Be extremely concise.\n\n"
-            f"--- LOGS TO SUMMARIZE ---\n{text_to_summarize}\n\n"
-            "SUMMARY:"
-        )
+        prompt = f"""# Role: 高级语义分析与上下文压缩专家
+
+## Task: 
+对提供的原始上下文进行【无损语义压缩】。目标是在大幅削减 Token 数（压缩比目标 5x-10x）的同时，保留所有关键逻辑、技术约束、实体关系和决策链路。
+
+## Constraints:
+1. **语义保留**：严禁改变原意，严禁使用含糊的词汇（如“讨论了某事”），必须保留具体的“决定”或“参数”。
+2. **格式优化**：删除所有礼貌用语、过渡词、重复信息，使用紧凑的电报式语言。
+3. **技术精度**：所有的函数名、变量名、API 路径、版本号、数学公式（使用 LaTeX 渲染，如 $E=mc^2$）必须 100% 保留。
+4. **结构对齐**：使用嵌套的 Markdown 列表或类似 YAML 的结构，确保压缩后的信息依然具备清晰的层级。
+
+## Compression Protocol (执行流程):
+
+### Phase 1: 实体与依赖提取
+- 识别所有核心实体（User, Agent, Database, API）及其当前状态。
+- 提取显式和隐式的约束条件（Constraints）。
+
+### Phase 2: 逻辑流精简
+- 转换对话或描述为“事件链”。
+- 示例：将“用户询问了关于数据库连接失败的问题，经过排查发现是密码过期”压缩为“Issue: DB_Conn_Fail -> Cause: Password_Expired”。
+
+### Phase 3: 代码与技术快照
+- 若涉及代码，提取函数签名和关键逻辑伪代码，剔除注释和冗余空格。
+
+---
+
+## Output Format (严格按此结构输出):
+
+<Compressed_Context>
+[Meta]: {{Topic: xxx, Status: xxx, Token_Saving: xxx}}
+
+<Constraints_Snapshot>
+- C1: [具体约束1]
+- C2: [具体约束2]
+</Constraints_Snapshot>
+
+<Knowledge_Graph>
+- [EntityA] --(Action)--> [EntityB]
+- [Logic_Node]: {{Key_Value_Pairs}}
+</Knowledge_Graph>
+
+<Event_Timeline>
+1. T1: [精炼动作/指令]
+2. T2: [关键反馈/结果]
+</Event_Timeline>
+
+<Technical_Assets>
+- Code/API: `[保留核心逻辑]`
+</Technical_Assets>
+
+<Pending_Actions>
+- [待办项1]
+- [待办项2]
+</Pending_Actions>
+</Compressed_Context>
+
+--- LOGS TO SUMMARIZE ---
+{text_to_summarize}
+"""
         
         try:
             from langchain_core.messages import HumanMessage

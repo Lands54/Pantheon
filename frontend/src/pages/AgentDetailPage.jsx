@@ -23,6 +23,10 @@ export function AgentDetailPage({ projectId, agentId }) {
   const [receipts, setReceipts] = useState([])
   const [llmTrace, setLlmTrace] = useState(null)
   const [receiptStatus, setReceiptStatus] = useState('')
+  const [eventDomain, setEventDomain] = useState('')
+  const [eventType, setEventType] = useState('')
+  const [eventState, setEventState] = useState('')
+  const [eventLimit, setEventLimit] = useState(100)
   const [error, setError] = useState('')
 
   const renderMessageContent = (msg) => {
@@ -52,7 +56,14 @@ export function AgentDetailPage({ projectId, agentId }) {
       const [p, r, e, out, llm, snap, comp, derived] = await Promise.all([
         getContextPreview(projectId, agentId),
         getContextReports(projectId, agentId, 20),
-        listEvents({ project_id: projectId, agent_id: agentId, limit: 50 }),
+        listEvents({
+          project_id: projectId,
+          agent_id: agentId,
+          domain: eventDomain,
+          event_type: eventType,
+          state: eventState,
+          limit: Number(eventLimit || 100),
+        }),
         listOutboxReceipts(projectId, agentId, receiptStatus, 50),
         getLatestLlmContext(projectId, agentId),
         getContextSnapshot(projectId, agentId, 0),
@@ -83,7 +94,7 @@ export function AgentDetailPage({ projectId, agentId }) {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, agentId, receiptStatus])
+  }, [projectId, agentId, receiptStatus, eventDomain, eventType, eventState, eventLimit])
 
   useEffect(() => {
     if (!projectId || !agentId) return undefined
@@ -305,11 +316,61 @@ export function AgentDetailPage({ projectId, agentId }) {
       </div>
 
       <div className="panel">
-        <h3>Recent Events (Agent)</h3>
+        <div className="row-between">
+          <h3>Recent Events (Agent)</h3>
+          <div className="action-row">
+            <input
+              placeholder="domain (e.g. iris/interaction)"
+              value={eventDomain}
+              onChange={(e) => setEventDomain(e.target.value)}
+            />
+            <input
+              placeholder="event_type (e.g. mail_event)"
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+            />
+            <input
+              placeholder="state (queued/done/dead)"
+              value={eventState}
+              onChange={(e) => setEventState(e.target.value)}
+            />
+            <input
+              type="number"
+              min="1"
+              max="1000"
+              value={eventLimit}
+              onChange={(e) => setEventLimit(Math.max(1, Math.min(1000, Number(e.target.value || 100))))}
+              style={{ width: 96 }}
+            />
+            <button
+              className="ghost-btn"
+              onClick={() => {
+                setEventDomain('iris')
+                setEventType('mail_event')
+                setEventState('')
+              }}
+            >
+              Only Mail
+            </button>
+            <button
+              className="ghost-btn"
+              onClick={() => {
+                setEventDomain('')
+                setEventType('')
+                setEventState('')
+                setEventLimit(100)
+              }}
+            >
+              Reset
+            </button>
+            <button className="ghost-btn" onClick={load}>Apply</button>
+          </div>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>Domain</th>
                 <th>Type</th>
                 <th>State</th>
                 <th>Created</th>
@@ -319,13 +380,14 @@ export function AgentDetailPage({ projectId, agentId }) {
             <tbody>
               {events.map((row) => (
                 <tr key={row.event_id}>
+                  <td>{row.domain || '-'}</td>
                   <td>{row.event_type}</td>
                   <td>{row.state}</td>
                   <td>{new Date((row.created_at || 0) * 1000).toLocaleString()}</td>
                   <td className="mono error-cell">{row.error_message || '-'}</td>
                 </tr>
               ))}
-              {!events.length && <tr><td colSpan={4}>No events</td></tr>}
+              {!events.length && <tr><td colSpan={5}>No events</td></tr>}
             </tbody>
           </table>
         </div>
