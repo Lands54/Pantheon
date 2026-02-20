@@ -27,7 +27,7 @@ def test_context_strategy_switch_project_and_agent_override():
     old = runtime_config.projects.get(project_id)
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
-        context_strategy="structured_v1",
+        context_strategy="sequential_v1",
         agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
     )
     try:
@@ -42,7 +42,7 @@ def test_context_strategy_switch_project_and_agent_override():
         agent.process(state)
         r1 = latest_context_report(project_id, agent_id)
         assert r1 is not None
-        assert r1.get("strategy_used") == "structured_v1"
+        assert r1.get("strategy_used") == "sequential_v1"
 
         runtime_config.projects[project_id].agent_settings[agent_id].context_strategy = "invalid_legacy_mode"
         state2 = {
@@ -54,7 +54,7 @@ def test_context_strategy_switch_project_and_agent_override():
         agent.process(state2)
         r2 = latest_context_report(project_id, agent_id)
         assert r2 is not None
-        assert r2.get("strategy_used") == "structured_v1"
+        assert r2.get("strategy_used") == "sequential_v1"
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

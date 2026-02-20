@@ -63,7 +63,8 @@ def test_record_intent_inbox_ack_runtime_only():
         rows = [json.loads(line) for line in runtime_log.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert len(rows) == 1
         assert rows[0]["intent_key"] == "inbox.read_ack"
-        assert "payload=" in rows[0]["text"]
+        # Now rendered via memory_inbox_read_ack template
+        assert "[INBOX_READ_ACK] count=2 ids=['e1', 'e2']" in rows[0]["text"]
         assert result["chronicle_written"] is False
         assert result["runtime_log_written"] is True
     finally:
@@ -186,7 +187,7 @@ def test_split_templates_chronicle_and_runtime():
         chrono_text = chronicle.read_text(encoding="utf-8")
         rows = [json.loads(line) for line in runtime_log.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert "split-check" in chrono_text
-        assert "payload=" in rows[-1]["text"]
+        # When runtime template is explicitly empty but intent is found, it fallbacks to internal summary
         assert "split-check" in rows[-1]["text"]
         assert result["chronicle_text"] != result["runtime_text"]
     finally:

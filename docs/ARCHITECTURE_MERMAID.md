@@ -266,7 +266,7 @@ sequenceDiagram
     loop "for each tool_call"
       RT->>TL: "execute_tool(name, args)"
       TL->>FS: "read/write/command/buffer/protocol"
-      TL-->>RT: "observation string"
+      TL-->>RT: "tool result string"
       RT->>AG: "append memory [[ACTION]]"
     end
     RT-->>AG: "next_step=finish|continue|escalated|abstained"
@@ -509,7 +509,7 @@ sequenceDiagram
         else 有 tool_calls
             loop 执行本轮全部 tool_calls
                 AG->>T: execute_tool(name,args)
-                T-->>AG: observation/result
+                T-->>AG: tool result
                 AG->>AG: 写入 state.messages 与 chronicle
             end
             opt after_action 有新 inbox
@@ -579,14 +579,14 @@ sequenceDiagram
             PH->>BRAIN: think_with_tools(llm_messages, tools)
             BRAIN-->>PH: AIMessage(tool_calls/content)
             PH->>TOOLS: execute tool calls
-            TOOLS-->>PH: observation/result
+            TOOLS-->>PH: tool result
 
             opt 工具为 Hermes 类
                 TOOLS->>HERMES: register/invoke/route/contracts/ports
                 HERMES-->>TOOLS: result/error
             end
 
-            PH->>MNE: 追加 chronicle / observation
+            PH->>MNE: 追加 chronicle / tool intent
         end
 
         AG-->>WK: new_state(next_step, delivered_ids)
@@ -627,7 +627,7 @@ flowchart LR
         JC["load_chronicle_for_context()"]
         JT["read_task_state()"]
         JI["build_inbox_overview()"]
-        JO["list_observations()"]
+        JO["list_entries()"]
         ASM["assemble_llm_messages()"]
         SYS["SystemMessage"]
     end

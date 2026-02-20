@@ -46,13 +46,15 @@ def test_chaos_mailbox_attachment_render_only_summary():
                 "context": "",
             },
         )
-        rows = list(snapshot.context_materials.get("mailbox_rendered", []) or [])
-        assert any("MAILBOX_ATTACHMENTS" in str(x) for x in rows)
-        assert not any("body" == str(x).strip() for x in rows)
+        buckets = dict(snapshot.context_materials.get("card_buckets", {}) or {})
+        rows = list(buckets.get("mailbox", []) or [])
+        assert rows
+        text = "\n".join([str(x.get("text", "") or "") for x in rows if isinstance(x, dict)])
+        assert "MAILBOX_ATTACHMENTS" in text
+        assert "body" not in text
     finally:
         if old_project is None:
             runtime_config.projects.pop(project_id, None)
         else:
             runtime_config.projects[project_id] = old_project
         shutil.rmtree(base, ignore_errors=True)
-

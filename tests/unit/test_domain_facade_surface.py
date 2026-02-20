@@ -18,6 +18,8 @@ def test_iris_facade_surface():
     assert hasattr(facade, "has_pending")
     assert hasattr(facade, "build_inbox_overview")
     assert hasattr(facade, "list_outbox_receipts")
+    assert hasattr(facade, "get_mailbox_glance")
+    assert hasattr(facade, "mark_as_delivered")
 
 
 def test_hermes_facade_surface():

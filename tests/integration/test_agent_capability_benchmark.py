@@ -57,8 +57,8 @@ class _ScriptedBrain:
         return script[idx]
 
 
-def _read_observations(project_id: str, agent_id: str) -> list[dict]:
-    p = Path("projects") / project_id / "mnemosyne" / "observations" / f"{agent_id}.jsonl"
+def _read_tool_intents(project_id: str, agent_id: str) -> list[dict]:
+    p = Path("projects") / project_id / "mnemosyne" / "intents" / f"{agent_id}.jsonl"
     if not p.exists():
         return []
     rows: list[dict] = []
@@ -67,13 +67,15 @@ def _read_observations(project_id: str, agent_id: str) -> list[dict]:
             line = line.strip()
             if not line:
                 continue
-            rows.append(json.loads(line))
+            intent = json.loads(line)
+            if intent.get("source_kind") == "tool":
+                rows.append(intent.get("payload", {}))
     return rows
 
 
 def _capability_metrics(rows: list[dict]) -> dict:
     tracked = {"list", "send_message", "check_outbox"}
-    filtered = [r for r in rows if str(r.get("tool", "")) in tracked]
+    filtered = [r for r in rows if str(r.get("tool_name", "")) in tracked]
     total = len(filtered)
     ok = sum(1 for r in filtered if str(r.get("status", "")) == "ok")
     error = sum(1 for r in filtered if str(r.get("status", "")) == "error")
@@ -118,8 +120,7 @@ def test_agent_capability_benchmark_inbox_reply_and_tool_accuracy():
         phase_strategy="freeform",
         tool_loop_max=6,
         context_strategy="structured_v1",
-        context_budget_state_window=18000,
-        context_state_window_limit=80,
+        context_short_window_intents=120,
     )
     try:
         enqueue_message(
@@ -149,11 +150,11 @@ def test_agent_capability_benchmark_inbox_reply_and_tool_accuracy():
 
         assert brain.system_prompts, "system prompt should be captured"
         first_prompt = brain.system_prompts[0]
-        assert "# COMBINED MEMORY" in first_prompt
-        assert "[INBOX UNREAD]" in first_prompt
+        assert "# CARD_CONTEXT" in first_prompt
+        assert "[INBOX_UNREAD]" in first_prompt
         assert "bootstrap-task" in first_prompt
 
-        obs = _read_observations(project_id, agent_id)
+        obs = _read_tool_intents(project_id, agent_id)
         metrics = _capability_metrics(obs)
         assert metrics["total_calls"] >= 3
         assert metrics["by_tool"].get("list", 0) >= 1

@@ -34,8 +34,7 @@ def test_structured_v1_recent_messages_not_fixed_eight():
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
         context_strategy="structured_v1",
-        context_state_window_limit=40,
-        context_budget_state_window=30000,
+        context_short_window_intents=40,
         agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
     )
     try:
@@ -51,8 +50,8 @@ def test_structured_v1_recent_messages_not_fixed_eight():
         }
         agent.process(state)
         assert brain.last_recent_count == 0
-        assert "[STATE_WINDOW]" in brain.last_system_text
-        assert "m29-" in brain.last_system_text
+        assert "# CARD_CONTEXT" in brain.last_system_text
+        assert "[STATE_WINDOW]" not in brain.last_system_text
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

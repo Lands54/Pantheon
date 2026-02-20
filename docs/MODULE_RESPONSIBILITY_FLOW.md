@@ -17,7 +17,7 @@
 | Mnemosyne | 记忆与意图持久化 | 运行意图/tool结果/事件语义 | 记忆策略结果、LLM可渲染文本 | Chaos/Janus |
 | Hermes | 契约/协议/端口管理 | Tool 调用与系统操作 | 契约/协议状态、通知事件 | Chaos/Angelia |
 | Config Registry | 配置单一真相源 | 配置模型与registry元数据 | schema/audit/校验结果 | API/CLI/前端/Runtime |
-| Tools | 行为执行面 | LLM tool calls | domain side effects + observation | Runtime dispatch |
+| Tools | 行为执行面 | LLM tool calls | domain side effects + tool result | Runtime dispatch |
 
 ## 3. 模块间主信息流（结构）
 ```mermaid

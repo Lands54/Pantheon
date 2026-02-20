@@ -42,6 +42,9 @@ def test_message_flow_no_interaction_agent_trigger_event_created():
         assert "interaction.message.sent" in etypes
         assert "mail_event" in etypes
         assert "interaction.agent.trigger" not in etypes
+        interaction_rows = [x for x in rows if str(x.domain) == "interaction"]
+        assert interaction_rows
+        assert all(str(x.state.value) != "queued" for x in interaction_rows)
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")
@@ -65,6 +68,17 @@ def test_event_submit_rejects_interaction_agent_trigger():
             },
         )
         assert res.status_code == 410
+
+        res2 = client.post(
+            "/events/submit",
+            json={
+                "project_id": project_id,
+                "domain": "interaction",
+                "event_type": "interaction.unknown.xxx",
+                "payload": {"agent_id": "alpha"},
+            },
+        )
+        assert res2.status_code == 400
     finally:
         _switch_project(old_project)
         client.delete(f"/projects/{project_id}")

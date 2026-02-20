@@ -4,6 +4,7 @@ import time
 from gods.angelia import store
 from gods.angelia import policy
 from gods.config import ProjectConfig, runtime_config
+from gods import events as events_bus
 
 
 def test_angelia_priority_without_permanent_starvation():
@@ -112,3 +113,35 @@ def test_angelia_preempt_types_follow_config_ssot():
             runtime_config.projects.pop(project_id, None)
         else:
             runtime_config.projects[project_id] = old
+
+
+def test_angelia_rejects_interaction_event_in_queue_path():
+    project_id = "unit_scheduler_reject_interaction_domain"
+    try:
+        rec = events_bus.EventRecord.create(
+            project_id=project_id,
+            domain="interaction",
+            event_type="interaction.message.sent",
+            priority=100,
+            payload={"agent_id": "a", "to_id": "a", "sender_id": "b", "title": "t", "content": "c"},
+            dedupe_key="",
+            max_attempts=1,
+        )
+        rec = events_bus.append_event(rec)
+        try:
+            store.pick_next_event(
+                project_id=project_id,
+                agent_id="a",
+                now=time.time(),
+                cooldown_until=0.0,
+                preempt_types={"mail_event", "manual"},
+            )
+            assert False, "expected Angelia queue domain violation"
+        except ValueError as e:
+            assert "ANGELIA_QUEUE_DOMAIN_VIOLATION" in str(e)
+
+        rows = events_bus.list_events(project_id=project_id, event_type="interaction.message.sent", limit=5)
+        assert rows
+        assert rows[0].state.value == "dead"
+    finally:
+        shutil.rmtree(Path("projects") / project_id, ignore_errors=True)

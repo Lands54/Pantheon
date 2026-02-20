@@ -50,8 +50,7 @@ def _setup_config(project_id: str, agent_id: str):
         phase_strategy="freeform",
         tool_loop_max=8,
         context_strategy="structured_v1",
-        context_budget_state_window=18000,
-        context_state_window_limit=80,
+        context_short_window_intents=120,
     )
     return old
 
@@ -64,8 +63,8 @@ def _cleanup(project_id: str, old_project):
     shutil.rmtree(Path("projects") / project_id, ignore_errors=True)
 
 
-def _read_observations(project_id: str, agent_id: str) -> list[dict]:
-    p = Path("projects") / project_id / "mnemosyne" / "observations" / f"{agent_id}.jsonl"
+def _read_tool_intents(project_id: str, agent_id: str) -> list[dict]:
+    p = Path("projects") / project_id / "mnemosyne" / "intents" / f"{agent_id}.jsonl"
     if not p.exists():
         return []
     rows: list[dict] = []
@@ -74,13 +73,15 @@ def _read_observations(project_id: str, agent_id: str) -> list[dict]:
             line = line.strip()
             if not line:
                 continue
-            rows.append(json.loads(line))
+            intent = json.loads(line)
+            if intent.get("source_kind") == "tool":
+                rows.append(intent.get("payload", {}))
     return rows
 
 
 def _tool_metrics(rows: list[dict]) -> dict:
     tracked = {"list", "send_message", "check_outbox"}
-    filtered = [r for r in rows if str(r.get("tool", "")) in tracked]
+    filtered = [r for r in rows if str(r.get("tool_name", "")) in tracked]
     total = len(filtered)
     ok = sum(1 for r in filtered if str(r.get("status", "")) == "ok")
     return {
@@ -250,7 +251,7 @@ def _run_one_round(round_idx: int) -> dict:
         brain1 = _ToolFlowBrain()
         a1.brain = brain1
         out1, _ = _run_agent_once(a1, s1)
-        obs = _read_observations(project_id, agent_id)
+        obs = _read_tool_intents(project_id, agent_id)
         tm = _tool_metrics(obs)
         result["tool_metrics"] = tm
         result["tool_flow_pass"] = bool(
@@ -354,7 +355,7 @@ def _run_one_round_live(round_idx: int) -> dict:
         a1 = GodAgent(agent_id=agent_id, project_id=project_id)
         out1, _, to1 = _run_agent_once_with_timeout(a1, s1, timeout_sec=30)
         result["timeouts"] += int(to1)
-        obs = _read_observations(project_id, agent_id)
+        obs = _read_tool_intents(project_id, agent_id)
         tm = _tool_metrics(obs)
         result["tool_metrics"] = tm
         result["tool_flow_pass"] = bool(out1.get("next_step") in {"finish", "continue"} and tm["total_calls"] >= 2)
@@ -576,7 +577,7 @@ def _prepare_tool_preconditions(project_id: str, agent_id: str, tool_name: str) 
 def _run_tool_coverage_suite_live(project_id: str, agent_id: str, timeout_sec: int = 30) -> dict:
     agent = GodAgent(agent_id=agent_id, project_id=project_id)
     tool_names = [t.name for t in agent.get_tools()]
-    rows = _read_observations(project_id, agent_id)
+    rows = _read_tool_intents(project_id, agent_id)
     called_ok: dict[str, bool] = {x: False for x in tool_names}
     called_any: dict[str, bool] = {x: False for x in tool_names}
     attempts: dict[str, int] = {x: 0 for x in tool_names}
@@ -599,9 +600,9 @@ def _run_tool_coverage_suite_live(project_id: str, agent_id: str, timeout_sec: i
                 inject_inbox_before_pulse(state, project_id=project_id, agent_id=agent_id)
             _, _, to = _run_agent_once_with_timeout(agent, state, timeout_sec=timeout_sec)
             timeouts += int(to)
-            rows = _read_observations(project_id, agent_id)
+            rows = _read_tool_intents(project_id, agent_id)
             delta = rows[base_len:]
-            hits = [r for r in delta if str(r.get("tool", "")) == tool]
+            hits = [r for r in delta if str(r.get("tool_name", "")) == tool]
             if hits:
                 called_any[tool] = True
                 if any(str(h.get("status", "")) == "ok" for h in hits):

@@ -183,7 +183,7 @@ record_intent(intent)
 2. 不要直接写 chronicle/runtime 文件
    - 必须通过 `record_intent(...)`
 3. builder 要保证 key 与 payload 一致
-   - 如 `tool.read_file.ok` 必须 `payload.tool_name=read_file`、`payload.status=ok`
+   - 如 `tool.read.ok` 必须 `payload.tool_name=read_file`、`payload.status=ok`
 4. event 扩展字段可以有，但核心字段必须完整
 5. 模板改动要配合 policy 校验
    - `validate_memory_policy(...)` 需通过

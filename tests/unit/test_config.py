@@ -11,7 +11,14 @@ def test_agent_model_config_defaults():
     """Test AgentModelConfig default values."""
     config = AgentModelConfig()
     assert config.model == "stepfun/step-3.5-flash:free"
-    assert config.disabled_tools == ["check_inbox", "check_outbox"]
+    assert config.disabled_tools == [
+        "check_inbox",
+        "check_outbox",
+        "post_to_synod",
+        "mnemo_write_agent",
+        "mnemo_list_agent",
+        "mnemo_read_agent",
+    ]
 
 
 def test_project_config_defaults():
@@ -26,7 +33,7 @@ def test_project_config_defaults():
     assert config.pulse_event_inject_budget == 3
     assert config.pulse_interrupt_mode == "after_action"
     assert config.phase_strategy == "react_graph"
-    assert config.context_strategy == "structured_v1"
+    assert config.context_strategy == "sequential_v1"
     assert config.context_token_budget_total == 32000
 
 

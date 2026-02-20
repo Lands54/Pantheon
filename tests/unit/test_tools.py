@@ -10,6 +10,8 @@ from gods.tools.filesystem import list
 from gods.tools.filesystem import read, write_file
 from gods.tools.hermes import register_contract, list_contracts
 from gods.config import runtime_config, ProjectConfig
+from gods.iris.facade import enqueue_message
+from gods.mnemosyne import facade as mnemosyne_facade
 
 
 def test_validate_path_within_territory(tmp_path):
@@ -156,6 +158,96 @@ def test_read_file_supports_range_and_shows_path_metadata():
     assert "line4" not in out
 
 
+def test_read_and_list_mail_virtual_paths():
+    project_id = "unit_mail_virtual_paths"
+    caller_id = "alice"
+    receiver_id = "bob"
+    (Path("projects") / project_id / "agents" / caller_id).mkdir(parents=True, exist_ok=True)
+    (Path("projects") / project_id / "agents" / receiver_id).mkdir(parents=True, exist_ok=True)
+
+    row = enqueue_message(
+        project_id=project_id,
+        agent_id=caller_id,
+        sender=receiver_id,
+        title="t1",
+        content="hello\nline2",
+        msg_type="private",
+        trigger_pulse=False,
+        pulse_priority=100,
+        attachments=[],
+    )
+    event_id = str(row.get("mail_event_id", ""))
+    assert event_id
+
+    inbox_list = list.invoke(
+        {"path": "mail://inbox", "caller_id": caller_id, "project_id": project_id, "page_size": 10, "page": 1}
+    )
+    assert "[MAILBOX:inbox]" in inbox_list
+    assert event_id in inbox_list
+
+    inbox_read = read.invoke(
+        {"path": f"mail://inbox/{event_id}", "caller_id": caller_id, "project_id": project_id, "start": 1, "end": 1}
+    )
+    assert "[READ_MAIL_INBOX]" in inbox_read
+    assert "title: t1" in inbox_read
+    assert "hello" in inbox_read
+    assert "line2" not in inbox_read
+
+    outbox_list = list.invoke(
+        {"path": "mail://outbox", "caller_id": receiver_id, "project_id": project_id, "page_size": 10, "page": 1}
+    )
+    assert "[MAILBOX:outbox]" in outbox_list
+    assert "[RECEIPT]" in outbox_list
+
+
+def test_list_agent_virtual_paths():
+    project_id = "unit_agent_virtual_paths"
+    caller_id = "alpha"
+    (Path("projects") / project_id / "agents" / caller_id).mkdir(parents=True, exist_ok=True)
+    (Path("projects") / project_id / "agents" / "beta").mkdir(parents=True, exist_ok=True)
+    profiles = Path("projects") / project_id / "mnemosyne" / "agent_profiles"
+    profiles.mkdir(parents=True, exist_ok=True)
+    (profiles / "alpha.md").write_text("# alpha\nAlpha role", encoding="utf-8")
+    (profiles / "beta.md").write_text("# beta\nBeta role", encoding="utf-8")
+
+    out = list.invoke(
+        {"path": "agent://all", "caller_id": caller_id, "project_id": project_id, "page_size": 20, "page": 1}
+    )
+    assert "[AGENTS:all]" in out
+    assert "[AGENT] id=alpha" in out
+    assert "[AGENT] id=beta" in out
+
+
+def test_read_and_list_artifact_virtual_paths():
+    project_id = "unit_artifact_virtual_paths"
+    caller_id = "alpha"
+    (Path("projects") / project_id / "agents" / caller_id).mkdir(parents=True, exist_ok=True)
+
+    ref = mnemosyne_facade.put_artifact_text(
+        scope="agent",
+        project_id=project_id,
+        owner_agent_id=caller_id,
+        actor_id=caller_id,
+        text="a1\na2\na3",
+        mime="text/plain",
+        tags=[],
+    )
+
+    art_list = list.invoke(
+        {"path": "artifact://agent", "caller_id": caller_id, "project_id": project_id, "page_size": 5, "page": 1}
+    )
+    assert "[ARTIFACTS:agent]" in art_list
+    assert ref.artifact_id in art_list
+
+    art_read = read.invoke(
+        {"path": f"artifact://{ref.artifact_id}", "caller_id": caller_id, "project_id": project_id, "start": 2, "end": 3}
+    )
+    assert "[READ_ARTIFACT]" in art_read
+    assert f"path: artifact://{ref.artifact_id}" in art_read
+    assert "a2" in art_read and "a3" in art_read
+    assert "a1" not in art_read
+
+
 def test_list_contracts_shows_title_and_description():
     project_id = "unit_contract_list"
     caller_id = "tester"
@@ -201,6 +293,69 @@ def test_list_contracts_shows_title_and_description():
         row = data["contracts"][0]
         assert row["title"] == "Library Contract"
         assert "catalog and circulation" in row["description"]
+    finally:
+        runtime_config.projects.pop(project_id, None)
+        proj_dir = Path("projects") / project_id
+        if proj_dir.exists():
+            shutil.rmtree(proj_dir)
+
+
+def test_read_and_list_contract_virtual_paths():
+    project_id = "unit_contract_virtual_paths"
+    caller_id = "tester"
+    runtime_config.projects[project_id] = ProjectConfig()
+    try:
+        contract = {
+            "title": "Coord Contract",
+            "version": "1.0.0",
+            "description": "Coordinate agents for task routing.",
+            "submitter": caller_id,
+            "committers": [caller_id],
+            "default_obligations": [
+                {
+                    "id": "route_ping",
+                    "summary": "route ping",
+                    "provider": {"type": "http", "url": "http://127.0.0.1:1/ping", "method": "GET"},
+                    "io": {"request_schema": {"type": "object"}, "response_schema": {"type": "object"}},
+                    "runtime": {"mode": "sync", "timeout_sec": 3},
+                }
+            ],
+            "obligations": {},
+        }
+        reg = register_contract.invoke(
+            {
+                "contract_json": json.dumps(contract, ensure_ascii=False),
+                "caller_id": caller_id,
+                "project_id": project_id,
+            }
+        )
+        assert '"ok": true' in reg.lower()
+
+        out_list = list.invoke(
+            {
+                "path": "contract://active",
+                "caller_id": caller_id,
+                "project_id": project_id,
+                "page_size": 10,
+                "page": 1,
+            }
+        )
+        assert "[CONTRACTS:active]" in out_list
+        assert "Coord Contract@1.0.0" in out_list
+
+        out_read = read.invoke(
+            {
+                "path": "contract://Coord Contract@1.0.0",
+                "caller_id": caller_id,
+                "project_id": project_id,
+                "start": 1,
+                "end": 40,
+            }
+        )
+        assert "[READ_CONTRACT]" in out_read
+        assert "title: Coord Contract" in out_read
+        assert "version: 1.0.0" in out_read
+        assert "route_ping" in out_read
     finally:
         runtime_config.projects.pop(project_id, None)
         proj_dir = Path("projects") / project_id

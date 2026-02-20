@@ -32,7 +32,7 @@ def test_events_catalog_contains_llm_flag():
     items = data.get("items", [])
     row = next((x for x in items if x.get("event_type") == "interaction.message.sent"), None)
     assert row is not None
-    assert row.get("feeds_llm") is True
+    assert row.get("feeds_llm") is False
     assert "description" in row
 
 

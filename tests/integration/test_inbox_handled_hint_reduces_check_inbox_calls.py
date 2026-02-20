@@ -33,8 +33,7 @@ def test_inbox_context_contains_handled_semantics_for_agent_confidence():
     runtime_config.projects[project_id] = ProjectConfig(
         active_agents=[agent_id],
         context_strategy="structured_v1",
-        context_budget_state_window=20000,
-        context_state_window_limit=50,
+        context_short_window_intents=120,
         agent_settings={agent_id: AgentModelConfig(disabled_tools=[])},
     )
     try:
@@ -62,7 +61,7 @@ def test_inbox_context_contains_handled_semantics_for_agent_confidence():
         agent.brain = brain
         agent.process(state)
 
-        assert "marked handled automatically" in brain.seen
+        assert "[INBOX_UNREAD]" in brain.seen
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

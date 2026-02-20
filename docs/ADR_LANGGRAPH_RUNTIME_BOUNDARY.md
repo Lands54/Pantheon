@@ -163,7 +163,7 @@ sequenceDiagram
     participant M as Mnemosyne
 
     W->>E: 触发一次 pulse(project_id, agent_id)
-    E->>C: 聚合原料(events/mailbox/memory/contracts/config/tools/state_window)
+    E->>C: 聚合原料(events/mailbox/memory/contracts/config/tools/cards)
     E->>G: invoke(state + __chaos_envelope)
 
     G->>J: build_context(envelope)
@@ -175,7 +175,7 @@ sequenceDiagram
     loop 每个 tool_call
         G->>T: execute_tool(name, args)
         T-->>G: tool_result
-        G->>M: 记录 tool intent/observation
+        G->>M: 记录 tool intent
         opt after_action 注入开启
             G->>I: inject_inbox_after_action_if_any
             I-->>G: 新 inbox 注入结果

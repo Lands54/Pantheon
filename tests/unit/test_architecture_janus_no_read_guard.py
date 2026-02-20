@@ -15,7 +15,6 @@ def test_janus_no_read_exports_in_facade_or_init():
         "context_reports",
         "latest_context_report",
         "list_context_reports",
-        "list_observations",
         "read_profile",
         "read_task_state",
     )
