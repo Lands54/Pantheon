@@ -55,6 +55,7 @@ from gods.mnemosyne.intent_builders import (
     intent_from_inbox_received,
     intent_from_inbox_summary,
     intent_from_outbox_status,
+    intent_from_tool_call,
     intent_from_tool_result,
     intent_from_janus_compaction_base,
 )
@@ -92,6 +93,7 @@ __all__ = [
     "list_entries",
     "read_entry",
     "intent_from_tool_result",
+    "intent_from_tool_call",
     "intent_from_angelia_event",
     "intent_from_mailbox_section",
     "intent_from_inbox_read",

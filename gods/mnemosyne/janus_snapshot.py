@@ -271,10 +271,16 @@ def _card_id_for_row(row: dict[str, Any]) -> str:
     key = str(row.get("intent_key", "") or "")
     payload = row.get("payload")
     data = payload if isinstance(payload, dict) else {}
+    if key.startswith("tool.call."):
+        tn = str(data.get("tool_name", "") or "")
+        cid = str(data.get("call_id", "") or "")
+        return f"tool.call:{tn}:{cid or 'unknown'}"
     if key.startswith("tool."):
         tn = str(data.get("tool_name", "") or "")
         st = str(data.get("status", "") or "")
-        return f"tool:{tn}:{st}"
+        cid = str(data.get("call_id", "") or "")
+        suffix = f":{cid}" if cid else ""
+        return f"tool:{tn}:{st}{suffix}"
     if key.startswith("inbox.") or key.startswith("outbox."):
         mid = str(data.get("message_id", "") or "")
         sec = str(data.get("section", "") or "")

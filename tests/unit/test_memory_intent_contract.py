@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from gods.mnemosyne import MemoryIntent, record_intent
-from gods.mnemosyne.facade import intent_from_tool_result
+from gods.mnemosyne.facade import intent_from_tool_call, intent_from_tool_result
 
 
 def test_record_intent_rejects_invalid_llm_payload_missing_field():
@@ -69,6 +69,25 @@ def test_record_intent_accepts_valid_tool_contract_from_builder():
         )
         out = record_intent(intent)
         assert out["intent_key"] == "tool.list.ok"
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def test_record_intent_accepts_valid_tool_call_contract_from_builder():
+    project_id = f"mn_intent_contract_{uuid.uuid4().hex[:8]}"
+    agent_id = "alpha"
+    base = Path("projects") / project_id
+    try:
+        intent = intent_from_tool_call(
+            project_id=project_id,
+            agent_id=agent_id,
+            tool_name="list",
+            args={"path": "."},
+            node_name="dispatch_tools",
+            call_id="call_test_001",
+        )
+        out = record_intent(intent)
+        assert out["intent_key"] == "tool.call.list"
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

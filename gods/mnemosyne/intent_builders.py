@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import time
+import uuid
 from typing import Any
 
 from gods.mnemosyne.contracts import MemoryIntent
@@ -40,6 +41,8 @@ def intent_from_tool_result(
     status: str,
     args: dict[str, Any],
     result: str,
+    *,
+    call_id: str = "",
 ) -> MemoryIntent:
     st = str(status or "ok").strip().lower()
     if st not in {"ok", "blocked", "error"}:
@@ -56,10 +59,39 @@ def intent_from_tool_result(
             "tool_name": tn,
             "status": st,
             "args": args or {},
+            "call_id": str(call_id or "").strip(),
             "result": raw_result,
             "result_compact": compact,
         },
         fallback_text=f"[[ACTION]] {tn} ({st}) -> {result}",
+        timestamp=time.time(),
+    )
+
+
+def intent_from_tool_call(
+    project_id: str,
+    agent_id: str,
+    tool_name: str,
+    args: dict[str, Any],
+    *,
+    node_name: str = "",
+    call_id: str = "",
+) -> MemoryIntent:
+    tn = str(tool_name or "unknown").strip()
+    cid = str(call_id or "").strip() or f"call_{uuid.uuid4().hex[:16]}"
+    node = str(node_name or "").strip()
+    return MemoryIntent(
+        intent_key=f"tool.call.{tn}",
+        project_id=project_id,
+        agent_id=agent_id,
+        source_kind="tool",
+        payload={
+            "tool_name": tn,
+            "args": args or {},
+            "call_id": cid,
+            "node": node,
+        },
+        fallback_text=f"[[ACTION_CALL]] {tn} id={cid} node={node or '-'} args={args or {}}",
         timestamp=time.time(),
     )
 

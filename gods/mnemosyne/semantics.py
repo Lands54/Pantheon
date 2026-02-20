@@ -55,6 +55,7 @@ class SemanticsService:
     def list_intent_keys(self) -> list[str]:
         keys = list(self._intents.keys())
         for tool in self._tools:
+            keys.append(f"tool.call.{tool}")
             keys.append(f"tool.{tool}.ok")
             keys.append(f"tool.{tool}.error")
             keys.append(f"tool.{tool}.blocked")
@@ -63,6 +64,10 @@ class SemanticsService:
     def is_registered_intent(self, key: str) -> bool:
         if key in self._intents:
             return True
+        if key.startswith("tool.call."):
+            parts = key.split(".")
+            if len(parts) == 3 and parts[2] in self._tools:
+                return True
         if key.startswith("tool."):
             parts = key.split(".")
             if len(parts) == 3 and parts[1] in self._tools and parts[2] in {"ok", "error", "blocked"}:
@@ -79,8 +84,23 @@ class SemanticsService:
             p["llm_context_template_key"] = templates.get("llm_context", "")
             return p
         
+        if key.startswith("tool.call."):
+            return {
+                "to_chronicle": False, "to_runtime_log": True, "to_llm_context": False,
+                "chronicle_template_key": "",
+                "runtime_log_template_key": "memory_tool_call",
+                "llm_context_template_key": ""
+            }
+
         if key.startswith("tool."):
             parts = key.split(".")
+            if len(parts) != 3:
+                return {
+                    "to_chronicle": False, "to_runtime_log": True, "to_llm_context": False,
+                    "chronicle_template_key": "",
+                    "runtime_log_template_key": "",
+                    "llm_context_template_key": ""
+                }
             status = parts[-1]
             if status == "ok":
                 return {
@@ -112,8 +132,10 @@ class SemanticsService:
         defn = self.get_intent_definition(key)
         if defn:
             return defn.get("schema", {"guaranteed": [], "optional": []})
+        if key.startswith("tool.call."):
+            return {"guaranteed": ["tool_name", "args", "call_id", "node"], "optional": []}
         if key.startswith("tool."):
-            return {"guaranteed": ["tool_name", "status", "args", "result", "result_compact"], "optional": []}
+            return {"guaranteed": ["tool_name", "status", "args", "result", "result_compact"], "optional": ["call_id"]}
         if key.startswith("event."):
             return {"guaranteed": ["stage", "event_id", "event_type", "priority", "attempt", "max_attempts", "payload"], "optional": []}
         return {"guaranteed": [], "optional": []}
@@ -132,6 +154,8 @@ class SemanticsService:
     def get_template_key(self, intent_key: str, scope: Literal["runtime_log", "chronicle", "llm_context"]) -> str:
         defn = self.get_intent_definition(intent_key)
         if not defn:
+            if intent_key.startswith("tool.call."):
+                return "memory_tool_call" if scope == "runtime_log" else ""
             if intent_key.startswith("tool."):
                 status = intent_key.split(".")[-1]
                 return f"memory_tool_{status}"

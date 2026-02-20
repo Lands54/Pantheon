@@ -48,14 +48,18 @@ def test_themis_allowlist_and_execution_records():
         initial_len = len(intents)
         ok = executor.execute_tool("alpha", {"path": "."}, node_name="dispatch_tools")
         assert "ok:alpha:." in ok
-        assert len(intents) == initial_len + 1
+        assert len(intents) == initial_len + 2
+        assert intents[-2].intent_key == "tool.call.alpha"
         assert intents[-1].intent_key == "tool.alpha.ok"
+        assert intents[-1].payload.get("call_id") == intents[-2].payload.get("call_id")
 
         mid_len = len(intents)
         blocked = executor.execute_tool("boom", {"path": "."}, node_name="dispatch_tools")
         assert "not allowed in node" in blocked
-        assert len(intents) == mid_len + 1
+        assert len(intents) == mid_len + 2
+        assert intents[-2].intent_key == "tool.call.boom"
         assert intents[-1].intent_key == "tool.boom.blocked"
+        assert intents[-1].payload.get("call_id") == intents[-2].payload.get("call_id")
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

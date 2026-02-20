@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
 from gods.agents.runtime_policy import resolve_phase_strategy
 from gods.config import runtime_config
-from gods.mnemosyne.intent_builders import intent_from_tool_result
+from gods.mnemosyne.intent_builders import intent_from_tool_call, intent_from_tool_result
 from gods.tools import GODS_TOOLS
 from gods.tools.communication import reset_inbox_guard
 
@@ -169,6 +170,21 @@ class ThemisOrchestrator:
                 return msg
             return f"[Current CWD: {self.agent_dir.resolve()}] Content: {msg}"
 
+        invoke_args = dict(args or {})
+        invoke_args["caller_id"] = self.agent_id
+        invoke_args["project_id"] = self.project_id
+        call_id = f"call_{uuid.uuid4().hex[:16]}"
+        self._intent_recorder(
+            intent_from_tool_call(
+                project_id=self.project_id,
+                agent_id=self.agent_id,
+                tool_name=name,
+                args=invoke_args,
+                node_name=node_name or "dispatch_tools",
+                call_id=call_id,
+            )
+        )
+
         proj = runtime_config.projects.get(self.project_id)
         if proj:
             settings = proj.agent_settings.get(self.agent_id)
@@ -178,7 +194,17 @@ class ThemisOrchestrator:
                     "Suggested next step: choose another available tool aligned with your current phase."
                 )
 
-                self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "blocked", args, blocked))
+                self._intent_recorder(
+                    intent_from_tool_result(
+                        self.project_id,
+                        self.agent_id,
+                        name,
+                        "blocked",
+                        invoke_args,
+                        blocked,
+                        call_id=call_id,
+                    )
+                )
                 return blocked
 
         if node_name and not self._is_tool_allowed_for_node(name, node_name):
@@ -187,12 +213,18 @@ class ThemisOrchestrator:
                 "Suggested next step: choose a tool permitted by current node policy."
             )
 
-            self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "blocked", args, blocked))
+            self._intent_recorder(
+                intent_from_tool_result(
+                    self.project_id,
+                    self.agent_id,
+                    name,
+                    "blocked",
+                    invoke_args,
+                    blocked,
+                    call_id=call_id,
+                )
+            )
             return blocked
-
-        invoke_args = dict(args or {})
-        invoke_args["caller_id"] = self.agent_id
-        invoke_args["project_id"] = self.project_id
         for tool_func in self.get_tools_for_node(node_name or "dispatch_tools"):
             if tool_func.name != name:
                 continue
@@ -205,7 +237,15 @@ class ThemisOrchestrator:
                 status = self.classify_tool_status(str(result))
 
                 self._intent_recorder(
-                    intent_from_tool_result(self.project_id, self.agent_id, name, status, invoke_args, str(result))
+                    intent_from_tool_result(
+                        self.project_id,
+                        self.agent_id,
+                        name,
+                        status,
+                        invoke_args,
+                        str(result),
+                        call_id=call_id,
+                    )
                 )
                 return str(result)
             except Exception as e:
@@ -214,7 +254,17 @@ class ThemisOrchestrator:
                     "Suggested next step: verify required arguments and retry once."
                 )
 
-                self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "error", invoke_args, err))
+                self._intent_recorder(
+                    intent_from_tool_result(
+                        self.project_id,
+                        self.agent_id,
+                        name,
+                        "error",
+                        invoke_args,
+                        err,
+                        call_id=call_id,
+                    )
+                )
                 return err
 
         available = ", ".join([t.name for t in self.get_tools_for_node(node_name or "dispatch_tools")])
@@ -223,5 +273,15 @@ class ThemisOrchestrator:
             f"Suggested next step: choose one from [{available}]."
         )
 
-        self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "error", invoke_args, unknown))
+        self._intent_recorder(
+            intent_from_tool_result(
+                self.project_id,
+                self.agent_id,
+                name,
+                "error",
+                invoke_args,
+                unknown,
+                call_id=call_id,
+            )
+        )
         return unknown

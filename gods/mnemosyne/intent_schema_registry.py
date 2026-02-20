@@ -103,6 +103,7 @@ def schema_for_intent(intent_key: str) -> dict[str, list[str]]:
     return semantics_service.get_schema(k)
 
 
+_TOOL_CALL_INTENT_RE = re.compile(r"^tool\.call\.([a-z][a-z0-9_]{0,63})$")
 _TOOL_INTENT_RE = re.compile(r"^tool\.([a-z][a-z0-9_]{0,63})\.(ok|blocked|error)$")
 _EVENT_INTENT_RE = re.compile(r"^event\.([a-z][a-z0-9_.-]{0,127})$")
 _INBOX_SECTION_RE = re.compile(r"^inbox\.section\.(summary|recent_read|recent_send|inbox_unread)$")
@@ -135,6 +136,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
     """
     Phase-1 strict contract:
     - llm.response
+    - tool.call.<tool_name>
     - tool.<tool_name>.<ok|blocked|error>
     Other intents remain permissive for incremental migration.
     """
@@ -162,6 +164,31 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "content", str, where=key)
         return
 
+    if key.startswith("tool.call."):
+        m = _TOOL_CALL_INTENT_RE.match(key)
+        if not m:
+            raise ValueError(
+                f"invalid intent '{key}': expected format tool.call.<tool_name>"
+            )
+        if str(source_kind or "").strip() != "tool":
+            raise ValueError(f"invalid intent '{key}': source_kind must be 'tool'")
+        tool_from_key = str(m.group(1))
+        allowed = {"tool_name", "args", "call_id", "node"}
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                f"invalid intent '{key}': unsupported payload keys: {', '.join(unknown)}"
+            )
+        tool_name = _expect_field_type(data, "tool_name", str, where=key)
+        _expect_field_type(data, "args", dict, where=key)
+        _expect_field_type(data, "call_id", str, where=key)
+        _expect_field_type(data, "node", str, where=key)
+        if str(tool_name).strip() != tool_from_key:
+            raise ValueError(
+                f"invalid intent '{key}': payload.tool_name must equal '{tool_from_key}'"
+            )
+        return
+
     if key.startswith("tool."):
         m = _TOOL_INTENT_RE.match(key)
         if not m:
@@ -172,7 +199,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
             raise ValueError(f"invalid intent '{key}': source_kind must be 'tool'")
         tool_from_key = str(m.group(1))
         status_from_key = str(m.group(2))
-        allowed = {"tool_name", "status", "args", "result", "result_compact"}
+        allowed = {"tool_name", "status", "args", "result", "result_compact", "call_id"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -181,6 +208,8 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         tool_name = _expect_field_type(data, "tool_name", str, where=key)
         status = _expect_field_type(data, "status", str, where=key)
         _expect_field_type(data, "args", dict, where=key)
+        if "call_id" in data:
+            _expect_field_type(data, "call_id", str, where=key)
         _expect_field_type(data, "result", str, where=key)
         _expect_field_type(data, "result_compact", str, where=key)
         if str(tool_name).strip() != tool_from_key:

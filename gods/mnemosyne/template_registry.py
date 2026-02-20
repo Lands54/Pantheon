@@ -31,6 +31,7 @@ _DEFAULT_RUNTIME_LOG_TEMPLATES: dict[str, str] = {
     "memory_phase_retry_reason": "[PHASE_RETRY] reason -> $message",
     "memory_phase_retry_act": "[PHASE_RETRY] act -> $message",
     "memory_phase_retry_observe": "[PHASE_RETRY] observe -> $message",
+    "memory_tool_call": "[[ACTION_CALL]] $tool_name id=$call_id node=$node args=$args",
     "memory_tool_ok": "[[ACTION]] $tool_name (ok) -> $result_compact",
     "memory_tool_error": "[[ACTION]] $tool_name (error) -> $result_compact",
     "memory_tool_blocked": "[[ACTION]] $tool_name (blocked) -> $result_compact",
