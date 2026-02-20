@@ -1,0 +1,965 @@
+{
+    "version": 1,
+    "tools": [
+        "check_inbox",
+        "check_outbox",
+        "send_message",
+        "finalize",
+        "read",
+        "write_file",
+        "replace_content",
+        "insert_content",
+        "run_command",
+        "run_command_detach",
+        "detach_list",
+        "detach_stop",
+        "post_to_synod",
+        "abstain_from_synod",
+        "list_agents",
+        "multi_replace",
+        "list",
+        "register_contract",
+        "commit_contract",
+        "list_contracts",
+        "disable_contract",
+        "reserve_port",
+        "release_port",
+        "list_port_leases",
+        "mnemo_write_agent",
+        "mnemo_list_agent",
+        "mnemo_read_agent",
+        "upload_artifact"
+    ],
+    "intents": {
+        "inbox.received.unread": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "sender",
+                    "message_id",
+                    "msg_type",
+                    "content",
+                    "payload"
+                ],
+                "optional": [
+                    "attachments_count"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_inbox_received_unread",
+                "llm_context": "memory_inbox_received_unread"
+            }
+        },
+        "inbox.read_ack": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "count",
+                    "message_ids"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_inbox_read_ack",
+                "llm_context": "memory_inbox_read_ack"
+            }
+        },
+        "event.manual": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "reason"
+                ],
+                "optional": []
+            }
+        },
+        "llm.response": {
+            "source_kind": "llm",
+            "policy": {
+                "to_chronicle": true,
+                "to_runtime_log": false,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "phase",
+                    "content"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "chronicle": "memory_llm_response",
+                "llm_context": "memory_llm_response"
+            }
+        },
+        "outbox.sent.pending": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "to_agent_id",
+                    "message_id",
+                    "status",
+                    "error_message"
+                ],
+                "optional": [
+                    "attachments_count"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_outbox_pending"
+            }
+        },
+        "outbox.sent.delivered": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "to_agent_id",
+                    "message_id",
+                    "status",
+                    "error_message"
+                ],
+                "optional": [
+                    "attachments_count"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_outbox_delivered"
+            }
+        },
+        "outbox.sent.handled": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "to_agent_id",
+                    "message_id",
+                    "status",
+                    "error_message"
+                ],
+                "optional": [
+                    "attachments_count"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_outbox_handled"
+            }
+        },
+        "outbox.sent.failed": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "to_agent_id",
+                    "message_id",
+                    "status",
+                    "error_message"
+                ],
+                "optional": [
+                    "attachments_count"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_outbox_failed"
+            }
+        },
+        "agent.mode.freeform": {
+            "source_kind": "agent",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_agent_mode_freeform"
+            }
+        },
+        "agent.safety.tool_loop_cap": {
+            "source_kind": "agent",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "max_rounds"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_agent_safety_tool_loop_cap"
+            }
+        },
+        "agent.event.injected": {
+            "source_kind": "agent",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "count"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_agent_event_injected"
+            }
+        },
+        "janus.compaction.base": {
+            "source_kind": "llm",
+            "policy": {
+                "to_chronicle": true,
+                "to_runtime_log": false,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "summary",
+                    "base_intent_seq",
+                    "source_card_ids"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "chronicle": "memory_janus_compaction_base",
+                "llm_context": "memory_janus_compaction_base"
+            }
+        },
+        "event.mail_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_mail_event"
+            }
+        },
+        "event.timer": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_timer"
+            }
+        },
+        "event.system": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "phase.retry.reason": {
+            "source_kind": "phase",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "phase",
+                    "message"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_phase_retry_reason"
+            }
+        },
+        "phase.retry.act": {
+            "source_kind": "phase",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "phase",
+                    "message"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_phase_retry_act"
+            }
+        },
+        "phase.retry.observe": {
+            "source_kind": "phase",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "phase",
+                    "message"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_phase_retry_observe"
+            }
+        },
+        "event.interaction.message.sent": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.interaction.message.read": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.interaction.hermes.notice": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.interaction.detach.notice": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.interaction.agent.trigger": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.hermes_protocol_invoked_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.hermes_job_updated_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.hermes_contract_registered_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.hermes_contract_committed_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.hermes_contract_disabled_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_submitted_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_started_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_stopping_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_stopped_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_failed_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_reconciled_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.detach_lost_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "inbox.section.summary": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": false,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "section",
+                    "title",
+                    "rows"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "llm_context": "memory_inbox_section_summary"
+            }
+        },
+        "inbox.section.recent_read": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": false,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "section",
+                    "title",
+                    "rows"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "llm_context": "memory_inbox_section_recent_read"
+            }
+        },
+        "inbox.section.recent_send": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": false,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "section",
+                    "title",
+                    "rows"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "llm_context": "memory_inbox_section_recent_send"
+            }
+        },
+        "inbox.section.inbox_unread": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": false,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "section",
+                    "title",
+                    "rows"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "llm_context": "memory_inbox_section_inbox_unread"
+            }
+        },
+        "inbox.notice.contract_commit_notice": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": true,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "sender",
+                    "message_id",
+                    "msg_type",
+                    "content",
+                    "payload"
+                ],
+                "optional": [
+                    "attachments"
+                ]
+            },
+            "templates": {
+                "chronicle": "memory_inbox_notice_contract_commit",
+                "llm_context": "memory_inbox_notice_contract_commit"
+            }
+        },
+        "inbox.notice.contract_fully_committed": {
+            "source_kind": "inbox",
+            "policy": {
+                "to_chronicle": true,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "title",
+                    "sender",
+                    "message_id",
+                    "msg_type",
+                    "content",
+                    "payload"
+                ],
+                "optional": [
+                    "attachments"
+                ]
+            },
+            "templates": {
+                "chronicle": "memory_inbox_notice_contract_fully_committed",
+                "llm_context": "memory_inbox_notice_contract_fully_committed"
+            }
+        }
+    },
+    "materials": {
+        "material.profile": {
+            "allow_without_intent": true,
+            "category": "task"
+        },
+        "material.task_state": {
+            "allow_without_intent": true,
+            "category": "task"
+        },
+        "material.trigger": {
+            "allow_without_intent": true,
+            "category": "event"
+        },
+        "material.directives": {
+            "allow_without_intent": true,
+            "category": "policy"
+        },
+        "material.phase": {
+            "allow_without_intent": true,
+            "category": "policy"
+        },
+        "material.tools": {
+            "allow_without_intent": true,
+            "category": "policy"
+        },
+        "material.inbox_hint": {
+            "allow_without_intent": true,
+            "category": "mailbox"
+        },
+        "material.mailbox:glance": {
+            "allow_without_intent": true,
+            "category": "mailbox"
+        },
+        "material.trigger:empty": {
+            "allow_without_intent": true,
+            "category": "event"
+        }
+    },
+    "prefixes": {
+        "material.mailbox:": {
+            "allow_without_intent": true,
+            "category": "mailbox"
+        },
+        "material.policy.": {
+            "allow_without_intent": true,
+            "category": "policy"
+        },
+        "material.trigger:": {
+            "allow_without_intent": true,
+            "category": "event"
+        }
+    }
+}

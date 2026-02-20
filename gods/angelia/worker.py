@@ -4,6 +4,8 @@ from __future__ import annotations
 import threading
 import time
 import uuid
+import logging
+import hashlib
 from dataclasses import dataclass
 
 from . import policy, store
@@ -11,12 +13,13 @@ from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.models import AgentRunState, AgentRuntimeStatus, AngeliaEvent
 from gods import events as events_bus
-from gods.iris.facade import ack_handled, fetch_mailbox_intents, has_pending
-from gods.mnemosyne.facade import intent_from_angelia_event
+from gods.iris.facade import ack_handled, has_pending, mark_as_delivered
+from gods.mnemosyne.facade import intent_from_angelia_event, intent_from_inbox_received
 from gods.mnemosyne import record_intent
 from gods.angelia.pulse.policy import get_inject_budget
 
 _INTERACTION_HANDLERS_READY = False
+logger = logging.getLogger(__name__)
 
 
 def _ensure_interaction_handlers_registered():
@@ -77,6 +80,31 @@ def _resolve_handler(event_type: str) -> events_bus.EventHandler | None:
     return _DEFAULT_AGENT_RUN_HANDLER
 
 
+def _record_event_lifecycle_intent(event: Any, stage: str, extra_payload: dict[str, Any] | None = None) -> None:
+    try:
+        record_intent(intent_from_angelia_event(event, stage=stage, extra_payload=extra_payload))
+    except Exception as e:
+        logger.warning(
+            "ANGELIA_EVENT_INTENT_RECORD_FAILED project=%s agent=%s event_id=%s stage=%s err=%s",
+            str(getattr(event, "project_id", "") or ""),
+            str(getattr(event, "agent_id", "") or ""),
+            str(getattr(event, "event_id", "") or ""),
+            str(stage or ""),
+            str(e),
+        )
+
+
+
+
+
+def _resolve_mail_intent_key(msg_type: str) -> str:
+    mt = str(msg_type or "").strip().lower()
+    return {
+        "contract_commit_notice": "inbox.notice.contract_commit_notice",
+        "contract_fully_committed": "inbox.notice.contract_fully_committed",
+    }.get(mt, "inbox.received.unread")
+
+
 def _run_agent(
     project_id: str,
     agent_id: str,
@@ -89,89 +117,65 @@ def _run_agent(
     agent = GodAgent(agent_id=agent_id, project_id=project_id)
     claimed_records: list[events_bus.EventRecord] = []
 
-    def _claim_events_for_chaos(limit: int = 10) -> list[dict]:
-        picked = store.pick_batch_events(
-            project_id=project_id,
-            agent_id=agent_id,
-            now=time.time(),
-            cooldown_until=0.0,
-            preempt_types=policy.cooldown_preempt_types(project_id),
-            limit=max(1, min(int(limit or 10), 50)),
-            force_after_sec=policy.force_pick_after_sec(project_id),
-        )
-        out: list[dict] = []
-        for evt in picked:
-            store.mark_processing(project_id, evt.event_id)
-            rec = _to_record(evt)
-            claimed_records.append(rec)
-            out.append(rec.to_dict())
-        return out
+    from gods.mnemosyne.facade import latest_intent_seq
+    base_seq = latest_intent_seq(project_id, agent_id)
     
     # 1. Trigger Events (Batch)
     trigger_intents: list[MemoryIntent] = []
+    delivered_ids: list[str] = []
     for rec in event_records:
         try:
-            trigger_intents.append(intent_from_angelia_event(rec, stage="trigger"))
+            et = str(getattr(rec, "event_type", ""))
+            if et == "mail_event":
+                payload = dict(getattr(rec, "payload", {}) or {})
+                mt = str(payload.get("msg_type", ""))
+                intent = intent_from_inbox_received(
+                    project_id=project_id,
+                    agent_id=agent_id,
+                    title=str(payload.get("title", "")),
+                    sender=str(payload.get("sender", "")),
+                    message_id=str(getattr(rec, "event_id", "")),
+                    content=str(payload.get("content", "")),
+                    attachments=list(payload.get("attachments", [])),
+                    msg_type=mt,
+                    intent_key=_resolve_mail_intent_key(mt),
+                )
+            else:
+                intent = intent_from_angelia_event(rec, stage="trigger")
+
+            res = record_intent(intent)
+            setattr(intent, "intent_id", str(res.get("intent_id", "") or ""))
+            setattr(intent, "intent_seq", int(res.get("intent_seq", 0) or 0))
+            trigger_intents.append(intent)
+            
+            # If it's a mail event, mark it as delivered in Iris for the sender's awareness
+            if et == "mail_event":
+                mid = str(getattr(rec, "event_id", ""))
+                delivered_ids.append(mid)
+                try:
+                    mark_as_delivered(project_id, mid)
+                except Exception:
+                    pass
         except Exception:
             pass
 
-    # 2. Mailbox domain context (mailbox = inbox + outbox receipts)
-    budget = get_inject_budget(project_id)
-    preferred_mail_event_ids: list[str] = []
-    seen_mail_event_ids: set[str] = set()
-    for rec in event_records:
-        rid = str(getattr(rec, "event_id", "") or "").strip()
-        et = str(getattr(rec, "event_type", "") or "").strip()
-        payload = dict(getattr(rec, "payload", {}) or {})
-        pid = str(payload.get("mail_event_id", "") or "").strip()
-        candidates = [pid]
-        if et == "mail_event":
-            candidates.append(rid)
-        for mid in candidates:
-            if not mid or mid in seen_mail_event_ids:
-                continue
-            seen_mail_event_ids.add(mid)
-            preferred_mail_event_ids.append(mid)
-
-    mailbox_intents = fetch_mailbox_intents(
-        project_id,
-        agent_id,
-        budget,
-        preferred_event_ids=preferred_mail_event_ids or None,
-    )
-    
-    # Extract IDs for ACK later
-    delivered_ids = []
-    for intent in mailbox_intents:
-        if intent.intent_key.startswith("inbox.received") or intent.intent_key.startswith("inbox.notice"):
-             mid = intent.payload.get("message_id")
-             if mid:
-                 delivered_ids.append(mid)
-
-    # 3. State Construction
+    # 2. Mailbox & State Construction
     state = {
         "project_id": project_id,
         "messages": [],
         "context": "",
         "next_step": "",
-        "triggers": trigger_intents,
-        "mailbox": mailbox_intents,
         "__pulse_meta": {
             "pulse_id": pulse_id,
             "reason": reason,
             "started_at": time.time(),
         },
         "__inbox_delivered_ids": delivered_ids,
-        # Chaos can only consume new events via worker-owned claim callback.
-        "__worker_claim_events": _claim_events_for_chaos,
+        "__chaos_synced_seq": base_seq,
     }
 
     new_state = agent.process(state)
     if isinstance(new_state, dict):
-        try:
-            new_state.pop("__worker_claim_events", None)
-        except Exception:
-            pass
         new_state["__worker_claimed_events"] = [r.to_dict() for r in claimed_records]
     
     # ACK processed messages
@@ -278,15 +282,19 @@ def worker_loop(ctx: WorkerContext):
             cooldown_until = max(float(st.cooldown_until or 0.0), float(st.backoff_until or 0.0))
             
             # Batch Pick (Limit 10 for now)
-            batch = store.pick_batch_events(
-                project_id=project_id,
-                agent_id=agent_id,
-                now=now,
-                cooldown_until=cooldown_until,
-                preempt_types=preempt_types,
-                limit=10,
-                force_after_sec=policy.force_pick_after_sec(project_id),
-            )
+            try:
+                batch = store.pick_batch_events(
+                    project_id=project_id,
+                    agent_id=agent_id,
+                    now=now,
+                    cooldown_until=cooldown_until,
+                    preempt_types=preempt_types,
+                    limit=10,
+                    force_after_sec=policy.force_pick_after_sec(project_id),
+                )
+            except Exception as e:
+                _set_error_backoff(st, str(e), delay_sec=2)
+                continue
 
             if not batch:
                 if now >= float(st.cooldown_until or 0.0) and now >= float(st.backoff_until or 0.0):
@@ -312,7 +320,7 @@ def worker_loop(ctx: WorkerContext):
             if handler is None:
                 for evt in batch:
                     store.mark_done(project_id, evt.event_id)
-                    record_intent(intent_from_angelia_event(evt, stage="done", extra_payload={"next_step": "skipped"}))
+                    _record_event_lifecycle_intent(evt, stage="done", extra_payload={"next_step": "skipped"})
                 _set_idle(st, cooldown_sec=0)
                 angelia_metrics.inc("event_done", len(batch))
                 continue
@@ -325,7 +333,7 @@ def worker_loop(ctx: WorkerContext):
             result: dict = {}
             try:
                 for evt in batch:
-                    record_intent(intent_from_angelia_event(evt, stage="processing"))
+                    _record_event_lifecycle_intent(evt, stage="processing")
                 
                 # Combine payloads or just pick first reason?
                 # The handler will now take list of records.
@@ -396,7 +404,7 @@ def worker_loop(ctx: WorkerContext):
                 # Mark ALL done
                 for evt in all_events:
                     store.mark_done(project_id, evt.event_id)
-                    record_intent(intent_from_angelia_event(evt, stage="done", extra_payload={"next_step": next_step}))
+                    _record_event_lifecycle_intent(evt, stage="done", extra_payload={"next_step": next_step})
 
                 # on_success for primary? or all?
                 handler.on_success(records[0], result)
@@ -427,10 +435,7 @@ def worker_loop(ctx: WorkerContext):
                         error_message=str(e),
                         retry_delay_sec=min(30, max(2, 2 ** min(evt.attempt + 1, 5))),
                     )
-                    try:
-                        record_intent(intent_from_angelia_event(evt, stage="failed", extra_payload={"error": str(e)}))
-                    except:
-                        pass
+                    _record_event_lifecycle_intent(evt, stage="failed", extra_payload={"error": str(e)})
                 
                 _set_error_backoff(st, str(e), delay_sec=5)
                 angelia_metrics.inc("event_requeued", len(all_events))

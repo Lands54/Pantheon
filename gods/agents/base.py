@@ -9,7 +9,7 @@ from gods.agents.orchestrators import ChronosOrchestrator, NikeOrchestrator, The
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.config import runtime_config
 from gods.mnemosyne import MemoryIntent, record_intent
-from gods.mnemosyne.facade import ObservationRecord, record_observation
+
 from gods.mnemosyne.facade import ensure_agent_memory_seeded, load_agent_directives, load_chronicle_for_context
 from gods.paths import agent_dir
 from gods.state import GodsState
@@ -37,7 +37,6 @@ class GodAgent:
             agent_id=agent_id,
             agent_dir=self.agent_dir,
             intent_recorder=self._record_intent,
-            observation_recorder=self._record_observation,
         )
 
     def _build_inbox_context_hint(self) -> str:
@@ -82,23 +81,7 @@ class GodAgent:
     def execute_tool(self, name: str, args: dict, node_name: str = "") -> str:
         return self.themis.execute_tool(name, args, node_name=node_name)
 
-    def _record_observation(self, name: str, args: dict, result: str, status: str):
-        try:
-            args_summary = str(args)[:240]
-            result_summary = str(result)[:500]
-            record_observation(
-                ObservationRecord(
-                    project_id=self.project_id,
-                    agent_id=self.agent_id,
-                    tool_name=name,
-                    args_summary=args_summary,
-                    result_summary=result_summary,
-                    status=status,
-                    timestamp=time.time(),
-                )
-            )
-        except Exception:
-            pass
+
 
     def get_tools(self):
         return self.themis.get_tools()

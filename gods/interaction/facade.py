@@ -16,7 +16,14 @@ def _dispatch_inline(record: events_bus.EventRecord) -> tuple[bool, dict[str, An
     register_handlers()
     handler = events_bus.get_handler(record.event_type)
     if handler is None:
-        return False, {}
+        events_bus.transition_state(
+            record.project_id,
+            record.event_id,
+            events_bus.EventState.DEAD,
+            error_code="INTERACTION_HANDLER_MISSING",
+            error_message=f"handler missing: {record.event_type}",
+        )
+        return False, {"error": "handler missing", "state": events_bus.EventState.DEAD.value}
     try:
         events_bus.transition_state(record.project_id, record.event_id, events_bus.EventState.PROCESSING)
         handler.on_pick(record)
@@ -26,16 +33,15 @@ def _dispatch_inline(record: events_bus.EventRecord) -> tuple[bool, dict[str, An
         return True, (result if isinstance(result, dict) else {})
     except Exception as e:
         handler.on_fail(record, e)
-        state = events_bus.requeue_or_dead(
+        events_bus.transition_state(
             record.project_id,
             record.event_id,
+            events_bus.EventState.DEAD,
             error_code="INTERACTION_HANDLER_ERROR",
             error_message=str(e),
-            retry_delay_sec=1,
         )
-        if state == events_bus.EventState.DEAD.value:
-            handler.on_dead(record, e)
-        return False, {"error": str(e), "state": state}
+        handler.on_dead(record, e)
+        return False, {"error": str(e), "state": events_bus.EventState.DEAD.value}
 
 
 def submit_message_event(

@@ -53,110 +53,45 @@ def required_intent_keys() -> list[str]:
     return registered_intent_keys()
 
 
-def default_memory_policy() -> dict[str, dict[str, Any]]:
-    def _rule(
-        to_chronicle: bool,
-        to_runtime_log: bool,
-        to_llm_context: bool = False,
-        chronicle_key: str = "",
-        runtime_key: str = "",
-        llm_context_key: str = "",
-    ) -> dict[str, Any]:
-        return {
-            "to_chronicle": bool(to_chronicle),
-            "to_runtime_log": bool(to_runtime_log),
-            "to_llm_context": bool(to_llm_context),
-            "chronicle_template_key": str(chronicle_key or ""),
-            "runtime_log_template_key": str(runtime_key or ""),
-            "llm_context_template_key": str(llm_context_key or ""),
-        }
+from gods.mnemosyne.semantics import semantics_service
 
-    policy: dict[str, dict[str, Any]] = {
-        "event.mail_event": _rule(False, True),
-        "event.timer": _rule(False, True),
-        "event.manual": _rule(False, True),
-        "event.system": _rule(False, True),
-        "event.interaction.message.sent": _rule(False, True),
-        "event.interaction.message.read": _rule(False, True),
-        "event.interaction.hermes.notice": _rule(False, True),
-        "event.interaction.detach.notice": _rule(False, True),
-        "event.interaction.agent.trigger": _rule(False, True),
-        "event.hermes_protocol_invoked_event": _rule(False, True),
-        "event.hermes_job_updated_event": _rule(False, True),
-        "event.hermes_contract_registered_event": _rule(False, True),
-        "event.hermes_contract_committed_event": _rule(False, True),
-        "event.hermes_contract_disabled_event": _rule(False, True),
-        "event.detach_submitted_event": _rule(False, True),
-        "event.detach_started_event": _rule(False, True),
-        "event.detach_stopping_event": _rule(False, True),
-        "event.detach_stopped_event": _rule(False, True),
-        "event.detach_failed_event": _rule(False, True),
-        "event.detach_reconciled_event": _rule(False, True),
-        "event.detach_lost_event": _rule(False, True),
-        "inbox.received.unread": _rule(False, True),
-        "inbox.notice.contract_commit_notice": _rule(True, True, True, "memory_inbox_notice_contract_commit", "", "memory_inbox_notice_contract_commit"),
-        "inbox.notice.contract_fully_committed": _rule(True, True, True, "memory_inbox_notice_contract_fully_committed", "", "memory_inbox_notice_contract_fully_committed"),
-        "inbox.read_ack": _rule(False, True),
-        "outbox.sent.pending": _rule(False, True),
-        "outbox.sent.delivered": _rule(False, True),
-        "outbox.sent.handled": _rule(False, True),
-        "outbox.sent.failed": _rule(False, True),
-        "inbox.section.summary": _rule(False, False, True, "", "", "memory_inbox_section_summary"),
-        "inbox.section.recent_read": _rule(False, False, True, "", "", "memory_inbox_section_recent_read"),
-        "inbox.section.recent_send": _rule(False, False, True, "", "", "memory_inbox_section_recent_send"),
-        "inbox.section.inbox_unread": _rule(False, False, True, "", "", "memory_inbox_section_inbox_unread"),
-        "llm.response": _rule(True, False, False, "memory_llm_response", ""),
-        "agent.mode.freeform": _rule(False, True),
-        "agent.safety.tool_loop_cap": _rule(False, True),
-        "agent.event.injected": _rule(False, True),
-        "phase.retry.reason": _rule(False, True),
-        "phase.retry.act": _rule(False, True),
-        "phase.retry.observe": _rule(False, True),
-    }
-    for tool_name in tool_intent_names():
-        policy[f"tool.{tool_name}.ok"] = _rule(True, False, False, "memory_tool_ok", "")
-        policy[f"tool.{tool_name}.error"] = _rule(True, True, True, "memory_tool_error", "")
-        policy[f"tool.{tool_name}.blocked"] = _rule(False, True, True, "", "")
+
+def default_memory_policy() -> dict[str, dict[str, Any]]:
+    policy: dict[str, dict[str, Any]] = {}
+    for key in semantics_service.list_intent_keys():
+        p = semantics_service.get_policy(key)
+        if p:
+            policy[key] = {
+                "to_chronicle": p.get("to_chronicle", False),
+                "to_runtime_log": p.get("to_runtime_log", False),
+                "to_llm_context": p.get("to_llm_context", False),
+                "chronicle_template_key": p.get("chronicle_template_key", ""),
+                "runtime_log_template_key": p.get("runtime_log_template_key", ""),
+                "llm_context_template_key": p.get("llm_context_template_key", ""),
+            }
+        else:
+            # Fallback for keys without explicit policy
+            policy[key] = {
+                "to_chronicle": False,
+                "to_runtime_log": True,
+                "to_llm_context": False,
+                "chronicle_template_key": "",
+                "runtime_log_template_key": "",
+                "llm_context_template_key": "",
+            }
     return policy
 
 
 def default_intent_rule(intent_key: str) -> dict[str, Any]:
-    key = str(intent_key or "").strip()
-    if key == "inbox.section.summary":
+    p = semantics_service.get_policy(intent_key)
+    if p:
         return {
-            "to_chronicle": False,
-            "to_runtime_log": False,
-            "to_llm_context": True,
-            "chronicle_template_key": "",
-            "runtime_log_template_key": "",
-            "llm_context_template_key": "memory_inbox_section_summary",
-        }
-    if key == "inbox.section.recent_read":
-        return {
-            "to_chronicle": False,
-            "to_runtime_log": False,
-            "to_llm_context": True,
-            "chronicle_template_key": "",
-            "runtime_log_template_key": "",
-            "llm_context_template_key": "memory_inbox_section_recent_read",
-        }
-    if key == "inbox.section.recent_send":
-        return {
-            "to_chronicle": False,
-            "to_runtime_log": False,
-            "to_llm_context": True,
-            "chronicle_template_key": "",
-            "runtime_log_template_key": "",
-            "llm_context_template_key": "memory_inbox_section_recent_send",
-        }
-    if key == "inbox.section.inbox_unread":
-        return {
-            "to_chronicle": False,
-            "to_runtime_log": False,
-            "to_llm_context": True,
-            "chronicle_template_key": "",
-            "runtime_log_template_key": "",
-            "llm_context_template_key": "memory_inbox_section_inbox_unread",
+            "to_chronicle": p.get("to_chronicle", False),
+            "to_runtime_log": p.get("to_runtime_log", False),
+            "to_llm_context": p.get("to_llm_context", False),
+            "chronicle_template_key": p.get("chronicle_template_key", ""),
+            "runtime_log_template_key": p.get("runtime_log_template_key", ""),
+            "llm_context_template_key": p.get("llm_context_template_key", ""),
         }
     return {
         "to_chronicle": False,
@@ -196,27 +131,25 @@ def _normalize_rule(rule: dict[str, Any], *, intent_key: str, project_id: str) -
 
 
 def ensure_memory_policy(project_id: str) -> Path:
+    from gods.mnemosyne.template_registry import ensure_memory_templates
     ensure_memory_templates(project_id)
     path = policy_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    
     default_payload = default_memory_policy()
+    
     if not path.exists():
         path.write_text(json.dumps(default_payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
+
     raw = _load_raw_policy(path, project_id=project_id)
     changed = False
-    # Zero-compat migration: rewrite known legacy intent keys to canonical keys.
-    # Unknown keys are still rejected later by validate_memory_policy.
-    for legacy, canonical in _LEGACY_INTENT_KEY_MAP.items():
-        if legacy not in raw:
-            continue
-        legacy_rule = raw.get(legacy)
-        if canonical not in raw and isinstance(legacy_rule, dict):
-            raw[canonical] = _normalize_rule(legacy_rule, intent_key=legacy, project_id=project_id)
-        del raw[legacy]
-        changed = True
-    for k, v in default_payload.items():
+    
+    # Prune legacy keys or add missing ones based on semantics.json
+    required_keys = set(default_payload.keys())
+    for k in required_keys:
         if k not in raw:
-            raw[k] = v
+            raw[k] = default_payload[k]
             changed = True
         elif not isinstance(raw.get(k), dict):
             raise MemoryPolicyMissingError(f"memory policy key must be object for '{k}' in project={project_id}")

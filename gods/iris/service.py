@@ -72,31 +72,6 @@ def enqueue_message(
         message_id=event.event_id,
         status=OutboxReceiptStatus.PENDING,
     )
-    record_intent(
-        intent_from_inbox_received(
-            project_id=project_id,
-            agent_id=agent_id,
-            title=title,
-            sender=sender,
-            message_id=event.event_id,
-            msg_type=msg_type,
-            content=content,
-            attachments=list(event.attachments or []),
-            payload=event.payload,
-            intent_key=_resolve_inbox_received_intent_key(project_id, msg_type),
-        )
-    )
-    record_intent(
-        intent_from_outbox_status(
-            project_id=project_id,
-            agent_id=sender,
-            to_agent_id=agent_id,
-            title=title,
-            message_id=event.event_id,
-            status=receipt.status.value,
-            attachments_count=len(list(event.attachments or [])),
-        )
-    )
     return {
         "mail_event_id": event.event_id,
         "title": title,
@@ -106,117 +81,46 @@ def enqueue_message(
     }
 
 
-def fetch_mailbox_intents(
-    project_id: str,
-    agent_id: str,
-    budget: int,
-    preferred_event_ids: list[str] | None = None,
-) -> list[MemoryIntent]:
+def get_mailbox_glance(project_id: str, agent_id: str, budget: int = 10) -> str:
     """
-    Fetches mailbox events (inbox + outbox status) and summaries as structured MemoryIntent objects.
+    Returns a concise text summary of the mailbox (inbox + outbox) for LLM awareness.
+    A 'physical reality' snapshot, not an incremental intent.
     """
-    intents: list[MemoryIntent] = []
-    
-    # 1. Fetch and Deliver New Events
-    preferred = [str(x).strip() for x in (preferred_event_ids or []) if str(x).strip()]
-    events = deliver_mailbox_events(project_id, agent_id, budget, preferred_event_ids=preferred or None)
-    delivered_ids = []
-    
-    for item in events:
-        delivered_ids.append(item.event_id)
-        # Update status to DELIVERED
-        updated = update_status_by_message_id(
-            project_id=project_id,
-            message_id=item.event_id,
-            status=OutboxReceiptStatus.DELIVERED,
-        )
-        # Record outbox status updates for sender awareness
-        for rec in updated:
-            record_intent(
-                intent_from_outbox_status(
-                    project_id=project_id,
-                    agent_id=rec.from_agent_id,
-                    to_agent_id=rec.to_agent_id,
-                    title=rec.title,
-                    message_id=rec.message_id,
-                    status=rec.status.value,
-                    attachments_count=0,
-                )
-            )
-
-        # Create Inbox Received Intent
-        intents.append(
-            intent_from_inbox_received(
-                project_id=project_id,
-                agent_id=agent_id,
-                title=item.title,
-                sender=item.sender,
-                message_id=item.event_id,
-                content=item.content,
-                attachments=list(item.attachments or []),
-                payload=item.payload,
-                msg_type=item.msg_type,
-                intent_key=_resolve_inbox_received_intent_key(project_id, item.msg_type),
-            )
-        )
-
-    # 2. Inbox Statistics & Context
+    # Just read current state from DB
     read_recent = list_mailbox_events(
         project_id=project_id,
         agent_id=agent_id,
         state=MailEventState.HANDLED,
-        limit=max(1, min(budget, 10)),
+        limit=max(1, min(budget, 5)),
     )
-    receipts = list_receipts(project_id=project_id, from_agent_id=agent_id, limit=max(1, min(budget * 3, 50)))
+    receipts = list_receipts(project_id=project_id, from_agent_id=agent_id, limit=max(1, min(budget * 2, 20)))
     
-    unread_count = len(
-        list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.QUEUED, limit=1000)
-    ) + len(
-        list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.DEFERRED, limit=1000)
-    )
+    unread = list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.QUEUED, limit=100)
+    deferred = list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.DEFERRED, limit=100)
     
     status_count = {"pending": 0, "delivered": 0, "handled": 0, "failed": 0}
     for r in receipts:
         if r.status.value in status_count:
             status_count[r.status.value] += 1
-            
-    summary_data = {
-        "unread_count": unread_count,
-        "read_recent_count": len(read_recent),
-        "sent_stats": status_count,
-        "delivered_ids": delivered_ids
-    }
-    intents.insert(0, intent_from_inbox_summary(project_id, agent_id, summary_data))
 
-    summary_rows = [
-        (
-            f"- unread_count={unread_count} read_recent_count={len(read_recent)} "
-            f"sent_pending={status_count['pending']} sent_delivered={status_count['delivered']} "
-            f"sent_handled={status_count['handled']} sent_failed={status_count['failed']}"
-        )
+    lines = [
+        "[MAILBOX_GLANCE]",
+        f"- Inbound: {len(unread)} unread, {len(deferred)} deferred, {len(read_recent)} recently handled.",
+        f"- Outbound: {status_count['pending']} pending, {status_count['delivered']} delivered, {status_count['handled']} handled, {status_count['failed']} failed.",
     ]
-    read_rows = [
-        f"- [title={x.title}][from={x.sender}][status={x.state.value}] id={x.event_id} at={x.created_at:.3f}"
-        for x in read_recent[-10:]
-    ]
-    send_rows = [
-        f"- [title={r.title}][to={r.to_agent_id}][status={r.status.value}] mid={r.message_id} updated={r.updated_at:.3f}"
-        for r in receipts[:20]
-    ]
-    inbox_unread_rows = [
-        f"- [title={x.title}][from={x.sender}] id={x.event_id} msg_type={x.msg_type} "
-        f"attachments={len(list(x.attachments or []))}"
-        for x in events
-    ]
-    section_intents = [
-        intent_from_mailbox_section(project_id, agent_id, "summary", summary_rows),
-        intent_from_mailbox_section(project_id, agent_id, "recent_read", read_rows),
-        intent_from_mailbox_section(project_id, agent_id, "recent_send", send_rows),
-        intent_from_mailbox_section(project_id, agent_id, "inbox_unread", inbox_unread_rows),
-    ]
-    intents = section_intents + intents
     
-    return intents
+    if unread:
+        lines.append("\n[UNREAD_MESSAGES]")
+        for msg in unread[:10]:
+            lines.append(f"- [from={msg.sender}][title={msg.title}] id={msg.event_id}")
+            
+    if receipts:
+        lines.append("\n[RECENT_SENT_STATUS]")
+        for r in receipts[:10]:
+            lines.append(f"- [to={r.to_agent_id}][status={r.status.value}][title={r.title}] mid={r.message_id}")
+            
+    return "\n".join(lines)
+
 
 
 def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[str, list[str]]:
@@ -441,3 +345,27 @@ def list_outbox_receipts(
         status=status,
         limit=limit,
     )
+
+
+def mark_as_delivered(project_id: str, message_id: str):
+    """
+    Mark a message as DELIVERED in the outbox system (for the sender's awareness).
+    This is usually called when the receiver's pulse starts.
+    """
+    updated = update_status_by_message_id(
+        project_id=project_id,
+        message_id=message_id,
+        status=OutboxReceiptStatus.DELIVERED,
+    )
+    for rec in updated:
+        record_intent(
+            intent_from_outbox_status(
+                project_id=project_id,
+                agent_id=rec.from_agent_id,
+                to_agent_id=rec.to_agent_id,
+                title=rec.title,
+                message_id=rec.message_id,
+                status=rec.status.value,
+                attachments_count=0,
+            )
+        )

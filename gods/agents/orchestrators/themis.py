@@ -21,14 +21,14 @@ class ThemisOrchestrator:
         agent_dir: Path,
         tools_provider: Callable[[], list[Any]] | None = None,
         intent_recorder: Callable[[Any], Any] | None = None,
-        observation_recorder: Callable[[str, dict, str, str], None] | None = None,
+
     ):
         self.project_id = project_id
         self.agent_id = agent_id
         self.agent_dir = agent_dir
         self._tools_provider = tools_provider or (lambda: GODS_TOOLS)
         self._intent_recorder = intent_recorder or (lambda _intent: None)
-        self._observation_recorder = observation_recorder or (lambda _name, _args, _result, _status: None)
+
 
     @staticmethod
     def _normalize_allowlist(raw: list[str]) -> list[str]:
@@ -177,7 +177,7 @@ class ThemisOrchestrator:
                     f"Divine Restriction: The tool '{name}' has been disabled for you by the High Overseer.\n"
                     "Suggested next step: choose another available tool aligned with your current phase."
                 )
-                self._observation_recorder(name, args, blocked, "blocked")
+
                 self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "blocked", args, blocked))
                 return blocked
 
@@ -186,7 +186,7 @@ class ThemisOrchestrator:
                 f"Divine Restriction: The tool '{name}' is not allowed in node '{node_name}'.\n"
                 "Suggested next step: choose a tool permitted by current node policy."
             )
-            self._observation_recorder(name, args, blocked, "blocked")
+
             self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "blocked", args, blocked))
             return blocked
 
@@ -203,7 +203,7 @@ class ThemisOrchestrator:
                 if name != "check_inbox":
                     reset_inbox_guard(self.agent_id, self.project_id)
                 status = self.classify_tool_status(str(result))
-                self._observation_recorder(name, invoke_args, str(result), status)
+
                 self._intent_recorder(
                     intent_from_tool_result(self.project_id, self.agent_id, name, status, invoke_args, str(result))
                 )
@@ -213,7 +213,7 @@ class ThemisOrchestrator:
                     f"Tool Execution Error: failed to run '{name}'. Reason: {str(e)}\n"
                     "Suggested next step: verify required arguments and retry once."
                 )
-                self._observation_recorder(name, invoke_args, err, "error")
+
                 self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "error", invoke_args, err))
                 return err
 
@@ -222,6 +222,6 @@ class ThemisOrchestrator:
             f"Tool Error: Unknown tool '{name}'.\n"
             f"Suggested next step: choose one from [{available}]."
         )
-        self._observation_recorder(name, invoke_args, unknown, "error")
+
         self._intent_recorder(intent_from_tool_result(self.project_id, self.agent_id, name, "error", invoke_args, unknown))
         return unknown

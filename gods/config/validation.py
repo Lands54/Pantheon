@@ -10,7 +10,7 @@ from gods.identity import is_valid_agent_id
 logger = logging.getLogger("GodsConfig")
 
 _ALLOWED_PHASE_STRATEGIES = {"react_graph", "freeform"}
-_ALLOWED_CONTEXT_STRATEGIES = {"structured_v1"}
+_ALLOWED_CONTEXT_STRATEGIES = {"sequential_v1"}
 _ALLOWED_COMPACT_STRATEGIES = {"semantic_llm", "rule_based"}
 _ALLOWED_EXECUTORS = {"docker", "local"}
 _ALLOWED_DOCKER_NET = {"bridge_local_only", "none"}
@@ -27,6 +27,9 @@ _ALLOWED_ANGELIA_PREEMPT_TYPES = {
 _ALLOWED_METIS_REFRESH_MODE = {"pulse", "node"}
 _STRATEGY_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PHASE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_LEGACY_TOOL_NAME_MAP = {
+    "list_agents": "list",
+}
 
 
 def _clamp_int(value: int, low: int, high: int) -> int:
@@ -96,6 +99,7 @@ def _normalize_tool_policies(
                 tn = str(item or "").strip()
                 if not tn:
                     continue
+                tn = _LEGACY_TOOL_NAME_MAP.get(tn, tn)
                 if tn not in known_tools:
                     raise ValueError(
                         f"invalid {owner}.tool_policies.{strategy}.{phase} tool '{tn}' in "
@@ -119,7 +123,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.context_strategy = _fallback_str(
         proj.context_strategy,
         _ALLOWED_CONTEXT_STRATEGIES,
-        "structured_v1",
+        "sequential_v1",
         "context_strategy",
         project_id,
     )
@@ -173,14 +177,17 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
 
     proj.context_token_budget_total = _clamp_int(proj.context_token_budget_total, 4000, 256000)
     proj.context_budget_task_state = _clamp_int(proj.context_budget_task_state, 200, 128000)
-    proj.context_budget_observations = _clamp_int(proj.context_budget_observations, 200, 128000)
+
     proj.context_budget_inbox = _clamp_int(proj.context_budget_inbox, 200, 128000)
     proj.context_budget_inbox_unread = _clamp_int(proj.context_budget_inbox_unread, 100, 64000)
     proj.context_budget_inbox_read_recent = _clamp_int(proj.context_budget_inbox_read_recent, 100, 64000)
     proj.context_budget_inbox_receipts = _clamp_int(proj.context_budget_inbox_receipts, 100, 64000)
-    proj.context_budget_state_window = _clamp_int(proj.context_budget_state_window, 200, 128000)
-    proj.context_state_window_limit = _clamp_int(proj.context_state_window_limit, 1, 500)
-    proj.context_observation_window = _clamp_int(proj.context_observation_window, 1, 500)
+    proj.context_short_window_intents = _clamp_int(proj.context_short_window_intents, 10, 5000)
+    proj.context_n_recent = _clamp_int(proj.context_n_recent, 1, 5000)
+    proj.context_token_budget_chronicle_trigger = _clamp_int(
+        proj.context_token_budget_chronicle_trigger, 1000, 512000
+    )
+
     proj.metis_refresh_mode = _fallback_str(
         proj.metis_refresh_mode,
         _ALLOWED_METIS_REFRESH_MODE,
@@ -274,7 +281,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
             settings.context_strategy = _fallback_str(
                 settings.context_strategy,
                 _ALLOWED_CONTEXT_STRATEGIES,
-                "structured_v1",
+                "sequential_v1",
                 f"agent.{aid}.context_strategy",
                 project_id,
             )

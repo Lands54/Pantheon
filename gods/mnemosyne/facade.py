@@ -1,25 +1,28 @@
 """Public facade for mnemosyne domain operations."""
 from __future__ import annotations
 
-from typing import Any
-
-from gods.mnemosyne import VALID_VAULTS, list_entries, read_entry, write_entry
+from gods.mnemosyne import VALID_VAULTS, list_entries, read_entry, write_entry, record_intent, fetch_intents_between
 from gods.mnemosyne.compaction import load_chronicle_for_context
 from gods.mnemosyne.context_materials import (
     read_profile,
     read_task_state,
-    list_observations,
-    observations_path,
     chronicle_path,
     load_agent_directives,
     ensure_agent_memory_seeded,
 )
 from gods.mnemosyne.context_reports import latest_context_report, list_context_reports, record_context_report
-from gods.mnemosyne.contracts import ObservationRecord
-from gods.mnemosyne.journal import inbox_digest_path, record_inbox_digest, record_observation
-from gods.mnemosyne.memory import render_intent_for_llm_context
+from gods.mnemosyne.journal import inbox_digest_path, record_inbox_digest
+from gods.mnemosyne.context_index import (
+    list_context_index_entries,
+    list_context_index_texts,
+    rebuild_context_index_from_intents,
+)
+from gods.mnemosyne.chronicle_index import (
+    list_chronicle_index_entries,
+    list_chronicle_index_texts,
+    rebuild_chronicle_markdown_from_index,
+)
 from gods.mnemosyne.policy_registry import default_memory_policy, required_intent_keys
-from gods.mnemosyne.state_window import load_state_window, save_state_window
 from gods.mnemosyne.artifacts import (
     put_artifact_text,
     put_artifact_bytes,
@@ -31,6 +34,20 @@ from gods.mnemosyne.artifacts import (
     grant_artifact_access,
     list_artifact_grants,
 )
+from gods.mnemosyne.janus_snapshot import (
+    CHAOS_CARD_BUCKET_KEYS,
+    load_janus_snapshot,
+    save_janus_snapshot,
+    build_cards_from_intents,
+    build_cards_from_intent_views,
+    estimate_cards_tokens,
+    latest_intent_seq,
+    record_snapshot_compression,
+    list_snapshot_compressions,
+    list_derived_cards,
+    validate_context_card,
+    validate_card_buckets,
+)
 from gods.mnemosyne.intent_builders import (
     intent_from_angelia_event,
     intent_from_mailbox_section,
@@ -39,19 +56,34 @@ from gods.mnemosyne.intent_builders import (
     intent_from_inbox_summary,
     intent_from_outbox_status,
     intent_from_tool_result,
+    intent_from_janus_compaction_base,
 )
 
 
 def render_intents_for_llm(intents: list[Any]) -> list[str]:
     lines: list[str] = []
     for intent in list(intents or []):
-        try:
-            rendered = render_intent_for_llm_context(intent)
-        except Exception:
-            rendered = None
-        if rendered:
-            lines.append(str(rendered))
+        text = str(getattr(intent, "fallback_text", "") or "").strip()
+        if text:
+            lines.append(text)
     return lines
+
+
+def record_janus_compaction_base_intent(
+    project_id: str,
+    agent_id: str,
+    summary: str,
+    base_intent_seq: int,
+    source_card_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    intent = intent_from_janus_compaction_base(
+        project_id=project_id,
+        agent_id=agent_id,
+        summary=summary,
+        base_intent_seq=base_intent_seq,
+        source_card_ids=source_card_ids or [],
+    )
+    return record_intent(intent)
 
 
 __all__ = [
@@ -66,24 +98,26 @@ __all__ = [
     "intent_from_inbox_received",
     "intent_from_inbox_summary",
     "intent_from_outbox_status",
+    "intent_from_janus_compaction_base",
+    "record_janus_compaction_base_intent",
     "render_intents_for_llm",
     "load_chronicle_for_context",
     "read_profile",
     "read_task_state",
-    "list_observations",
-    "observations_path",
     "chronicle_path",
     "load_agent_directives",
     "ensure_agent_memory_seeded",
     "latest_context_report",
     "list_context_reports",
     "record_context_report",
-    "ObservationRecord",
-    "record_observation",
+    "list_context_index_entries",
+    "list_context_index_texts",
+    "rebuild_context_index_from_intents",
+    "list_chronicle_index_entries",
+    "list_chronicle_index_texts",
+    "rebuild_chronicle_markdown_from_index",
     "record_inbox_digest",
     "inbox_digest_path",
-    "load_state_window",
-    "save_state_window",
     "default_memory_policy",
     "required_intent_keys",
     "put_artifact_text",
@@ -95,4 +129,17 @@ __all__ = [
     "is_valid_artifact_id",
     "grant_artifact_access",
     "list_artifact_grants",
+    "load_janus_snapshot",
+    "save_janus_snapshot",
+    "build_cards_from_intents",
+    "build_cards_from_intent_views",
+    "estimate_cards_tokens",
+    "latest_intent_seq",
+    "record_snapshot_compression",
+    "list_snapshot_compressions",
+    "list_derived_cards",
+    "CHAOS_CARD_BUCKET_KEYS",
+    "validate_context_card",
+    "validate_card_buckets",
+    "fetch_intents_between",
 ]

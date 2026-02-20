@@ -6,8 +6,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from gods.mnemosyne.context_materials import observations_path
-from gods.mnemosyne.contracts import ObservationRecord
 from gods.paths import mnemosyne_dir
 
 
@@ -25,21 +23,6 @@ def _append_jsonl(path: Path, row: dict[str, Any]):
 
 def inbox_digest_path(project_id: str, agent_id: str) -> Path:
     return _mn_root(project_id) / "inbox_digest" / f"{agent_id}.jsonl"
-
-
-def record_observation(record: ObservationRecord):
-    _append_jsonl(
-        observations_path(record.project_id, record.agent_id),
-        {
-            "project_id": record.project_id,
-            "agent_id": record.agent_id,
-            "tool": record.tool_name,
-            "args_summary": record.args_summary,
-            "result_summary": record.result_summary,
-            "status": record.status,
-            "timestamp": record.timestamp,
-        },
-    )
 
 
 def record_inbox_digest(project_id: str, agent_id: str, event_ids: list[str], summary: str):

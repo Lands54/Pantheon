@@ -19,6 +19,10 @@ def _extract_agent_id(record: events_bus.EventRecord) -> str:
 
 
 def _try_wake_on_enqueue(record: events_bus.EventRecord) -> None:
+    # Interaction events are synchronous routing-layer events and should
+    # not participate in Angelia wake semantics.
+    if str(getattr(record, "domain", "") or "").strip() == "interaction":
+        return
     aid = _extract_agent_id(record)
     if not aid:
         return

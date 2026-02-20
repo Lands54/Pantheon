@@ -28,10 +28,6 @@ def task_state_path(project_id: str, agent_id: str) -> Path:
     return _mn_root(project_id) / "task_state" / f"{agent_id}.json"
 
 
-def observations_path(project_id: str, agent_id: str) -> Path:
-    return _mn_root(project_id) / "observations" / f"{agent_id}.jsonl"
-
-
 def chronicle_path(project_id: str, agent_id: str) -> Path:
     p = _mn_root(project_id) / "chronicles" / f"{agent_id}.md"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -123,5 +119,3 @@ def read_task_state(project_id: str, agent_id: str, objective_fallback: str = ""
     return payload
 
 
-def list_observations(project_id: str, agent_id: str, limit: int = 50) -> list[dict[str, Any]]:
-    return _read_jsonl(observations_path(project_id, agent_id), limit=limit)

@@ -8,6 +8,22 @@ from gods import events as events_bus
 from gods.angelia.models import AgentRuntimeStatus, AngeliaEvent
 
 
+def _assert_queue_domain_allowed(project_id: str, row) -> None:
+    dm = str(getattr(row, "domain", "") or "").strip().lower()
+    if dm == "interaction":
+        events_bus.transition_state(
+            project_id,
+            str(getattr(row, "event_id", "") or ""),
+            events_bus.EventState.DEAD,
+            error_code="ANGELIA_DOMAIN_VIOLATION",
+            error_message="interaction events must be consumed inline, not by Angelia queue",
+        )
+        raise ValueError(
+            f"ANGELIA_QUEUE_DOMAIN_VIOLATION: interaction event '{getattr(row, 'event_type', '')}' "
+            f"(event_id={getattr(row, 'event_id', '')}) entered Angelia queue path"
+        )
+
+
 def runtime_dir(project_id: str) -> Path:
     path = Path("projects") / project_id / "runtime"
     if path.exists() and not path.is_dir():
@@ -142,6 +158,7 @@ def pick_next_event(
     )
     cand = None
     for row in rows:
+        _assert_queue_domain_allowed(project_id, row)
         if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
             waited = float(now) - float(getattr(row, "created_at", 0.0) or 0.0)
             if waited < float(force_after_sec or 0.0):
@@ -180,6 +197,7 @@ def pick_batch_events(
     # Angelia events usually sort by priority DESC, created_at ASC
     
     for row in rows:
+        _assert_queue_domain_allowed(project_id, row)
         if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
             waited = float(now) - float(getattr(row, "created_at", 0.0) or 0.0)
             if waited < float(force_after_sec or 0.0):

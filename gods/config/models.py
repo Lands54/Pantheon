@@ -19,8 +19,17 @@ class AgentModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str = "stepfun/step-3.5-flash:free"
-    # Event-driven inbox/outbox is default path; polling tools are opt-in for debug/audit.
-    disabled_tools: List[str] = Field(default_factory=lambda: ["check_inbox", "check_outbox"])
+    # Default hard baseline (can still be overridden by config per agent/project).
+    disabled_tools: List[str] = Field(
+        default_factory=lambda: [
+            "check_inbox",
+            "check_outbox",
+            "post_to_synod",
+            "mnemo_write_agent",
+            "mnemo_list_agent",
+            "mnemo_read_agent",
+        ]
+    )
     # Optional agent-level phase runtime overrides (fallback to project defaults when None).
     phase_strategy: Optional[str] = None
     # Optional agent-level context strategy overrides (fallback to project defaults when None).
@@ -73,17 +82,18 @@ class ProjectConfig(BaseModel):
     memory_compact_trigger_tokens: int = 12000
     memory_compact_strategy: str = "semantic_llm"
 
-    context_strategy: str = "structured_v1"
+    context_strategy: str = "sequential_v1"
     context_token_budget_total: int = 32000
     context_budget_task_state: int = 4000
-    context_budget_observations: int = 12000
+
     context_budget_inbox: int = 4000
     context_budget_inbox_unread: int = 2000
     context_budget_inbox_read_recent: int = 1000
     context_budget_inbox_receipts: int = 1000
-    context_budget_state_window: int = 12000
-    context_state_window_limit: int = 50
-    context_observation_window: int = 30
+    context_short_window_intents: int = 120
+    context_n_recent: int = 12
+    context_token_budget_chronicle_trigger: int = 8000
+
     context_include_inbox_status_hints: bool = True
     context_write_build_report: bool = True
     metis_refresh_mode: str = "pulse"

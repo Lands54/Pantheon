@@ -42,6 +42,7 @@ def build_context_node(agent, state: RuntimeState) -> RuntimeState:
     env = _strategy_envelope(agent, state, node_name="build_context")
     inbox_hint = agent._build_inbox_context_hint()
     llm_messages, _ = janus_service.build_llm_messages_from_envelope(
+        agent=agent,
         envelope=env,
         directives=agent._build_behavior_directives(),
         local_memory=agent._load_local_memory(),
@@ -139,7 +140,7 @@ def decide_next_node(agent, state: RuntimeState) -> RuntimeState:
                 project_id=agent.project_id,
                 agent_id=agent.agent_id,
                 marker="tool_loop_cap",
-                payload={"project_id": agent.project_id, "agent_id": agent.agent_id, "max_rounds": max_rounds},
+                payload={"max_rounds": max_rounds},
             )
         )
         state["next_step"] = "continue"

@@ -20,15 +20,6 @@ class MemoryIntent:
 
 
 @dataclass
-class ObservationRecord:
-    project_id: str
-    agent_id: str
-    tool_name: str
-    args_summary: str
-    result_summary: str
-    status: str
-    timestamp: float
-
 
 @dataclass
 class MemorySinkPolicy:

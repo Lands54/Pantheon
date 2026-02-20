@@ -8,6 +8,90 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class MemoryMaterials:
+    """Smart container for context cards with dynamic retrieval."""
+
+    cards: list[dict[str, Any]] = field(default_factory=list)
+
+    def get_by_intent(self, intent_pattern: str) -> tuple[list[int], list[dict[str, Any]]]:
+        """Return (indices, cards) matching the intent key pattern (supports wildcard)."""
+        idx_list: list[int] = []
+        card_list: list[dict[str, Any]] = []
+        pattern = str(intent_pattern or "").strip()
+        if not pattern:
+            return [], []
+
+        # Convert simple wildcard * to regex
+        reg_pattern = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+        regex = re.compile(reg_pattern)
+
+        for i, card in enumerate(self.cards):
+            intent_key = str(card.get("meta", {}).get("intent_key", "") or "").strip()
+            if regex.match(intent_key):
+                idx_list.append(i)
+                card_list.append(card)
+        return idx_list, card_list
+
+    def get_by_kind(self, kind: str) -> tuple[list[int], list[dict[str, Any]]]:
+        """Return (indices, cards) matching the source kind."""
+        idx_list: list[int] = []
+        card_list: list[dict[str, Any]] = []
+        k = str(kind or "").strip()
+        for i, card in enumerate(self.cards):
+            card_kind = str(card.get("meta", {}).get("source_kind", "") or "").strip()
+            if card_kind == k:
+                idx_list.append(i)
+                card_list.append(card)
+        return idx_list, card_list
+
+    def recompose_for_prompt(self, n_recent: int = 10) -> list[dict[str, Any]]:
+        """
+        Implements the 'mindless' ordered assembly:
+        1. Fixed static materials (Profile, Directives)
+        2. Chronicle/Archive (source_seq > 0 but not in n_recent) -- if present
+        3. Recents (Last N with source_seq > 0)
+        4. Fixed dynamic materials (Mailbox, Tools)
+        """
+        # Group cards
+        fixed_start_keys = {"material.profile", "material.directives", "material.task_state"}
+        fixed_end_keys = {"material.mailbox", "material.tools", "material.inbox_hint"}
+        
+        static_start: list[dict[str, Any]] = []
+        static_end: list[dict[str, Any]] = []
+        context_cards: list[dict[str, Any]] = []
+        
+        for c in self.cards:
+            seq = int(c.get("source_seq", -1) or -1)
+            ik = str(c.get("meta", {}).get("intent_key", "") or "")
+            
+            if seq == -1:
+                # Direct match or starts-with for mailbox
+                if ik in fixed_start_keys:
+                    static_start.append(c)
+                elif ik in fixed_end_keys or ik.startswith("material.mailbox"):
+                    static_end.append(c)
+                else:
+                    # Other -1s go to start by default
+                    static_start.append(c)
+            else:
+                context_cards.append(c)
+        
+        # Sort context cards by seq
+        context_cards.sort(key=lambda x: int(x.get("source_seq", 0) or 0))
+        
+        # Split into chronicle (old) and recents
+        n = max(0, n_recent)
+        if len(context_cards) <= n:
+            chronicle = []
+            recents = context_cards
+        else:
+            chronicle = context_cards[:-n]
+            recents = context_cards[-n:]
+            
+        return static_start + chronicle + recents + static_end
+
+
+@dataclass(frozen=True)
 class ResourceSnapshot:
     """Immutable snapshot of strategy materials prepared by Chaos."""
 
@@ -18,10 +102,9 @@ class ResourceSnapshot:
     mailbox: dict[str, Any] = field(default_factory=dict)
     memory: dict[str, Any] = field(default_factory=dict)
     contracts: dict[str, Any] = field(default_factory=dict)
-    state_window: list[Any] = field(default_factory=list)
     tool_catalog: list[str] = field(default_factory=list)
     config_view: dict[str, Any] = field(default_factory=dict)
-    context_materials: dict[str, Any] = field(default_factory=dict)
+    context_materials: MemoryMaterials = field(default_factory=lambda: MemoryMaterials())
     runtime_meta: dict[str, Any] = field(default_factory=dict)
 
     def update(self, **patch: Any) -> "ResourceSnapshot":

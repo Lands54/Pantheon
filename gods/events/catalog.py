@@ -9,9 +9,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "interaction.message.sent": {
         "domain": "interaction",
         "title": "发送消息请求",
-        "description": "请求向目标 Agent 投递一条消息，后续会进入 Iris/Angelia 链路。",
-        "feeds_llm": True,
-        "llm_note": "通过 mailbox 注入到目标 Agent 上下文。",
+        "description": "交互层消息请求入口；在 interaction 内同步转化为 mailbox 领域事件。",
+        "feeds_llm": False,
+        "llm_note": "路由层事件，不直接注入 LLM。",
     },
     "interaction.message.read": {
         "domain": "interaction",
@@ -23,16 +23,16 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "interaction.hermes.notice": {
         "domain": "interaction",
         "title": "Hermes 通知分发",
-        "description": "将 Hermes 事件转成可投递消息并分发给目标 Agent。",
-        "feeds_llm": True,
-        "llm_note": "会转成消息进入目标 Agent 上下文。",
+        "description": "将 Hermes 事件转成可投递消息并分发给目标 Agent（同步路由层）。",
+        "feeds_llm": False,
+        "llm_note": "路由层事件，不直接注入 LLM。",
     },
     "interaction.detach.notice": {
         "domain": "interaction",
         "title": "Detach 生命周期通知",
-        "description": "将 detach 运行态变化通知到 Agent。",
-        "feeds_llm": True,
-        "llm_note": "作为通知消息可注入 LLM 上下文。",
+        "description": "将 detach 运行态变化通知到 Agent（同步路由层）。",
+        "feeds_llm": False,
+        "llm_note": "路由层事件，不直接注入 LLM。",
     },
     "interaction.agent.trigger": {
         "domain": "interaction",

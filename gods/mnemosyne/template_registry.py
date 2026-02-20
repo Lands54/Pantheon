@@ -42,6 +42,7 @@ _DEFAULT_CHRONICLE_TEMPLATES: dict[str, str] = {
     "memory_tool_error": "[[ACTION]] $tool_name (error) -> $result_compact",
     "memory_inbox_notice_contract_commit": "[COMMIT_NOTICE] [title=$title][from=$sender]",
     "memory_inbox_notice_contract_fully_committed": "[COMMIT_FULLY] [title=$title][from=$sender]",
+    "memory_janus_compaction_base": "[JANUS_COMPACTION_BASE]\nbase_intent_seq=$base_intent_seq\n$summary",
 }
 
 _DEFAULT_LLM_CONTEXT_TEMPLATES: dict[str, str] = {
@@ -56,6 +57,7 @@ _DEFAULT_LLM_CONTEXT_TEMPLATES: dict[str, str] = {
     "memory_inbox_notice_contract_fully_committed": "[SYSTEM NOTICE]\nEvent: Contract Fully Committed\nContract ID: $title\nStatus: FULLY COMMITTED\nInfo: All parties have agreed. Execution is mandatory.",
     "memory_tool_error": "[TOOL ERROR]\nTool: $tool_name\nStatus: Error\nDetails: $result_compact\nSuggestion: Check arguments and retry.",
     "memory_tool_blocked": "[TOOL BLOCKED]\nTool: $tool_name\nReason: Policy Restriction\nDetails: $result_compact",
+    "memory_janus_compaction_base": "[COMPACTED_BASE]\nbase_intent_seq=$base_intent_seq\n$summary",
 }
 
 

@@ -134,7 +134,7 @@ def intent_from_inbox_received(
         fallback_text=(
             f"[INBOX_UNREAD] title={title} from={sender} id={message_id} "
             f"attachments={len([str(x).strip() for x in list(attachments or []) if str(x).strip()])}\n"
-            f"{str(content or '')[:200]}"
+            f"{str(content or '')}"
         ),
         timestamp=time.time(),
     )
@@ -254,5 +254,30 @@ def intent_from_phase_retry(project_id: str, agent_id: str, phase_name: str, mes
         source_kind="phase",
         payload={"phase": phase, "message": str(message or "")},
         fallback_text=f"[PHASE_RETRY] {phase} -> {message}",
+        timestamp=time.time(),
+    )
+
+
+def intent_from_janus_compaction_base(
+    project_id: str,
+    agent_id: str,
+    summary: str,
+    base_intent_seq: int,
+    source_card_ids: list[str] | None = None,
+) -> MemoryIntent:
+    base = int(max(0, int(base_intent_seq or 0)))
+    src = [str(x).strip() for x in list(source_card_ids or []) if str(x).strip()]
+    body = str(summary or "").strip()
+    return MemoryIntent(
+        intent_key="janus.compaction.base",
+        project_id=project_id,
+        agent_id=agent_id,
+        source_kind="llm",
+        payload={
+            "summary": body,
+            "base_intent_seq": base,
+            "source_card_ids": src,
+        },
+        fallback_text=f"[JANUS_COMPACTION_BASE]\nbase_intent_seq={base}\n{body}",
         timestamp=time.time(),
     )

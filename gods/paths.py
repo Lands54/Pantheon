@@ -32,10 +32,6 @@ def runtime_debug_dir(project_id: str, agent_id: str) -> Path:
     return runtime_dir(project_id) / "debug" / str(agent_id)
 
 
-def runtime_state_window_path(project_id: str, agent_id: str) -> Path:
-    return runtime_dir(project_id) / "state_windows" / f"{agent_id}.json"
-
-
 def mnemosyne_dir(project_id: str) -> Path:
     return project_dir(project_id) / "mnemosyne"
 

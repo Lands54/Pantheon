@@ -56,7 +56,6 @@ _DEFAULT_TOOL_ORDER: list[str] = [
     "detach_stop",
     "post_to_synod",
     "abstain_from_synod",
-    "list_agents",
     "multi_replace",
     "list",
     "register_contract",

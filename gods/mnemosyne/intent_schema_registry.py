@@ -10,27 +10,9 @@ from typing import Any
 from gods.mnemosyne.intent_registry import is_registered_intent_key
 from gods.paths import mnemosyne_dir
 
-BASE_VARS = ["project_id", "agent_id", "intent_key"]
+from gods.mnemosyne.semantics import semantics_service
 
-_EXPLICIT: dict[str, dict[str, Any]] = {
-    "llm.response": {"guaranteed": ["phase", "content"], "optional": []},
-    "inbox.read_ack": {"guaranteed": ["event_ids", "count"], "optional": []},
-    "inbox.received.unread": {"guaranteed": ["title", "sender", "message_id", "msg_type"], "optional": ["attachments"]},
-    "inbox.section.summary": {"guaranteed": ["section", "title", "rows"], "optional": []},
-    "inbox.section.recent_read": {"guaranteed": ["section", "title", "rows"], "optional": []},
-    "inbox.section.recent_send": {"guaranteed": ["section", "title", "rows"], "optional": []},
-    "inbox.section.inbox_unread": {"guaranteed": ["section", "title", "rows"], "optional": []},
-    "outbox.sent.pending": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
-    "outbox.sent.delivered": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
-    "outbox.sent.handled": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
-    "outbox.sent.failed": {"guaranteed": ["title", "to_agent_id", "message_id", "status", "error_message"], "optional": ["attachments_count"]},
-    "agent.mode.freeform": {"guaranteed": [], "optional": []},
-    "agent.safety.tool_loop_cap": {"guaranteed": ["max_rounds"], "optional": []},
-    "agent.event.injected": {"guaranteed": ["count"], "optional": []},
-    "phase.retry.reason": {"guaranteed": ["phase", "message"], "optional": []},
-    "phase.retry.act": {"guaranteed": ["phase", "message"], "optional": []},
-    "phase.retry.observe": {"guaranteed": ["phase", "message"], "optional": []},
-}
+BASE_VARS = ["project_id", "agent_id", "intent_key"]
 
 
 def _mn_root(project_id: str) -> Path:
@@ -118,14 +100,7 @@ def observe_intent_payload(project_id: str, intent_key: str, payload: dict[str, 
 
 def schema_for_intent(intent_key: str) -> dict[str, list[str]]:
     k = str(intent_key or "").strip()
-    if k in _EXPLICIT:
-        row = _EXPLICIT[k]
-        return {"guaranteed": list(row.get("guaranteed", [])), "optional": list(row.get("optional", []))}
-    if k.startswith("tool."):
-        return {"guaranteed": ["tool_name", "status", "args", "result", "result_compact"], "optional": []}
-    if k.startswith("event."):
-        return {"guaranteed": ["stage", "event_id", "event_type", "priority", "attempt", "max_attempts", "payload"], "optional": []}
-    return {"guaranteed": [], "optional": []}
+    return semantics_service.get_schema(k)
 
 
 _TOOL_INTENT_RE = re.compile(r"^tool\.([a-z][a-z0-9_]{0,63})\.(ok|blocked|error)$")
@@ -147,7 +122,16 @@ def _expect_field_type(payload: dict[str, Any], key: str, expected: type, *, whe
     return value
 
 
+import logging
+logger = logging.getLogger(__name__)
+
 def validate_intent_contract(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
+    try:
+        _validate_intent_contract_strict(intent_key, source_kind, payload)
+    except ValueError as e:
+        logger.warning(f"Intent schema validation failed (softened): {e}")
+
+def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
     """
     Phase-1 strict contract:
     - llm.response

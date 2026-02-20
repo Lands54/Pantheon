@@ -2,5 +2,6 @@
 from __future__ import annotations
 
 from gods.tools.communication import check_inbox, check_outbox, list_agents, send_message
+from gods.tools.filesystem import list
 
-__all__ = ["check_inbox", "check_outbox", "list_agents", "send_message"]
+__all__ = ["check_inbox", "check_outbox", "list_agents", "send_message", "list"]

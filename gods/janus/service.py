@@ -13,6 +13,7 @@ from gods.mnemosyne.facade import record_context_report
 class JanusService:
     def build_llm_messages_from_envelope(
         self,
+        agent: Any,
         *,
         envelope: Any,
         directives: str,
@@ -23,12 +24,16 @@ class JanusService:
     ) -> tuple[list[Any], dict[str, Any]]:
         state = dict(getattr(envelope, "state", {}) or {})
         snapshot = getattr(envelope, "resource_snapshot", None)
-        context_materials = dict(getattr(snapshot, "context_materials", {}) or {})
+        context_materials = getattr(snapshot, "context_materials", None)
+        if context_materials is None:
+            from gods.chaos.contracts import MemoryMaterials
+            context_materials = MemoryMaterials()
         state["__context_materials"] = context_materials
         strategy = str(getattr(envelope, "strategy", state.get("strategy", "react_graph")) or "react_graph")
         req = ContextBuildRequest(
             project_id=str(state.get("project_id", "")),
             agent_id=str(state.get("agent_id", "")),
+            agent=agent,
             state=state,
             directives=directives,
             local_memory=local_memory,
@@ -43,7 +48,7 @@ class JanusService:
     def _build_llm_messages(self, req: ContextBuildRequest) -> tuple[list[Any], dict[str, Any]]:
         cfg = resolve_context_cfg(req.project_id, req.agent_id)
         req.context_cfg = cfg
-        strategy = get_strategy(cfg.get("strategy", "structured_v1"))
+        strategy = get_strategy(cfg.get("strategy", "sequential_v1"))
         result = strategy.build(req)
         messages = assemble_llm_messages(result)
         report = {

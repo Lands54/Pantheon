@@ -7,11 +7,10 @@ from langchain_core.tools import tool
 
 from gods.angelia import facade as angelia_facade
 from gods.hestia import facade as hestia_facade
-from gods.identity import is_valid_agent_id
 from gods.interaction import facade as interaction_facade
 from gods.interaction.contracts import EVENT_MESSAGE_SENT
 from gods.mnemosyne import facade as mnemosyne_facade
-from gods.paths import mnemosyne_dir, project_dir
+from gods.tools.filesystem import list as list_tool
 from gods.tools.comm_common import format_comm_error
 
 
@@ -218,54 +217,15 @@ def abstain_from_synod(reason: str, caller_id: str = "default") -> str:
 
 @tool
 def list_agents(caller_id: str, project_id: str = "default") -> str:
-    """List all agents in current project with short role summary from Mnemosyne profiles."""
-    try:
-        agents_root = project_dir(project_id) / "agents"
-        if not agents_root.exists():
-            return "No agents found in this project."
-
-        visible = set(hestia_facade.list_reachable_agents(project_id=project_id, caller_id=caller_id))
-        restrict_by_graph = bool(is_valid_agent_id(caller_id))
-        results = []
-        for agent_dir in sorted([p for p in agents_root.iterdir() if p.is_dir()]):
-            agent_id = agent_dir.name
-            if not is_valid_agent_id(agent_id):
-                continue
-            if restrict_by_graph and agent_id not in visible:
-                continue
-            md_path = mnemosyne_dir(project_id) / "agent_profiles" / f"{agent_id}.md"
-            role = "No role summary."
-            if md_path.exists():
-                text = md_path.read_text(encoding="utf-8").strip()
-                lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-                if lines:
-                    role = lines[0].replace("#", "").strip()
-                    for i, ln in enumerate(lines):
-                        if ("本体职责" in ln) or ("自身职责" in ln):
-                            for j in range(i + 1, len(lines)):
-                                cand = lines[j]
-                                if cand.startswith("#"):
-                                    break
-                                role = cand[:120]
-                                break
-                            break
-                    else:
-                        for ln in lines[1:]:
-                            if not ln.startswith("#"):
-                                role = ln[:120]
-                                break
-            results.append(f"- {agent_id}: {role}")
-
-        if not results:
-            if restrict_by_graph:
-                return "No reachable agents in Hestia social graph."
-            return "No agents found in this project."
-        return "\n".join(results)
-    except Exception as e:
-        return format_comm_error(
-            "Communication Error",
-            str(e),
-            "Verify project agents directory exists and mnemosyne profiles are readable.",
-            caller_id,
-            project_id,
+    """Deprecated alias of list(path='agent://reachable')."""
+    return str(
+        list_tool.invoke(
+            {
+                "path": "agent://reachable",
+                "caller_id": caller_id,
+                "project_id": project_id,
+                "page_size": 200,
+                "page": 1,
+            }
         )
+    )

@@ -25,7 +25,8 @@ class ContextBuildRequest:
     phase_block: str = ""
     phase_name: str = ""
     tools_desc: str = ""
-    context_materials: dict[str, Any] = field(default_factory=dict)
+    context_materials: Any = None
+    agent: Any = None
     context_cfg: dict[str, Any] = field(default_factory=dict)
 
 
@@ -33,6 +34,5 @@ class ContextBuildRequest:
 class ContextBuildResult:
     strategy_used: str
     system_blocks: list[str]
-    recent_messages: list[Any]
     token_usage: dict[str, int]
     preview: dict[str, Any] = field(default_factory=dict)

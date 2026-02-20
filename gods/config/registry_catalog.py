@@ -23,7 +23,7 @@ _DEPRECATED_AGENT_KEYS: set[str] = set()
 
 _PROJECT_ENUMS: dict[str, list[str]] = {
     "phase_strategy": ["react_graph", "freeform"],
-    "context_strategy": ["structured_v1"],
+    "context_strategy": ["sequential_v1"],
     "memory_compact_strategy": ["semantic_llm", "rule_based"],
     "command_executor": ["docker", "local"],
     "docker_network_mode": ["bridge_local_only", "none"],
@@ -34,6 +34,8 @@ _PROJECT_ENUMS: dict[str, list[str]] = {
 _PROJECT_CONSTRAINTS: dict[str, dict[str, Any]] = {
     "tool_loop_max": {"min": 1, "max": 64},
     "context_token_budget_total": {"min": 4000, "max": 256000},
+    "context_n_recent": {"min": 1, "max": 5000},
+    "context_token_budget_chronicle_trigger": {"min": 1000, "max": 512000},
     "llm_global_max_concurrency": {"min": 1, "max": 256},
     "llm_global_rate_per_minute": {"min": 1, "max": 200000},
     "llm_project_max_concurrency": {"min": 1, "max": 256},
@@ -61,14 +63,15 @@ _PROJECT_RUNTIME: dict[str, list[str]] = {
     "context_strategy": ["gods/janus/context_policy.py"],
     "context_token_budget_total": ["gods/janus/context_policy.py"],
     "context_budget_task_state": ["gods/janus/context_policy.py"],
-    "context_budget_observations": ["gods/janus/context_policy.py"],
+
     "context_budget_inbox": ["gods/janus/context_policy.py"],
     "context_budget_inbox_unread": ["gods/janus/context_policy.py"],
     "context_budget_inbox_read_recent": ["gods/janus/context_policy.py"],
     "context_budget_inbox_receipts": ["gods/janus/context_policy.py"],
-    "context_budget_state_window": ["gods/janus/context_policy.py"],
-    "context_state_window_limit": ["gods/janus/context_policy.py", "gods/mnemosyne/state_window.py"],
-    "context_observation_window": ["gods/janus/context_policy.py"],
+    "context_short_window_intents": ["gods/janus/context_policy.py", "gods/mnemosyne/janus_snapshot.py"],
+    "context_n_recent": ["gods/janus/context_policy.py", "gods/janus/strategies/sequential_v1.py"],
+    "context_token_budget_chronicle_trigger": ["gods/janus/context_policy.py", "gods/janus/strategies/sequential_v1.py"],
+
     "context_include_inbox_status_hints": ["gods/janus/context_policy.py"],
     "context_write_build_report": ["gods/janus/context_policy.py"],
     "metis_refresh_mode": ["gods/metis/snapshot.py", "gods/metis/strategy_runtime.py"],
@@ -142,6 +145,8 @@ _PROJECT_DESCRIPTIONS: dict[str, str] = {
     "agent_settings": "按 agent_id 的运行覆盖配置。",
     "tool_policies": "项目级策略/阶段工具白名单（推荐主路径）。",
     "tool_loop_max": "单次脉冲工具调用上限。",
+    "context_n_recent": "顺序上下文中作为 recent 保留的卡片数量。",
+    "context_token_budget_chronicle_trigger": "chronicle 区段超过该估算 token 时触发压缩。",
     "metis_refresh_mode": "Metis envelope 刷新模式：pulse(每轮一次) 或 node(每节点增量刷新)。",
     "llm_control_enabled": "启用 LLM 全局/项目级限速与并发控制。",
     "llm_global_max_concurrency": "LLM 全局并发上限（跨所有项目与 agent）。",
@@ -169,7 +174,7 @@ _GROUPS = [
     {"id": "pulse", "title": "Pulse", "scope": "project", "keys": ["pulse_event_inject_budget", "pulse_interrupt_mode", "pulse_priority_weights"]},
     {"id": "angelia", "title": "Angelia", "scope": "project", "keys": ["angelia_enabled", "angelia_worker_per_agent", "angelia_event_max_attempts", "angelia_processing_timeout_sec", "angelia_cooldown_preempt_types", "angelia_timer_enabled", "angelia_timer_idle_sec", "angelia_dedupe_window_sec"]},
     {"id": "memory", "title": "Memory", "scope": "project", "keys": ["summarize_threshold", "summarize_keep_count", "memory_compact_trigger_tokens", "memory_compact_strategy"]},
-    {"id": "context", "title": "Context", "scope": "project", "keys": ["context_strategy", "context_token_budget_total", "context_budget_task_state", "context_budget_observations", "context_budget_inbox", "context_budget_inbox_unread", "context_budget_inbox_read_recent", "context_budget_inbox_receipts", "context_budget_state_window", "context_state_window_limit", "context_observation_window", "context_include_inbox_status_hints", "context_write_build_report", "metis_refresh_mode"]},
+    {"id": "context", "title": "Context", "scope": "project", "keys": ["context_strategy", "context_token_budget_total", "context_budget_task_state", "context_budget_inbox", "context_budget_inbox_unread", "context_budget_inbox_read_recent", "context_budget_inbox_receipts", "context_short_window_intents", "context_n_recent", "context_token_budget_chronicle_trigger", "context_include_inbox_status_hints", "context_write_build_report", "metis_refresh_mode"]},
     {"id": "runtime", "title": "Runtime", "scope": "project", "keys": ["command_executor", "command_max_parallel", "command_timeout_sec", "command_max_memory_mb", "command_max_cpu_sec", "command_max_output_chars", "docker_enabled", "docker_image", "docker_network_mode", "docker_auto_start_on_project_start", "docker_auto_stop_on_project_stop", "docker_workspace_mount_mode", "docker_readonly_rootfs", "docker_extra_env", "docker_cpu_limit", "docker_memory_limit_mb", "detach_enabled", "detach_max_running_per_agent", "detach_max_running_per_project", "detach_queue_max_per_agent", "detach_ttl_sec", "detach_stop_grace_sec", "detach_log_tail_chars", "llm_control_enabled", "llm_global_max_concurrency", "llm_global_rate_per_minute", "llm_project_max_concurrency", "llm_project_rate_per_minute", "llm_acquire_timeout_sec", "llm_retry_interval_ms"]},
     {"id": "tools", "title": "Tools", "scope": "project", "keys": ["tool_loop_max", "tool_policies", "agent_settings", "hermes_enabled", "hermes_default_timeout_sec", "hermes_default_rate_per_minute", "hermes_default_max_concurrency", "hermes_allow_agent_tool_provider"]},
     {"id": "debug", "title": "Debug", "scope": "project", "keys": ["debug_trace_enabled", "debug_trace_max_events", "debug_trace_full_content", "debug_llm_trace_enabled"]},
@@ -295,7 +300,7 @@ def build_registry() -> ConfigRegistry:
                 owner="agent-runtime",
                 runtime_used_by=_AGENT_RUNTIME.get(key, [] if key in _DEPRECATED_AGENT_KEYS else ["unknown (audit required)"]),
                 status="deprecated" if key in _DEPRECATED_AGENT_KEYS else "active",
-                enum=["react_graph", "freeform"] if key == "phase_strategy" else (["structured_v1"] if key == "context_strategy" else (["pulse", "node"] if key == "metis_refresh_mode" else None)),
+                enum=["react_graph", "freeform"] if key == "phase_strategy" else (["sequential_v1"] if key == "context_strategy" else (["pulse", "node"] if key == "metis_refresh_mode" else None)),
                 ui=(
                     {
                         "widget": "strategy_phase_tool_allowlist",
