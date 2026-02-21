@@ -118,6 +118,41 @@ def test_tools_desc_not_duplicated_when_material_tools_exists():
     assert "## AVAILABLE TOOLS" not in blob
 
 
+def test_llm_response_anchor_seq_is_ordered_before_later_events():
+    strategy = SequentialV1Strategy()
+    req = ContextBuildRequest(
+        project_id="unit_seq_anchor",
+        agent_id="alpha",
+        state={},
+        directives="",
+        local_memory="",
+        inbox_hint="",
+        tools_desc="",
+        context_cfg={"n_recent": 10, "token_budget_chronicle_trigger": 999999},
+        context_materials=SimpleNamespace(
+            cards=[
+                _card("material.profile", "[PROFILE]", -1, intent_key="material.profile"),
+                _card("intent:80", "ctx-80", 80),
+                _card("intent:81", "event-81", 81),
+                {
+                    **_card("intent:82", "llm-82", 82, intent_key="llm.response"),
+                    "meta": {"intent_key": "llm.response", "anchor_seq": 80},
+                },
+                _card("intent:83", "event-83", 83),
+            ]
+        ),
+    )
+    out = strategy.build(req)
+    blob = "\n".join(out.system_blocks)
+    pos_llm = blob.find("llm-82")
+    pos_81 = blob.find("event-81")
+    pos_83 = blob.find("event-83")
+    assert pos_llm > 0
+    assert pos_81 > 0 and pos_83 > 0
+    assert pos_llm < pos_81
+    assert pos_llm < pos_83
+
+
 def test_compression_records_are_written_when_triggered(monkeypatch):
     strategy = SequentialV1Strategy()
 

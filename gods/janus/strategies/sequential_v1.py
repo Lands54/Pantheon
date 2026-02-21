@@ -56,6 +56,22 @@ class SequentialV1Strategy:
         return "[JANUS_COMPACTION_BASE]" in text or "[COMPACTED_BASE]" in text
 
     @classmethod
+    def _timeline_sort_key(cls, card: dict[str, Any]) -> tuple[int, int, int, float]:
+        seq = cls._card_seq(card)
+        meta = dict((card or {}).get("meta", {}) or {})
+        ik = str(meta.get("intent_key", "") or "").strip()
+        created = float((card or {}).get("created_at", 0.0) or 0.0)
+        if ik == "llm.response":
+            try:
+                anchor = int(meta.get("anchor_seq", 0) or 0)
+            except Exception:
+                anchor = 0
+            if anchor > 0:
+                # Place response right after its context watermark and before later events.
+                return (anchor, 1, seq, created)
+        return (seq, 0, seq, created)
+
+    @classmethod
     def _pick_latest_summary(cls, cards: list[dict[str, Any]]) -> dict[str, Any] | None:
         summaries: list[dict[str, Any]] = []
         for c in list(cards or []):
@@ -174,7 +190,7 @@ class SequentialV1Strategy:
                 else:
                     context_cards.append(c)
         
-        context_cards.sort(key=self._card_seq)
+        context_cards.sort(key=self._timeline_sort_key)
 
         # Apply summary-base slicing:
         # latest summary + (base_seq, ...] context cards
@@ -187,7 +203,7 @@ class SequentialV1Strategy:
             if self._card_seq(c) <= base_seq:
                 continue
             non_summary_cards.append(c)
-        non_summary_cards.sort(key=self._card_seq)
+        non_summary_cards.sort(key=self._timeline_sort_key)
         
         # Split into chronicle/recent by token budget (preferred) or by count fallback.
         chronicle, recents = self._split_recent_by_token_budget(

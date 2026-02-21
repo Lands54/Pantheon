@@ -341,6 +341,9 @@ def build_cards_from_intents(
                 continue
             iid = str(row.get("intent_id", "") or "").strip() or f"{agent_id}:{seq}"
             kind = _kind_from_intent(key)
+            payload = row.get("payload")
+            pld = payload if isinstance(payload, dict) else {}
+            anchor_seq = _to_int(pld.get("anchor_seq"), 0) if key == "llm.response" else 0
             rows.append(
                 ContextCard(
                     card_id=_card_id_for_row(row),
@@ -351,7 +354,11 @@ def build_cards_from_intents(
                     derived_from_card_ids=[],
                     supersedes_card_ids=[],
                     compression_type="",
-                    meta={"intent_key": key, "source_kind": str(row.get("source_kind", "") or "")},
+                    meta={
+                        "intent_key": key,
+                        "source_kind": str(row.get("source_kind", "") or ""),
+                        "anchor_seq": int(anchor_seq),
+                    },
                     created_at=float(row.get("timestamp") or time.time()),
                 )
             )

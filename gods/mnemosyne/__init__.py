@@ -1,7 +1,11 @@
 """Mnemosyne archival layer."""
 from gods.mnemosyne.store import write_entry, list_entries, read_entry, VALID_VAULTS
 from gods.mnemosyne.contracts import MemoryIntent, MemorySinkPolicy, MemoryDecision
-from gods.mnemosyne.memory import load_memory_policy, record_intent, fetch_intents_between
+from gods.mnemosyne.memory import (
+    load_memory_policy,
+    record_intent,
+    fetch_intents_between,
+)
 from gods.mnemosyne.context_index import (
     list_context_index_entries,
     list_context_index_texts,

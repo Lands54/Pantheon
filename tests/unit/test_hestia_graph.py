@@ -42,3 +42,25 @@ def test_hestia_default_full_mesh_and_edge_update():
         assert hestia_facade.can_message(project_id, "bob", "alice") is True
     finally:
         shutil.rmtree(base, ignore_errors=True)
+
+
+def test_hestia_new_agent_defaults_to_reachable_mesh():
+    project_id = "unit_hestia_graph_expand"
+    base = Path("projects") / project_id
+    shutil.rmtree(base, ignore_errors=True)
+    try:
+        (base / "agents" / "alice").mkdir(parents=True, exist_ok=True)
+        (base / "agents" / "bob").mkdir(parents=True, exist_ok=True)
+        graph = hestia_facade.get_social_graph(project_id)
+        assert int(graph["matrix"]["alice"]["bob"]) == 1
+        assert int(graph["matrix"]["bob"]["alice"]) == 1
+
+        # Add a new agent after graph file already exists.
+        (base / "agents" / "charlie").mkdir(parents=True, exist_ok=True)
+        graph2 = hestia_facade.get_social_graph(project_id)
+        assert int(graph2["matrix"]["alice"]["charlie"]) == 1
+        assert int(graph2["matrix"]["charlie"]["alice"]) == 1
+        assert int(graph2["matrix"]["bob"]["charlie"]) == 1
+        assert int(graph2["matrix"]["charlie"]["bob"]) == 1
+    finally:
+        shutil.rmtree(base, ignore_errors=True)

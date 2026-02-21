@@ -1,7 +1,14 @@
 """Public facade for mnemosyne domain operations."""
 from __future__ import annotations
 
-from gods.mnemosyne import VALID_VAULTS, list_entries, read_entry, write_entry, record_intent, fetch_intents_between
+from gods.mnemosyne import (
+    VALID_VAULTS,
+    list_entries,
+    read_entry,
+    write_entry,
+    record_intent,
+    fetch_intents_between,
+)
 from gods.mnemosyne.compaction import load_chronicle_for_context
 from gods.mnemosyne.context_materials import (
     read_profile,

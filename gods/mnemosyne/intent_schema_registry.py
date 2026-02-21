@@ -154,7 +154,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
     if key == "llm.response":
         if str(source_kind or "").strip() != "llm":
             raise ValueError("invalid intent 'llm.response': source_kind must be 'llm'")
-        allowed = {"phase", "content"}
+        allowed = {"phase", "content", "anchor_seq"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -162,6 +162,8 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
             )
         _expect_field_type(data, "phase", str, where=key)
         _expect_field_type(data, "content", str, where=key)
+        if "anchor_seq" in data and data.get("anchor_seq") is not None:
+            _expect_field_type(data, "anchor_seq", int, where=key)
         return
 
     if key.startswith("tool.call."):

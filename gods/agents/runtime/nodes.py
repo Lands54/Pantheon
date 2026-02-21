@@ -63,14 +63,17 @@ def llm_think_node(agent, state: RuntimeState) -> RuntimeState:
         trace_meta=(env.resource_snapshot.runtime_meta or {}).get("pulse_meta", {}) if isinstance(state, dict) else {},
     )
     state.setdefault("messages", []).append(response)
-    content_text = response.content or "[No textual response]"
-    if not agent._is_transient_llm_error_text(content_text):
+    raw_content = response.content
+    content_text = str(raw_content or "").strip()
+    # Tool-only turns may legitimately have empty assistant text; skip llm.response intent in that case.
+    if content_text and (not agent._is_transient_llm_error_text(content_text)):
         agent._record_intent(
             intent_from_llm_response(
                 project_id=agent.project_id,
                 agent_id=agent.agent_id,
                 phase=str(env.strategy or state.get("strategy", "react_graph")),
                 content=content_text,
+                anchor_seq=int(state.get("__chaos_synced_seq", 0) or 0),
             )
         )
     state["tool_calls"] = list(getattr(response, "tool_calls", []) or [])

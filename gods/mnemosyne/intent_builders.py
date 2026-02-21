@@ -112,13 +112,21 @@ def _compact_tool_result(text: str) -> str:
     return s
 
 
-def intent_from_llm_response(project_id: str, agent_id: str, phase: str, content: str) -> MemoryIntent:
+def intent_from_llm_response(
+    project_id: str,
+    agent_id: str,
+    phase: str,
+    content: str,
+    *,
+    anchor_seq: int = 0,
+) -> MemoryIntent:
+    anchor = int(anchor_seq or 0)
     return MemoryIntent(
         intent_key="llm.response",
         project_id=project_id,
         agent_id=agent_id,
         source_kind="llm",
-        payload={"phase": str(phase or ""), "content": str(content or "")},
+        payload={"phase": str(phase or ""), "content": str(content or ""), "anchor_seq": anchor},
         fallback_text=str(content or "[No textual response]"),
         timestamp=time.time(),
     )

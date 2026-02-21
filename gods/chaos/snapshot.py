@@ -315,6 +315,8 @@ def pull_incremental_materials(
 
             sk = str(getattr(intent, "source_kind", "") or "").strip()
             seq = int(getattr(intent, "intent_seq", -1) or -1)
+            payload = dict(getattr(intent, "payload", {}) or {})
+            anchor_seq = int(payload.get("anchor_seq", 0) or 0) if ik == "llm.response" else 0
             
             # Map into cards
             card_data = _card(
@@ -325,7 +327,8 @@ def pull_incremental_materials(
                 meta={
                     "intent_key": ik,
                     "source_kind": sk,
-                    "runtime_state_sync": True
+                    "runtime_state_sync": True,
+                    "anchor_seq": anchor_seq,
                 }
             )
             # Add required snapshot fields

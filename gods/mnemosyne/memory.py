@@ -283,7 +283,7 @@ def _render_intent_for_llm_context(intent: MemoryIntent) -> str | None:
         return None
 
 
-def record_intent(intent: MemoryIntent) -> dict[str, Any]:
+def _persist_intent(intent: MemoryIntent) -> dict[str, Any]:
     ts = float(intent.timestamp or time.time())
     intent_seq = _next_intent_seq(intent.project_id, intent.agent_id)
     intent_id = f"{intent.agent_id}:{intent_seq}"
@@ -414,3 +414,7 @@ def record_intent(intent: MemoryIntent) -> dict[str, Any]:
         },
         "llm_context_rendered": decision.llm_context_rendered,
     }
+
+
+def record_intent(intent: MemoryIntent) -> dict[str, Any]:
+    return _persist_intent(intent)
