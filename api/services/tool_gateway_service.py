@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
 from gods.hestia import facade as hestia_facade
+from gods.identity import HUMAN_AGENT_ID, is_valid_agent_id
 from gods.interaction import facade as interaction_facade
 from gods.mnemosyne import facade as mnemosyne_facade
 from gods.mnemosyne.intent_builders import intent_from_tool_result
@@ -79,14 +80,20 @@ class ToolGatewayService:
 
     def check_inbox(self, project_id: str | None, agent_id: str) -> dict[str, Any]:
         pid = resolve_project(project_id)
-        agent_dir = Path("projects") / pid / "agents" / agent_id
-        if not agent_dir.exists():
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found in '{pid}'")
-        args = {"caller_id": agent_id, "project_id": pid}
+        aid = str(agent_id or "").strip()
+        if not aid:
+            raise HTTPException(status_code=400, detail="agent_id is required")
+        if is_valid_agent_id(aid):
+            agent_dir = Path("projects") / pid / "agents" / aid
+            if not agent_dir.exists():
+                raise HTTPException(status_code=404, detail=f"Agent '{aid}' not found in '{pid}'")
+        elif aid not in {HUMAN_AGENT_ID, "system", "external"}:
+            raise HTTPException(status_code=400, detail=f"unsupported inbox identity: {aid}")
+        args = {"caller_id": aid, "project_id": pid}
         text = tools_facade.check_inbox.invoke(args)
         self._record_gateway_tool_intent(
             project_id=pid,
-            agent_id=agent_id,
+            agent_id=aid,
             tool_name="check_inbox",
             args=args,
             result_text=str(text),
@@ -98,7 +105,7 @@ class ToolGatewayService:
             parsed = None
         if not isinstance(parsed, list):
             parsed = []
-        return {"project_id": pid, "agent_id": agent_id, "result": text, "messages": parsed}
+        return {"project_id": pid, "agent_id": aid, "result": text, "messages": parsed}
 
     def check_outbox(
         self,
@@ -109,11 +116,17 @@ class ToolGatewayService:
         limit: int = 50,
     ) -> dict[str, Any]:
         pid = resolve_project(project_id)
-        agent_dir = Path("projects") / pid / "agents" / agent_id
-        if not agent_dir.exists():
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found in '{pid}'")
+        aid = str(agent_id or "").strip()
+        if not aid:
+            raise HTTPException(status_code=400, detail="agent_id is required")
+        if is_valid_agent_id(aid):
+            agent_dir = Path("projects") / pid / "agents" / aid
+            if not agent_dir.exists():
+                raise HTTPException(status_code=404, detail=f"Agent '{aid}' not found in '{pid}'")
+        elif aid not in {HUMAN_AGENT_ID, "system", "external"}:
+            raise HTTPException(status_code=400, detail=f"unsupported outbox identity: {aid}")
         args = {
-            "caller_id": agent_id,
+            "caller_id": aid,
             "project_id": pid,
             "to_id": to_id,
             "status": status,
@@ -122,7 +135,7 @@ class ToolGatewayService:
         text = tools_facade.check_outbox.invoke(args)
         self._record_gateway_tool_intent(
             project_id=pid,
-            agent_id=agent_id,
+            agent_id=aid,
             tool_name="check_outbox",
             args=args,
             result_text=str(text),
@@ -132,7 +145,7 @@ class ToolGatewayService:
             parsed = json.loads(text)
         except Exception:
             parsed = None
-        return {"project_id": pid, "agent_id": agent_id, "result": text, "items": parsed}
+        return {"project_id": pid, "agent_id": aid, "result": text, "items": parsed}
 
     def send_message(
         self,
@@ -144,22 +157,30 @@ class ToolGatewayService:
         attachments: list[str] | None = None,
     ) -> dict[str, Any]:
         pid = resolve_project(project_id)
-        from_dir = Path("projects") / pid / "agents" / from_id
         to_dir = Path("projects") / pid / "agents" / to_id
-        if not from_dir.exists():
-            raise HTTPException(status_code=404, detail=f"Sender agent '{from_id}' not found in '{pid}'")
+        src = str(from_id or "").strip()
+        if not src:
+            raise HTTPException(status_code=400, detail="from_id is required")
+        # Allow human/system/external identities to send via gateway; only strict-check filesystem
+        # for real agent ids.
+        if is_valid_agent_id(src):
+            from_dir = Path("projects") / pid / "agents" / src
+            if not from_dir.exists():
+                raise HTTPException(status_code=404, detail=f"Sender agent '{src}' not found in '{pid}'")
+        elif src not in {HUMAN_AGENT_ID, "system", "external"}:
+            raise HTTPException(status_code=400, detail=f"unsupported sender identity: {src}")
         if not to_dir.exists():
             raise HTTPException(status_code=404, detail=f"Target agent '{to_id}' not found in '{pid}'")
         if not str(title or "").strip():
             raise HTTPException(status_code=400, detail="title is required")
-        if not hestia_facade.can_message(project_id=pid, from_id=from_id, to_id=to_id):
-            raise HTTPException(status_code=403, detail=f"social graph denies route {from_id} -> {to_id}")
+        if not hestia_facade.can_message(project_id=pid, from_id=src, to_id=to_id):
+            raise HTTPException(status_code=403, detail=f"social graph denies route {src} -> {to_id}")
         attachment_ids = [str(x).strip() for x in list(attachments or []) if str(x).strip()]
         for aid in attachment_ids:
             if not mnemosyne_facade.is_valid_artifact_id(aid):
                 raise HTTPException(status_code=400, detail=f"invalid attachment id: {aid}")
             try:
-                ref = mnemosyne_facade.head_artifact(aid, from_id, pid)
+                ref = mnemosyne_facade.head_artifact(aid, src, pid)
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"attachment not accessible: {aid}: {e}") from e
             if str(getattr(ref, "scope", "")) != "agent":
@@ -169,7 +190,7 @@ class ToolGatewayService:
         row = interaction_facade.submit_message_event(
             project_id=pid,
             to_id=to_id,
-            sender_id=from_id,
+            sender_id=src,
             title=title,
             content=message,
             msg_type="private",
@@ -180,13 +201,13 @@ class ToolGatewayService:
         )
         self._record_gateway_tool_intent(
             project_id=pid,
-            agent_id=from_id,
+            agent_id=src,
             tool_name="send_message",
             args={
                 "to_id": to_id,
                 "title": title,
                 "message": message,
-                "caller_id": from_id,
+                "caller_id": src,
                 "project_id": pid,
                 "attachments": json.dumps(attachment_ids, ensure_ascii=False),
             },
@@ -194,7 +215,7 @@ class ToolGatewayService:
         )
         return {
             "project_id": pid,
-            "from_id": from_id,
+            "from_id": src,
             "to_id": to_id,
             "attachments_count": len(attachment_ids),
             **row,

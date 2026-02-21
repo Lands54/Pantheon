@@ -281,15 +281,16 @@ def worker_loop(ctx: WorkerContext):
             now = time.time()
             cooldown_until = max(float(st.cooldown_until or 0.0), float(st.backoff_until or 0.0))
             
-            # Batch Pick (Limit 10 for now)
+            # Batch pick size is runtime-configurable via angelia_pick_batch_size.
             try:
+                pick_limit = policy.pick_batch_size(project_id)
                 batch = store.pick_batch_events(
                     project_id=project_id,
                     agent_id=agent_id,
                     now=now,
                     cooldown_until=cooldown_until,
                     preempt_types=preempt_types,
-                    limit=10,
+                    limit=pick_limit,
                     force_after_sec=policy.force_pick_after_sec(project_id),
                 )
             except Exception as e:

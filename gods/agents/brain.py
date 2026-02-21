@@ -210,6 +210,10 @@ class GodBrain:
         ChatOpenAI = self._resolve_chat_openai_class()
         
         model = self._resolve_model()
+        current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+        proj = getattr(runtime_config, "projects", {}).get(current_project)
+        request_timeout_sec = int(getattr(proj, "llm_request_timeout_sec", 90) if proj else 90)
+        request_timeout_sec = max(1, min(request_timeout_sec, 600))
         
         api_key = runtime_config.openrouter_api_key
         
@@ -217,6 +221,7 @@ class GodBrain:
             model=model,
             openai_api_key=api_key,
             openai_api_base="https://openrouter.ai/api/v1",
+            timeout=request_timeout_sec,
             temperature=0.7,
             max_tokens=4096,
             default_headers={

@@ -513,10 +513,33 @@ export function ProjectControlPage({
   return (
     <div className="stack-lg page-body">
 
-      <div className="dashboard-header">
+      <div className="dashboard-header" style={{ alignItems: 'flex-start' }}>
         <div className="dash-title">
-          <h2>Project Control &bull; <span className="mono">{projectId}</span></h2>
-          <div className="sub">
+          <div className="row-between" style={{ gap: '1rem' }}>
+            <h2>Project Control &bull; <span className="mono">{projectId}</span></h2>
+            <div className="action-row" style={{ background: 'rgba(255,255,255,0.5)', padding: '4px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Plus size={14} color="#64748b" />
+              <input
+                className="glass-input"
+                style={{ width: '150px', border: 'none', background: 'transparent', padding: 0 }}
+                value={newProjectId}
+                onChange={e => setNewProjectId(e.target.value)}
+                placeholder="New project ID..."
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newProjectId) {
+                    onCreateProject(newProjectId);
+                    setNewProjectId('');
+                  }
+                }}
+              />
+              <button className="primary-btn" style={{ padding: '2px 8px', fontSize: '11px' }} onClick={async () => {
+                if (!newProjectId) return
+                await onCreateProject(newProjectId)
+                setNewProjectId('')
+              }}>Deploy Project</button>
+            </div>
+          </div>
+          <div className="sub top-gap-sm">
             Global Strategy: <span className="mono">{projectStrategy}</span>
           </div>
         </div>
@@ -605,27 +628,36 @@ export function ProjectControlPage({
               )
             })}
           </AnimatePresence>
+        </div>
 
-          {/* Create New Agent Card */}
-          <motion.div
-            className="agent-card"
-            style={{ borderStyle: 'dashed', background: 'rgba(255,255,255,0.4)', justifyContent: 'center' }}
-          >
-            <div className="agent-header">
-              <div className="agent-identity">
-                <div className="agent-icon" style={{ background: 'transparent', border: '1px dashed #cbd5e1' }}>
-                  <Plus size={20} />
-                </div>
-                <div className="agent-name dim">New Agent</div>
-              </div>
-            </div>
-            <div className="agent-body">
+        {/* Improved Agent Deployment Console */}
+        <motion.div
+          className="panel top-gap"
+          style={{
+            background: 'linear-gradient(145deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)',
+            border: '1px solid rgba(226, 232, 240, 0.8)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.02)'
+          }}
+        >
+          <div className="section-title" style={{ marginTop: 0, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="icon-wrapper" style={{ background: '#e2e8f0', padding: 6, borderRadius: 8 }}><Plus size={16} color="#334155" /></div>
+            Deploy New Agent Entity
+          </div>
+
+          <div className="form-grid" style={{ gridTemplateColumns: 'minmax(200px, 1fr) minmax(200px, 1fr)' }}>
+            <label>
+              Entity Designation (ID)
               <input
                 className="glass-input"
-                placeholder="Agent ID (e.g. 'architect')"
+                placeholder="e.g. 'architect', 'researcher'..."
                 value={newAgentId}
                 onChange={e => setNewAgentId(e.target.value)}
               />
+              <span className="sub" style={{ fontSize: '10px' }}>Only lowercase and underscores</span>
+            </label>
+
+            <label>
+              Core Model Engine
               <input
                 className="glass-input"
                 placeholder="Model ID"
@@ -633,34 +665,46 @@ export function ProjectControlPage({
                 value={newAgentModel}
                 onChange={e => setNewAgentModel(e.target.value)}
               />
+            </label>
+
+            <label style={{ gridColumn: '1 / -1' }}>
+              Soul Directives (System Prompt)
+              <textarea
+                className="glass-input"
+                rows={4}
+                style={{ resize: 'vertical', fontFamily: 'monospace' }}
+                placeholder="You are an expert systems architect. Your primary directive is to..."
+                value={newAgentDirectives}
+                onChange={e => setNewAgentDirectives(e.target.value)}
+              />
+              <span className="sub" style={{ fontSize: '10px' }}>This will be written to mnemosyne/agent_profiles/{newAgentId || 'id'}.md</span>
+            </label>
+
+            <label>
+              Execution Strategy
               <select
                 className="glass-input"
                 value={newAgentStrategy}
                 onChange={e => setNewAgentStrategy(e.target.value)}
               >
-                <option value={INHERIT_STRATEGY}>Inherit Strategy</option>
+                <option value={INHERIT_STRATEGY}>Inherit Global ({projectStrategy})</option>
                 {STRATEGY_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <textarea
-                className="glass-input"
-                rows={2}
-                placeholder="Directives (optional)..."
-                value={newAgentDirectives}
-                onChange={e => setNewAgentDirectives(e.target.value)}
-              />
-            </div>
-            <div className="agent-footer">
-              <div />
+            </label>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
               <button
                 className="primary-btn"
+                style={{ padding: '8px 24px', fontSize: '14px', background: '#0f172a', width: '100%', justifyContent: 'center' }}
                 disabled={!newAgentId || !!savingAgentId}
                 onClick={handleCreateAgent}
               >
-                Create & Activate
+                <Plus size={16} style={{ marginRight: 8 }} />
+                Initialize & Boot Agent
               </button>
             </div>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
       </div>
 
       <div className="top-gap">
@@ -700,19 +744,6 @@ export function ProjectControlPage({
                   >
                     Update Global Strategy
                   </button>
-
-                  <div className="top-gap"></div>
-                  <label>
-                    Create / Switch Project
-                    <div className="action-row">
-                      <input className="glass-input" value={newProjectId} onChange={e => setNewProjectId(e.target.value)} placeholder="new_project_id" />
-                      <button className="ghost-btn" onClick={async () => {
-                        if (!newProjectId) return
-                        await onCreateProject(newProjectId)
-                        setNewProjectId('')
-                      }}>Switch</button>
-                    </div>
-                  </label>
                 </div>
               </div>
 

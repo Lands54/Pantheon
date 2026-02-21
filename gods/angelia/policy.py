@@ -28,6 +28,12 @@ def processing_timeout_sec(project_id: str) -> int:
     return max(5, min(v, 3600))
 
 
+def pick_batch_size(project_id: str) -> int:
+    proj = _project(project_id)
+    v = int(getattr(proj, "angelia_pick_batch_size", 10) if proj else 10)
+    return max(1, min(v, 100))
+
+
 def dedupe_window_sec(project_id: str) -> int:
     proj = _project(project_id)
     v = int(getattr(proj, "angelia_dedupe_window_sec", 5) if proj else 5)

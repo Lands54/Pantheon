@@ -86,10 +86,10 @@ class SemanticsService:
         
         if key.startswith("tool.call."):
             return {
-                "to_chronicle": False, "to_runtime_log": True, "to_llm_context": False,
+                "to_chronicle": False, "to_runtime_log": True, "to_llm_context": True,
                 "chronicle_template_key": "",
                 "runtime_log_template_key": "memory_tool_call",
-                "llm_context_template_key": ""
+                "llm_context_template_key": "memory_tool_call"
             }
 
         if key.startswith("tool."):

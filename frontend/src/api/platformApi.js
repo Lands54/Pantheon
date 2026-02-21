@@ -187,3 +187,31 @@ export function updateSocialEdge(projectId, fromId, toId, allowed) {
     allowed
   })
 }
+
+export function gatewayCheckInbox(projectId, agentId) {
+  return apiPost('/tool-gateway/check_inbox', {
+    project_id: projectId,
+    agent_id: agentId,
+  })
+}
+
+export function gatewayCheckOutbox(projectId, agentId, toId = '', status = '', limit = 50) {
+  return apiPost('/tool-gateway/check_outbox', {
+    project_id: projectId,
+    agent_id: agentId,
+    to_id: toId,
+    status,
+    limit,
+  })
+}
+
+export function gatewaySendMessage(projectId, fromId, toId, title, message, attachments = []) {
+  return apiPost('/tool-gateway/send_message', {
+    project_id: projectId,
+    from_id: fromId,
+    to_id: toId,
+    title,
+    message,
+    attachments,
+  })
+}

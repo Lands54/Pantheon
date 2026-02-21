@@ -65,7 +65,6 @@ def _default_matrix(nodes: list[str]) -> dict[str, dict[str, int]]:
 
 
 def _normalize_matrix(nodes: list[str], matrix: dict) -> dict[str, dict[str, int]]:
-    node_set = set(nodes)
     out: dict[str, dict[str, int]] = {}
     for src in nodes:
         src_raw = matrix.get(src, {}) if isinstance(matrix, dict) else {}
@@ -74,16 +73,13 @@ def _normalize_matrix(nodes: list[str], matrix: dict) -> dict[str, dict[str, int
             if src == dst:
                 row[dst] = 0
                 continue
-            val = 0
-            if isinstance(src_raw, dict):
+            # Missing edges default to allowed (full mesh baseline).
+            val = 1
+            if isinstance(src_raw, dict) and dst in src_raw:
                 raw = src_raw.get(dst, 0)
                 val = 1 if int(raw) > 0 else 0
             row[dst] = val
         out[src] = row
-
-    # keep any matrix keys that are in nodes but were strings with extra spaces, etc. impossible now
-    # all unknown nodes are dropped by design.
-    _ = node_set
     return out
 
 
