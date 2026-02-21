@@ -157,6 +157,7 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showDeprecated, setShowDeprecated] = useState(false)
+  const [viewMode, setViewMode] = useState('module')
 
   const currentProject = useMemo(() => deepClone((config?.projects || {})[projectId] || {}), [config, projectId])
 
@@ -186,6 +187,7 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
 
   const projectFields = schema?.fields?.project || []
   const groups = schema?.groups?.filter((g) => g.scope === 'project') || []
+  const moduleGroups = schema?.module_groups?.filter((g) => g.scope === 'project') || []
   const toolOptions = schema?.tool_options || []
   const toolManagedKeys = new Set([
     'tool_loop_max',
@@ -207,8 +209,9 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
   const groupedKeys = useMemo(() => {
     const s = new Set()
     groups.forEach((g) => (g.keys || []).forEach((k) => s.add(k)))
+    moduleGroups.forEach((g) => (g.keys || []).forEach((k) => s.add(k)))
     return s
-  }, [groups])
+  }, [groups, moduleGroups])
 
   const otherFields = projectFields.filter((f) => !groupedKeys.has(f.key) && !toolManagedKeys.has(f.key))
   const agentSettings = draftProject?.agent_settings && typeof draftProject.agent_settings === 'object'
@@ -363,6 +366,9 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
         <div className="row-between">
           <h3>Config Center ({projectId})</h3>
           <div className="action-row">
+            <button className="ghost-btn" onClick={() => setViewMode((v) => (v === 'module' ? 'group' : 'module'))}>
+              {viewMode === 'module' ? '切换为业务分组' : '切换为模块分组'}
+            </button>
             <button className="ghost-btn" onClick={() => setShowDeprecated((v) => !v)}>
               {showDeprecated ? '隐藏 Deprecated' : '显示 Deprecated'}
             </button>
@@ -386,7 +392,7 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
         {loading && <div className="top-gap dim">加载 schema 中...</div>}
       </div>
 
-      {groups.map((g) => {
+      {(viewMode === 'module' ? moduleGroups : groups).map((g) => {
         if (g.id === 'tools') return null
         const entries = (g.keys || [])
           .map((k) => fieldMap.get(k))

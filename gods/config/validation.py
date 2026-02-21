@@ -159,6 +159,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.angelia_worker_per_agent = _clamp_int(proj.angelia_worker_per_agent, 1, 1)
     proj.angelia_event_max_attempts = _clamp_int(proj.angelia_event_max_attempts, 1, 20)
     proj.angelia_processing_timeout_sec = _clamp_int(proj.angelia_processing_timeout_sec, 5, 3600)
+    proj.angelia_pick_batch_size = _clamp_int(proj.angelia_pick_batch_size, 1, 100)
     proj.angelia_timer_idle_sec = _clamp_int(proj.angelia_timer_idle_sec, 5, 3600)
     proj.angelia_dedupe_window_sec = _clamp_int(proj.angelia_dedupe_window_sec, 0, 300)
     normalized_types = [
@@ -235,6 +236,7 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     proj.llm_project_max_concurrency = _clamp_int(proj.llm_project_max_concurrency, 1, 256)
     proj.llm_project_rate_per_minute = _clamp_int(proj.llm_project_rate_per_minute, 1, 200000)
     proj.llm_acquire_timeout_sec = _clamp_int(proj.llm_acquire_timeout_sec, 1, 300)
+    proj.llm_request_timeout_sec = _clamp_int(proj.llm_request_timeout_sec, 1, 600)
     proj.llm_retry_interval_ms = _clamp_int(proj.llm_retry_interval_ms, 10, 5000)
 
     proj.command_max_parallel = _clamp_int(proj.command_max_parallel, 1, 64)

@@ -10,6 +10,9 @@ def test_angelia_timer_idle_is_single_source():
             angelia_timer_idle_sec=17,
         )
         assert policy.timer_idle_sec(pid) == 17
+        assert policy.pick_batch_size(pid) == 10
+        runtime_config.projects[pid].angelia_pick_batch_size = 23
+        assert policy.pick_batch_size(pid) == 23
     finally:
         if old is None:
             runtime_config.projects.pop(pid, None)

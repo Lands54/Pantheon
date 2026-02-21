@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Any
+from itertools import combinations
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class ConfigEntry:
     enum: list[str] | None = None
     constraints: dict[str, Any] | None = None
     ui: dict[str, Any] | None = None
+    module_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
@@ -33,10 +35,18 @@ class ConfigEntry:
 
 
 class ConfigRegistry:
-    def __init__(self, *, version: str, fields: dict[str, list[ConfigEntry]], groups: list[dict[str, Any]]):
+    def __init__(
+        self,
+        *,
+        version: str,
+        fields: dict[str, list[ConfigEntry]],
+        groups: list[dict[str, Any]],
+        module_groups: list[dict[str, Any]] | None = None,
+    ):
         self.version = version
         self.fields = fields
         self.groups = groups
+        self.module_groups = list(module_groups or [])
         self._index: dict[tuple[str, str], ConfigEntry] = {}
         for scope, entries in fields.items():
             for e in entries:
@@ -70,6 +80,7 @@ class ConfigRegistry:
                 "agent": [e.to_dict() for e in self.entries("agent")],
             },
             "groups": self.groups,
+            "module_groups": self.module_groups,
             "tool_options": list(tool_options),
             "deprecations": deprecations,
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -177,8 +188,10 @@ class ConfigRegistry:
     def audit_usage(self) -> dict[str, Any]:
         deprecated: list[dict[str, str]] = []
         unreferenced: list[dict[str, str]] = []
+        all_entries: list[ConfigEntry] = []
         for scope in ("system", "project", "agent"):
             for e in self.entries(scope):
+                all_entries.append(e)
                 if e.status == "deprecated":
                     deprecated.append({"scope": scope, "key": e.key})
                 if not e.runtime_used_by:
@@ -194,8 +207,99 @@ class ConfigRegistry:
                 }
             )
 
+        # Detect fields sharing many lexical tokens (possible semantic overlap).
+        semantic_overlaps: list[dict[str, Any]] = []
+        project_entries = [e for e in all_entries if e.scope == "project"]
+
+        def _tokens(k: str) -> set[str]:
+            return {x for x in str(k or "").lower().split("_") if x}
+
+        for a, b in combinations(project_entries, 2):
+            ta = _tokens(a.key)
+            tb = _tokens(b.key)
+            inter = ta & tb
+            if len(inter) < 2:
+                continue
+            union = ta | tb
+            score = float(len(inter)) / float(max(1, len(union)))
+            if score < 0.5:
+                continue
+            semantic_overlaps.append(
+                {
+                    "scope": "project",
+                    "keys": sorted([a.key, b.key]),
+                    "shared_tokens": sorted(inter),
+                    "score": round(score, 3),
+                }
+            )
+        semantic_overlaps = sorted(
+            semantic_overlaps,
+            key=lambda x: (float(x.get("score", 0.0)), ",".join(x.get("keys", []))),
+            reverse=True,
+        )[:40]
+
+        # Detect strongly coupled fields by shared runtime consumer modules.
+        by_module: dict[str, list[tuple[str, str]]] = {}
+        for e in all_entries:
+            for mod in list(e.runtime_used_by or []):
+                m = str(mod or "").strip()
+                if not m:
+                    continue
+                by_module.setdefault(m, []).append((e.scope, e.key))
+        coupled_fields: list[dict[str, Any]] = []
+        for mod, refs in by_module.items():
+            uniq = sorted({f"{s}.{k}" for s, k in refs})
+            if len(uniq) < 2:
+                continue
+            coupled_fields.append(
+                {
+                    "module": mod,
+                    "count": len(uniq),
+                    "fields": uniq[:20],
+                }
+            )
+        coupled_fields = sorted(coupled_fields, key=lambda x: int(x.get("count", 0)), reverse=True)[:60]
+
+        # Detect fields not covered by UI groups.
+        grouped: set[tuple[str, str]] = set()
+        for g in list(self.groups or []):
+            scope = str(g.get("scope", "") or "").strip()
+            for k in list(g.get("keys", []) or []):
+                grouped.add((scope, str(k or "").strip()))
+        ungrouped_fields: list[dict[str, str]] = []
+        for e in all_entries:
+            if (e.scope, e.key) in grouped:
+                continue
+            ungrouped_fields.append({"scope": e.scope, "key": e.key})
+
+        module_quality: list[dict[str, Any]] = []
+        by_module: dict[str, list[ConfigEntry]] = {}
+        for e in all_entries:
+            mod = str(e.module_id or "unknown").strip() or "unknown"
+            by_module.setdefault(mod, []).append(e)
+        for mod, entries in by_module.items():
+            deprecated_count = sum(1 for e in entries if e.status == "deprecated")
+            missing_desc = sum(1 for e in entries if not str(e.description or "").strip())
+            missing_runtime = sum(
+                1 for e in entries if e.status != "deprecated" and not list(e.runtime_used_by or [])
+            )
+            module_quality.append(
+                {
+                    "module": mod,
+                    "fields": len(entries),
+                    "deprecated": deprecated_count,
+                    "missing_description": missing_desc,
+                    "missing_runtime_used_by": missing_runtime,
+                }
+            )
+        module_quality = sorted(module_quality, key=lambda x: str(x.get("module", "")))
+
         return {
             "deprecated": deprecated,
             "unreferenced": unreferenced,
             "naming_conflicts": naming_conflicts,
+            "semantic_overlaps": semantic_overlaps,
+            "coupled_fields": coupled_fields,
+            "ungrouped_fields": ungrouped_fields,
+            "module_quality": module_quality,
         }

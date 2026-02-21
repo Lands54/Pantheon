@@ -77,6 +77,7 @@ def cmd_config(args):
             print(f"   Angelia Timer Idle: {proj.get('angelia_timer_idle_sec', 60)}s")
             print(f"   Angelia Max Attempts: {proj.get('angelia_event_max_attempts', 3)}")
             print(f"   Angelia Processing Timeout: {proj.get('angelia_processing_timeout_sec', 60)}s")
+            print(f"   Angelia Pick Batch Size: {proj.get('angelia_pick_batch_size', 10)}")
             print(f"   Angelia Cooldown Preempt Types: {proj.get('angelia_cooldown_preempt_types', ['mail_event','manual'])}")
             print(f"   Angelia Dedupe Window: {proj.get('angelia_dedupe_window_sec', 5)}s")
             
@@ -114,6 +115,7 @@ def cmd_config(args):
             print(f"   Project Max Concurrency: {proj.get('llm_project_max_concurrency', 4)}")
             print(f"   Project Rate Per Minute: {proj.get('llm_project_rate_per_minute', 60)}")
             print(f"   Acquire Timeout: {proj.get('llm_acquire_timeout_sec', 20)}s")
+            print(f"   Request Timeout: {proj.get('llm_request_timeout_sec', 90)}s")
             print(f"   Retry Interval: {proj.get('llm_retry_interval_ms', 100)}ms")
             print(f"\n📡 Hermes Bus:")
             print(f"   Enabled: {proj.get('hermes_enabled', True)}")
@@ -168,6 +170,13 @@ def cmd_config(args):
                 spec_source = ((tool_meta.get("ui") or {}) if isinstance(tool_meta, dict) else {}).get("spec_source", "")
                 if spec_source:
                     print(f"   Strategy Spec Source: {spec_source}")
+                module_groups = schema.get("module_groups", []) if isinstance(schema, dict) else []
+                project_modules = [m for m in module_groups if str(m.get("scope", "")) == "project"]
+                if project_modules:
+                    print(f"   Module Blocks: {len(project_modules)}")
+                    for row in project_modules:
+                        keys = row.get("keys", []) if isinstance(row, dict) else []
+                        print(f"      - {row.get('id')}: {len(keys)} fields")
                 deprecated = [k for k, v in idx.items() if str(v.get("status", "active")) == "deprecated"]
                 if deprecated:
                     print("   Deprecated keys:")
@@ -211,6 +220,7 @@ def cmd_config(args):
                 "angelia_worker_per_agent",
                 "angelia_event_max_attempts",
                 "angelia_processing_timeout_sec",
+                "angelia_pick_batch_size",
                 "angelia_cooldown_preempt_types",
                 "angelia_timer_enabled",
                 "angelia_timer_idle_sec",
@@ -248,6 +258,7 @@ def cmd_config(args):
                     "angelia_worker_per_agent",
                     "angelia_event_max_attempts",
                     "angelia_processing_timeout_sec",
+                    "angelia_pick_batch_size",
                     "angelia_timer_idle_sec",
                     "angelia_dedupe_window_sec",
                 }:
@@ -271,6 +282,7 @@ def cmd_config(args):
                     "llm_project_max_concurrency",
                     "llm_project_rate_per_minute",
                     "llm_acquire_timeout_sec",
+                    "llm_request_timeout_sec",
                     "llm_retry_interval_ms",
                 }:
                     data["projects"][pid][direct_key] = int(args.value)
@@ -634,6 +646,7 @@ def cmd_config(args):
                 print("  pulse_event_inject_budget (number)")
                 print("  pulse_interrupt_mode (after_action)")
                 print("  pulse_priority_weights ({\"mail_event\":100,...})")
+                print("  angelia_pick_batch_size (number)")
                 print("  memory.threshold (message count)")
                 print("  memory.keep (message count)")
                 print("  memory.compact_trigger (tokens)")
@@ -712,6 +725,7 @@ def cmd_config(args):
                 print("  detach.ttl (seconds)")
                 print("  detach.stop_grace (seconds)")
                 print("  detach.log_tail_chars (int)")
+                print("  llm_request_timeout_sec (int)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  agent.<agent_id>.context_strategy (structured_v1)")
                 print("  agent.<agent_id>.context_token_budget_total (tokens)")
@@ -877,5 +891,25 @@ def cmd_config(args):
             print(f"   Naming Conflicts: {len(conflicts)}")
             for row in conflicts:
                 print(f"      - {row.get('topic')}: {row.get('detail')}")
+            overlaps = data.get("semantic_overlaps", []) if isinstance(data, dict) else []
+            coupled = data.get("coupled_fields", []) if isinstance(data, dict) else []
+            ungrouped = data.get("ungrouped_fields", []) if isinstance(data, dict) else []
+            print(f"   Semantic Overlaps: {len(overlaps)}")
+            for row in overlaps[:20]:
+                print(f"      - {','.join(row.get('keys', []))} (score={row.get('score')}, shared={','.join(row.get('shared_tokens', []))})")
+            print(f"   Coupled Fields: {len(coupled)}")
+            for row in coupled[:20]:
+                print(f"      - {row.get('module')} ({row.get('count')}): {', '.join(row.get('fields', [])[:6])}")
+            print(f"   Ungrouped Fields: {len(ungrouped)}")
+            for row in ungrouped[:20]:
+                print(f"      - {row.get('scope')}.{row.get('key')}")
+            module_quality = data.get("module_quality", []) if isinstance(data, dict) else []
+            print(f"   Module Quality: {len(module_quality)}")
+            for row in module_quality[:30]:
+                print(
+                    "      - {module}: fields={fields}, deprecated={deprecated}, missing_desc={missing_description}, missing_runtime={missing_runtime_used_by}".format(
+                        **row
+                    )
+                )
         except Exception as e:
             print(f"❌ audit failed: {e}")
