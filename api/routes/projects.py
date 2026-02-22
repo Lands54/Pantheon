@@ -123,6 +123,19 @@ async def get_context_snapshot_derived(project_id: str, agent_id: str, limit: in
     )
 
 
+@router.get("/{project_id}/context/pulses")
+async def get_context_pulses(project_id: str, agent_id: str, from_seq: int = 0, limit: int = 500):
+    """List pulse ledger entries and grouped pulses."""
+    if not str(agent_id or "").strip():
+        raise HTTPException(status_code=400, detail="agent_id is required")
+    return project_service.context_pulses(
+        project_id,
+        str(agent_id).strip(),
+        from_seq=max(0, int(from_seq or 0)),
+        limit=max(1, min(int(limit or 500), 5000)),
+    )
+
+
 @router.get("/{project_id}/inbox/outbox")
 async def get_outbox_receipts(
     project_id: str,
@@ -157,3 +170,33 @@ async def runtime_restart_agent(project_id: str, agent_id: str):
 async def runtime_reconcile(project_id: str):
     """Reconcile runtime containers against project's active_agents list."""
     return project_service.runtime_reconcile(project_id)
+
+
+@router.post("/{project_id}/sync-council/start")
+async def sync_council_start(project_id: str, req: Request):
+    """Start a synchronous council session for a group of agents."""
+    data = await req.json()
+    return project_service.sync_council_start(
+        project_id=project_id,
+        title=str(data.get("title", "") or ""),
+        content=str(data.get("content", "") or ""),
+        participants=list(data.get("participants", []) or []),
+        cycles=int(data.get("cycles", 1) or 1),
+        initiator=str(data.get("initiator", "human.overseer") or "human.overseer"),
+    )
+
+
+@router.post("/{project_id}/sync-council/confirm")
+async def sync_council_confirm(project_id: str, req: Request):
+    """Confirm one agent to participate in current synchronous council session."""
+    data = await req.json()
+    return project_service.sync_council_confirm(
+        project_id=project_id,
+        agent_id=str(data.get("agent_id", "") or ""),
+    )
+
+
+@router.get("/{project_id}/sync-council")
+async def sync_council_status(project_id: str):
+    """Get current synchronous council session state."""
+    return project_service.sync_council_status(project_id)

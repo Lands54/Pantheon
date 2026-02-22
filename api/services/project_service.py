@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from gods.angelia import facade as angelia_facade
+from gods.angelia import sync_council as angelia_sync_council
 from gods.config import ProjectConfig, runtime_config
 from gods.iris import facade as iris_facade
 from gods.mnemosyne import facade as mnemosyne_facade
@@ -299,6 +300,61 @@ class ProjectService:
         except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
+    def sync_council_start(
+        self,
+        *,
+        project_id: str,
+        title: str,
+        content: str,
+        participants: list[str],
+        cycles: int,
+        initiator: str = "human.overseer",
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        proj = runtime_config.projects[project_id]
+        active = {
+            str(x).strip()
+            for x in list(getattr(proj, "active_agents", []) or [])
+            if str(x).strip()
+        }
+        members = [str(x).strip() for x in list(participants or []) if str(x).strip()]
+        if not members:
+            raise HTTPException(status_code=400, detail="participants is required")
+        illegal = [x for x in members if x not in active]
+        if illegal:
+            raise HTTPException(
+                status_code=400,
+                detail=f"participants must be active agents. invalid={','.join(illegal)}",
+            )
+        try:
+            state = angelia_sync_council.start_session(
+                project_id,
+                title=title,
+                content=content,
+                participants=members,
+                cycles=max(1, int(cycles or 1)),
+                initiator=str(initiator or "human.overseer"),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"project_id": project_id, "status": "started", "sync_council": state}
+
+    def sync_council_confirm(self, *, project_id: str, agent_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        aid = str(agent_id or "").strip()
+        if not aid:
+            raise HTTPException(status_code=400, detail="agent_id is required")
+        try:
+            state = angelia_sync_council.confirm_participant(project_id, aid)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"project_id": project_id, "status": "confirmed", "sync_council": state}
+
+    def sync_council_status(self, project_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        state = angelia_sync_council.get_state(project_id)
+        return {"project_id": project_id, "sync_council": state}
+
     def build_report(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         # Report builder also archives markdown into Mnemosyne human vault.
@@ -317,6 +373,16 @@ class ProjectService:
     def context_preview(self, project_id: str, agent_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         row = mnemosyne_facade.latest_context_report(project_id, agent_id)
+        if not isinstance(row, dict):
+            entries = mnemosyne_facade.list_pulse_entries(project_id, agent_id, from_seq=0, limit=500)
+            frames = mnemosyne_facade.group_pulses(entries)
+            row = {
+                "strategy_used": "pulse_ledger_only",
+                "preview": {
+                    "pulse_count": len(frames),
+                    "entry_count": len(entries),
+                },
+            }
         return {
             "project_id": project_id,
             "agent_id": agent_id,
@@ -353,79 +419,123 @@ class ProjectService:
     def context_snapshot(self, project_id: str, agent_id: str, since_intent_seq: int = 0) -> dict[str, Any]:
         self.ensure_exists(project_id)
         since = max(0, int(since_intent_seq or 0))
-        snap = mnemosyne_facade.load_janus_snapshot(project_id, agent_id)
-        if not isinstance(snap, dict):
-            return {
-                "project_id": project_id,
-                "agent_id": agent_id,
-                "available": False,
-                "mode": "none",
-                "snapshot_id": "",
-                "base_intent_seq": 0,
-                "token_estimate": 0,
-                "upsert_cards": [],
-                "remove_card_ids": [],
-                "stats": {"cards_total": 0, "delta_cards": 0, "since_intent_seq": since},
-            }
-
-        cards = [dict(x) for x in list(snap.get("cards", []) or []) if isinstance(x, dict)]
-        base_intent_seq = int(snap.get("base_intent_seq", 0) or 0)
-        token_estimate = int(snap.get("token_estimate", 0) or 0)
-        snapshot_id = str(snap.get("snapshot_id", "") or "")
-
-        if since <= 0:
-            return {
-                "project_id": project_id,
-                "agent_id": agent_id,
-                "available": True,
-                "mode": "full",
-                "snapshot_id": snapshot_id,
-                "base_intent_seq": base_intent_seq,
-                "token_estimate": token_estimate,
-                "upsert_cards": cards,
-                "remove_card_ids": [],
-                "stats": {"cards_total": len(cards), "delta_cards": len(cards), "since_intent_seq": since},
-            }
-
-        upsert_cards = [c for c in cards if int(c.get("source_intent_seq_max", 0) or 0) > since]
-        remove_ids: list[str] = []
-        for c in upsert_cards:
-            for rid in list(c.get("supersedes_card_ids", []) or []):
-                rs = str(rid or "").strip()
-                if rs:
-                    remove_ids.append(rs)
-        remove_card_ids = sorted(set(remove_ids))
+        entries = mnemosyne_facade.list_pulse_entries(
+            project_id,
+            agent_id,
+            from_seq=since,
+            limit=5000,
+        )
+        frames = mnemosyne_facade.group_pulses(entries)
+        # Delta windows (from_seq > 0) can naturally clip pulse.start.
+        # Discard incomplete head/middle frames before integrity checks to avoid
+        # surfacing truncation artifacts as false errors in UI.
+        if since > 0:
+            frames = mnemosyne_facade.discard_incomplete_frames(frames)
+        report = mnemosyne_facade.validate_pulse_integrity(frames)
+        latest_seq = int(entries[-1].get("seq", 0) or 0) if entries else since
         return {
             "project_id": project_id,
             "agent_id": agent_id,
-            "available": True,
-            "mode": "delta",
-            "snapshot_id": snapshot_id,
-            "base_intent_seq": base_intent_seq,
-            "token_estimate": token_estimate,
-            "upsert_cards": upsert_cards,
-            "remove_card_ids": remove_card_ids,
-            "stats": {"cards_total": len(cards), "delta_cards": len(upsert_cards), "since_intent_seq": since},
+            "available": bool(entries),
+            "mode": "pulse_ledger",
+            "base_intent_seq": latest_seq,
+            "token_estimate": 0,
+            "entries": entries,
+            "pulses": [
+                {
+                    "pulse_id": fr.pulse_id,
+                    "start": fr.start,
+                    "triggers": fr.triggers,
+                    "llm": fr.llm,
+                    "tools": fr.tools,
+                    "finish": fr.finish,
+                }
+                for fr in frames
+            ],
+            "errors": report.errors,
+            "warnings": report.warnings,
+            "stats": {
+                "entry_count": len(entries),
+                "pulse_count": len(frames),
+                "since_seq": since,
+            },
         }
 
     def context_snapshot_compressions(self, project_id: str, agent_id: str, limit: int = 50) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        rows = mnemosyne_facade.list_snapshot_compressions(project_id, agent_id, limit=max(1, min(int(limit or 50), 500)))
+        rows = []
         return {
             "project_id": project_id,
             "agent_id": agent_id,
             "items": rows,
             "count": len(rows),
+            "deprecated": True,
         }
 
     def context_snapshot_derived(self, project_id: str, agent_id: str, limit: int = 100) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        rows = mnemosyne_facade.list_derived_cards(project_id, agent_id, limit=max(1, min(int(limit or 100), 2000)))
+        rows = []
         return {
             "project_id": project_id,
             "agent_id": agent_id,
             "items": rows,
             "count": len(rows),
+            "deprecated": True,
+        }
+
+    def context_pulses(self, project_id: str, agent_id: str, from_seq: int = 0, limit: int = 500) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        from_seq = max(0, int(from_seq or 0))
+        entries = mnemosyne_facade.list_pulse_entries(
+            project_id,
+            agent_id,
+            from_seq=from_seq,
+            limit=max(1, min(int(limit or 500), 5000)),
+        )
+        frames = mnemosyne_facade.group_pulses(entries)
+        if from_seq > 0:
+            frames = mnemosyne_facade.discard_incomplete_frames(frames)
+        report = mnemosyne_facade.validate_pulse_integrity(frames)
+        min_seq = int(entries[0].get("seq", 0) or 0) if entries else 0
+        max_seq = int(entries[-1].get("seq", 0) or 0) if entries else 0
+        intents = []
+        if max_seq > 0:
+            try:
+                intent_rows = mnemosyne_facade.fetch_intents_between(project_id, agent_id, max(1, min_seq), max_seq)
+            except Exception:
+                intent_rows = []
+            for it in list(intent_rows or []):
+                payload = dict(getattr(it, "payload", {}) or {})
+                intents.append(
+                    {
+                        "intent_seq": int(getattr(it, "intent_seq", 0) or 0),
+                        "intent_id": str(getattr(it, "intent_id", "") or ""),
+                        "intent_key": str(getattr(it, "intent_key", "") or ""),
+                        "source_kind": str(getattr(it, "source_kind", "") or ""),
+                        "pulse_id": str(payload.get("pulse_id", "") or ""),
+                        "timestamp": float(getattr(it, "timestamp", 0.0) or 0.0),
+                        "fallback_text": str(getattr(it, "fallback_text", "") or ""),
+                    }
+                )
+        return {
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "entries": entries,
+            "pulses": [
+                {
+                    "pulse_id": fr.pulse_id,
+                    "start": fr.start,
+                    "triggers": fr.triggers,
+                    "llm": fr.llm,
+                    "tools": fr.tools,
+                    "finish": fr.finish,
+                }
+                for fr in frames
+            ],
+            "intents": intents,
+            "errors": report.errors,
+            "warnings": report.warnings,
+            "count": len(frames),
         }
 
     def outbox_receipts(
