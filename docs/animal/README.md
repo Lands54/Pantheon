@@ -1,0 +1,78 @@
+# animal_world_lab 私信按无向 pair 拆分索引
+
+- source: `/Users/qiuboyu/CodeLearning/Gods/projects/animal_world_lab/runtime/exports/animal_world_lab_agent_private_mail_full.jsonl`
+- total messages: **250**
+- pair files (undirected): **70**
+
+## 文件列表
+
+- `bacteria <-> bees` total=3 (`bacteria->bees`=1, `bees->bacteria`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_bees.md`
+- `bacteria <-> flowers` total=3 (`bacteria->flowers`=2, `flowers->bacteria`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_flowers.md`
+- `bacteria <-> fungi` total=2 (`bacteria->fungi`=1, `fungi->bacteria`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_fungi.md`
+- `bacteria <-> grass` total=4 (`bacteria->grass`=3, `grass->bacteria`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_grass.md`
+- `bacteria <-> ground` total=3 (`bacteria->ground`=2, `ground->bacteria`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_ground.md`
+- `bacteria <-> rabbits` total=4 (`bacteria->rabbits`=3, `rabbits->bacteria`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_rabbits.md`
+- `bacteria <-> sheep` total=3 (`bacteria->sheep`=2, `sheep->bacteria`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_sheep.md`
+- `bacteria <-> tree` total=8 (`bacteria->tree`=4, `tree->bacteria`=4) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_tree.md`
+- `bacteria <-> wolves` total=1 (`bacteria->wolves`=1, `wolves->bacteria`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bacteria_wolves.md`
+- `bees <-> flowers` total=3 (`bees->flowers`=2, `flowers->bees`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_flowers.md`
+- `bees <-> grass` total=1 (`bees->grass`=1, `grass->bees`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_grass.md`
+- `bees <-> rabbits` total=1 (`bees->rabbits`=1, `rabbits->bees`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_rabbits.md`
+- `bees <-> rain` total=2 (`bees->rain`=1, `rain->bees`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_rain.md`
+- `bees <-> sun` total=2 (`bees->sun`=1, `sun->bees`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_sun.md`
+- `bees <-> tree` total=4 (`bees->tree`=2, `tree->bees`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_tree.md`
+- `bees <-> wind` total=4 (`bees->wind`=1, `wind->bees`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/bees_wind.md`
+- `flowers <-> fungi` total=6 (`flowers->fungi`=2, `fungi->flowers`=4) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_fungi.md`
+- `flowers <-> grass` total=2 (`flowers->grass`=1, `grass->flowers`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_grass.md`
+- `flowers <-> rabbits` total=3 (`flowers->rabbits`=1, `rabbits->flowers`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_rabbits.md`
+- `flowers <-> rain` total=4 (`flowers->rain`=2, `rain->flowers`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_rain.md`
+- `flowers <-> river` total=4 (`flowers->river`=2, `river->flowers`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_river.md`
+- `flowers <-> sun` total=2 (`flowers->sun`=1, `sun->flowers`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_sun.md`
+- `flowers <-> tree` total=2 (`flowers->tree`=1, `tree->flowers`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_tree.md`
+- `flowers <-> wind` total=7 (`flowers->wind`=4, `wind->flowers`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/flowers_wind.md`
+- `fungi <-> grass` total=4 (`fungi->grass`=2, `grass->fungi`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_grass.md`
+- `fungi <-> owls` total=4 (`fungi->owls`=3, `owls->fungi`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_owls.md`
+- `fungi <-> rabbits` total=6 (`fungi->rabbits`=4, `rabbits->fungi`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_rabbits.md`
+- `fungi <-> rain` total=5 (`fungi->rain`=2, `rain->fungi`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_rain.md`
+- `fungi <-> river` total=2 (`fungi->river`=1, `river->fungi`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_river.md`
+- `fungi <-> sheep` total=1 (`fungi->sheep`=1, `sheep->fungi`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_sheep.md`
+- `fungi <-> sun` total=1 (`fungi->sun`=1, `sun->fungi`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_sun.md`
+- `fungi <-> tree` total=7 (`fungi->tree`=3, `tree->fungi`=4) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_tree.md`
+- `fungi <-> wind` total=4 (`fungi->wind`=2, `wind->fungi`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_wind.md`
+- `fungi <-> wolves` total=4 (`fungi->wolves`=2, `wolves->fungi`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/fungi_wolves.md`
+- `grass <-> ground` total=2 (`grass->ground`=1, `ground->grass`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/grass_ground.md`
+- `grass <-> rabbits` total=3 (`grass->rabbits`=1, `rabbits->grass`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/grass_rabbits.md`
+- `grass <-> sheep` total=2 (`grass->sheep`=1, `sheep->grass`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/grass_sheep.md`
+- `grass <-> sun` total=2 (`grass->sun`=1, `sun->grass`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/grass_sun.md`
+- `ground <-> owls` total=7 (`ground->owls`=1, `owls->ground`=6) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_owls.md`
+- `ground <-> rabbits` total=6 (`ground->rabbits`=1, `rabbits->ground`=5) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_rabbits.md`
+- `ground <-> river` total=5 (`ground->river`=1, `river->ground`=4) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_river.md`
+- `ground <-> sheep` total=13 (`ground->sheep`=2, `sheep->ground`=11) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_sheep.md`
+- `ground <-> sun` total=2 (`ground->sun`=1, `sun->ground`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_sun.md`
+- `ground <-> tiger` total=3 (`ground->tiger`=0, `tiger->ground`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_tiger.md`
+- `ground <-> wind` total=4 (`ground->wind`=1, `wind->ground`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_wind.md`
+- `ground <-> wolves` total=5 (`ground->wolves`=1, `wolves->ground`=4) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/ground_wolves.md`
+- `Hermes <-> owls` total=4 (`Hermes->owls`=4, `owls->Hermes`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/Hermes_owls.md`
+- `Hermes <-> rabbits` total=2 (`Hermes->rabbits`=2, `rabbits->Hermes`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/Hermes_rabbits.md`
+- `Hermes <-> sheep` total=7 (`Hermes->sheep`=7, `sheep->Hermes`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/Hermes_sheep.md`
+- `Hermes <-> tiger` total=1 (`Hermes->tiger`=1, `tiger->Hermes`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/Hermes_tiger.md`
+- `Hermes <-> wolves` total=1 (`Hermes->wolves`=1, `wolves->Hermes`=0) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/Hermes_wolves.md`
+- `owls <-> rabbits` total=2 (`owls->rabbits`=1, `rabbits->owls`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/owls_rabbits.md`
+- `owls <-> sheep` total=2 (`owls->sheep`=1, `sheep->owls`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/owls_sheep.md`
+- `owls <-> sun` total=2 (`owls->sun`=1, `sun->owls`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/owls_sun.md`
+- `owls <-> tiger` total=3 (`owls->tiger`=2, `tiger->owls`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/owls_tiger.md`
+- `owls <-> wolves` total=4 (`owls->wolves`=1, `wolves->owls`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/owls_wolves.md`
+- `rabbits <-> sheep` total=2 (`rabbits->sheep`=1, `sheep->rabbits`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rabbits_sheep.md`
+- `rabbits <-> sun` total=1 (`rabbits->sun`=0, `sun->rabbits`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rabbits_sun.md`
+- `rabbits <-> tiger` total=2 (`rabbits->tiger`=1, `tiger->rabbits`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rabbits_tiger.md`
+- `rabbits <-> wolves` total=5 (`rabbits->wolves`=2, `wolves->rabbits`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rabbits_wolves.md`
+- `rain <-> river` total=3 (`rain->river`=2, `river->rain`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rain_river.md`
+- `rain <-> tree` total=2 (`rain->tree`=1, `tree->rain`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rain_tree.md`
+- `rain <-> wind` total=4 (`rain->wind`=2, `wind->rain`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/rain_wind.md`
+- `river <-> tree` total=2 (`river->tree`=1, `tree->river`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/river_tree.md`
+- `sheep <-> sun` total=2 (`sheep->sun`=1, `sun->sheep`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/sheep_sun.md`
+- `sheep <-> tiger` total=3 (`sheep->tiger`=0, `tiger->sheep`=3) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/sheep_tiger.md`
+- `sheep <-> wolves` total=2 (`sheep->wolves`=1, `wolves->sheep`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/sheep_wolves.md`
+- `sun <-> tree` total=2 (`sun->tree`=1, `tree->sun`=1) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/sun_tree.md`
+- `sun <-> wind` total=3 (`sun->wind`=1, `wind->sun`=2) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/sun_wind.md`
+- `tiger <-> wolves` total=19 (`tiger->wolves`=7, `wolves->tiger`=12) -> `/Users/qiuboyu/CodeLearning/Gods/docs/animal/pairs/tiger_wolves.md`
