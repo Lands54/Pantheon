@@ -7,6 +7,7 @@ from pathlib import Path
 from gods import events as events_bus
 from gods.angelia.models import AgentRuntimeStatus, AngeliaEvent
 from gods.angelia import sync_council
+from gods.identity import is_valid_agent_id
 
 
 def _assert_queue_domain_allowed(project_id: str, row) -> None:
@@ -47,7 +48,25 @@ def _load_agent_statuses(project_id: str) -> dict[str, dict]:
     try:
         raw = json.loads(ap.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
-            return raw
+            cleaned: dict[str, dict] = {}
+            dirty = False
+            for key, row in raw.items():
+                aid = str(key or "").strip()
+                if not is_valid_agent_id(aid):
+                    dirty = True
+                    continue
+                if not isinstance(row, dict):
+                    dirty = True
+                    continue
+                row_agent_id = str(row.get("agent_id", "") or "").strip()
+                if row_agent_id and row_agent_id != aid:
+                    dirty = True
+                    row = dict(row)
+                    row["agent_id"] = aid
+                cleaned[aid] = row
+            if dirty:
+                _save_agent_statuses(project_id, cleaned)
+            return cleaned
     except Exception:
         pass
     return {}
@@ -151,9 +170,6 @@ def pick_next_event(
     preempt_types: set[str],
     force_after_sec: float = 0.0,
 ) -> AngeliaEvent | None:
-    gate = sync_council.evaluate_pick_gate(project_id, agent_id)
-    if not gate.allowed:
-        return None
     rows = events_bus.list_events(
         project_id=project_id,
         state=events_bus.EventState.QUEUED,
@@ -163,6 +179,14 @@ def pick_next_event(
     cand = None
     for row in rows:
         _assert_queue_domain_allowed(project_id, row)
+        gate = sync_council.evaluate_pick_gate(project_id, agent_id, row)
+        if not gate.allowed:
+            if bool(getattr(gate, "defer", False)):
+                try:
+                    sync_council.register_deferred_event(project_id, str(getattr(row, "event_id", "") or ""))
+                except Exception:
+                    pass
+            continue
         if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
             waited = float(now) - float(getattr(row, "created_at", 0.0) or 0.0)
             if waited < float(force_after_sec or 0.0):
@@ -189,9 +213,6 @@ def pick_batch_events(
     limit: int = 10,
     force_after_sec: float = 0.0,
 ) -> list[AngeliaEvent]:
-    gate = sync_council.evaluate_pick_gate(project_id, agent_id)
-    if not gate.allowed:
-        return []
     rows = events_bus.list_events(
         project_id=project_id,
         state=events_bus.EventState.QUEUED,
@@ -205,6 +226,14 @@ def pick_batch_events(
     
     for row in rows:
         _assert_queue_domain_allowed(project_id, row)
+        gate = sync_council.evaluate_pick_gate(project_id, agent_id, row)
+        if not gate.allowed:
+            if bool(getattr(gate, "defer", False)):
+                try:
+                    sync_council.register_deferred_event(project_id, str(getattr(row, "event_id", "") or ""))
+                except Exception:
+                    pass
+            continue
         if now < float(cooldown_until or 0.0) and str(row.event_type or "") not in preempt_types:
             waited = float(now) - float(getattr(row, "created_at", 0.0) or 0.0)
             if waited < float(force_after_sec or 0.0):
@@ -250,6 +279,8 @@ def get_agent_status(project_id: str, agent_id: str) -> AgentRuntimeStatus:
 
 
 def set_agent_status(project_id: str, status: AgentRuntimeStatus):
+    if not is_valid_agent_id(str(status.agent_id or "").strip()):
+        return
     try:
         raw = _load_agent_statuses(project_id)
         raw[status.agent_id] = status.to_dict()

@@ -74,6 +74,12 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "description": "系统内部触发的执行事件。",
         "llm_note": "通常触发一次 Agent 执行与 LLM 推理。",
     },
+    "sync_council_turn_event": {
+        "domain": "angelia",
+        "title": "同步商议轮次触发",
+        "description": "Robert 议事规则会话中的轮次事件，仅当前发言人可消费。",
+        "llm_note": "会务相关触发事件。",
+    },
     "outbox_status_event": {
         "domain": "iris",
         "title": "发件箱状态事件",

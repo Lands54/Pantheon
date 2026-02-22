@@ -13,7 +13,7 @@ def _new_pid() -> str:
     return f"ut_sync_{uuid.uuid4().hex[:8]}"
 
 
-def test_sync_council_collecting_to_round_robin_transition():
+def test_sync_council_collecting_to_in_session_transition():
     pid = _new_pid()
     pdir = project_dir(pid)
     try:
@@ -42,14 +42,14 @@ def test_sync_council_collecting_to_round_robin_transition():
             encoding="utf-8",
         )
         st = sync_council.tick(pid, "a1", has_queued=False)
-        assert st["phase"] == "round_robin"
+        assert st["phase"] == "in_session"
         assert st["current_speaker"] == "a1"
         assert int(st["cycles_left"]) == 2
     finally:
         shutil.rmtree(pdir, ignore_errors=True)
 
 
-def test_sync_council_round_robin_advance_and_finish():
+def test_sync_council_in_session_advance_and_finish():
     pid = _new_pid()
     pdir = project_dir(pid)
     try:
@@ -67,19 +67,19 @@ def test_sync_council_round_robin_advance_and_finish():
             json.dumps({"a1": {"run_state": "idle"}, "a2": {"run_state": "idle"}}),
             encoding="utf-8",
         )
-        sync_council.tick(pid, "a1", has_queued=False)
+        st = sync_council.tick(pid, "a1", has_queued=False)
+        assert st["phase"] == "in_session"
         d1 = sync_council.evaluate_pick_gate(pid, "a1")
         d2 = sync_council.evaluate_pick_gate(pid, "a2")
         assert d1.allowed is True
         assert d2.allowed is False
 
         st = sync_council.note_pulse_finished(pid, "a1")
-        assert st["phase"] == "round_robin"
+        assert st["phase"] == "in_session"
         assert st["current_speaker"] == "a2"
 
         st = sync_council.note_pulse_finished(pid, "a2")
         assert st["enabled"] is False
-        assert st["phase"] == "done"
+        assert st["phase"] == "completed"
     finally:
         shutil.rmtree(pdir, ignore_errors=True)
-

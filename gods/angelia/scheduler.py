@@ -11,6 +11,7 @@ from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.worker import WorkerContext, worker_loop
 from gods.config import runtime_config
+from gods.identity import is_valid_agent_id
 
 logger = logging.getLogger("GodsServer")
 
@@ -62,6 +63,8 @@ class AngeliaSupervisor:
         angelia_mailbox.notify(project_id, agent_id)
 
     def wake_agent(self, project_id: str, agent_id: str) -> dict:
+        if not self._is_active_agent(project_id, agent_id):
+            return {"project_id": project_id, "agent_id": agent_id, "status": "ignored_not_active"}
         self._ensure_worker(project_id, agent_id)
         self.notify(project_id, agent_id)
         return {"project_id": project_id, "agent_id": agent_id, "status": "notified"}
@@ -89,6 +92,8 @@ class AngeliaSupervisor:
         priority: int | None = None,
         dedupe_key: str = "",
     ) -> dict:
+        if not self._is_active_agent(project_id, agent_id):
+            raise ValueError(f"ANGELIA_ENQUEUE_INVALID_AGENT: project={project_id} agent_id={agent_id}")
         self._validate_payload(event_type, payload or {})
         pri = int(priority if priority is not None else policy.default_priority(project_id, event_type))
         evt = store.enqueue_event(
@@ -163,6 +168,8 @@ class AngeliaSupervisor:
         return out
 
     def _ensure_worker(self, project_id: str, agent_id: str):
+        if not self._is_active_agent(project_id, agent_id):
+            return
         key = (project_id, agent_id)
         with self._lock:
             h = self._workers.get(key)
@@ -204,6 +211,15 @@ class AngeliaSupervisor:
                 logger.warning(f"Angelia manager loop error: {e}")
 
             self._stop_event.wait(1.0)
+
+    def _is_active_agent(self, project_id: str, agent_id: str) -> bool:
+        aid = str(agent_id or "").strip()
+        if not is_valid_agent_id(aid):
+            return False
+        proj = runtime_config.projects.get(project_id)
+        if not proj:
+            return False
+        return aid in set(getattr(proj, "active_agents", []) or [])
 
 
 angelia_supervisor = AngeliaSupervisor()
