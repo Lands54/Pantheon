@@ -56,6 +56,19 @@ def compact_strategy(project_id: str) -> str:
     return raw
 
 
+def _resolve_compaction_model(project_id: str, agent_id: str) -> str:
+    proj = _project(project_id)
+    aid = str(agent_id or "").strip()
+    if proj and aid and aid in getattr(proj, "agent_settings", {}):
+        try:
+            m = str(proj.agent_settings[aid].model or "").strip()
+            if m:
+                return m
+        except Exception:
+            pass
+    return "stepfun/step-3.5-flash:free"
+
+
 def note_llm_token_io(
     project_id: str,
     agent_id: str,
@@ -149,7 +162,7 @@ def _rule_based_summary(old_entries: list[str], seed_block: str) -> str:
     return "\n".join(lines)
 
 
-def _semantic_summary_with_llm(project_id: str, old_text: str, seed_block: str) -> str | None:
+def _semantic_summary_with_llm(project_id: str, agent_id: str, old_text: str, seed_block: str) -> str | None:
     api_key = str(getattr(runtime_config, "openrouter_api_key", "") or "").strip()
     if not api_key:
         return None
@@ -157,7 +170,7 @@ def _semantic_summary_with_llm(project_id: str, old_text: str, seed_block: str) 
         from langchain_openai import ChatOpenAI
     except Exception:
         return None
-    model = "openai/gpt-4o-mini"
+    model = _resolve_compaction_model(project_id, agent_id)
     try:
         llm = ChatOpenAI(
             model=model,
@@ -188,11 +201,11 @@ def _semantic_summary_with_llm(project_id: str, old_text: str, seed_block: str) 
         return None
 
 
-def _build_compact_summary(project_id: str, old_entries: list[str], seed_block: str) -> tuple[str, str]:
+def _build_compact_summary(project_id: str, agent_id: str, old_entries: list[str], seed_block: str) -> tuple[str, str]:
     strategy = compact_strategy(project_id)
     old_text = "\n".join(old_entries)
     if strategy == "semantic_llm":
-        semantic = _semantic_summary_with_llm(project_id, old_text, seed_block)
+        semantic = _semantic_summary_with_llm(project_id, agent_id, old_text, seed_block)
         if semantic:
             return semantic, "semantic_llm"
     return _rule_based_summary(old_entries, seed_block), "rule_based"
@@ -218,7 +231,7 @@ def ensure_compacted(project_id: str, agent_id: str) -> dict[str, Any]:
             return {"performed": False, "reason": "insufficient_entries", "tokens": total_tokens, "trigger": trigger}
         old_blob = body_text[:-keep_chars]
         kept_blob = body_text[-keep_chars:]
-        summary, actual = _build_compact_summary(project_id, [old_blob], seed_block)
+        summary, actual = _build_compact_summary(project_id, agent_id, [old_blob], seed_block)
         ap = archive_path(project_id, agent_id)
         with ap.open("a", encoding="utf-8") as af:
             af.write("\n\n# ARCHIVE_CHUNK\n")
@@ -257,7 +270,7 @@ def ensure_compacted(project_id: str, agent_id: str) -> dict[str, Any]:
     if not old:
         return {"performed": False, "reason": "no_old_entries", "tokens": total_tokens, "trigger": trigger}
 
-    summary, actual = _build_compact_summary(project_id, old, seed_block)
+    summary, actual = _build_compact_summary(project_id, agent_id, old, seed_block)
 
     ap = archive_path(project_id, agent_id)
     with ap.open("a", encoding="utf-8") as af:

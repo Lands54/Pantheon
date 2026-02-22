@@ -1,6 +1,7 @@
 """Assemble pulse frames for Janus from PulseLedger."""
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -60,6 +61,12 @@ def load_pulse_frames(
 
     # Step 3: Convert raw frames to PulseFrame objects, skipping broken ones.
     frames: list[PulseFrame] = []
+    def _to_json_text(v: Any) -> str:
+        try:
+            return json.dumps(v, ensure_ascii=False, sort_keys=True)
+        except Exception:
+            return str(v or "")
+
     for raw in raw_frames:
         # Skip frames with no trigger.event/mail at all (completely broken).
         if not raw.has_triggers:
@@ -91,7 +98,7 @@ def load_pulse_frames(
                         item_id=str(pld.get("message_id", "") or pld.get("event_id", "")),
                         title=str(pld.get("title", "") or ""),
                         sender=str(pld.get("sender", "") or ""),
-                        content=str(pld.get("content", "") or ""),
+                        content=_to_json_text(pld),
                     )
                 )
             else:
@@ -101,7 +108,7 @@ def load_pulse_frames(
                         origin=str(tr.get("origin", "internal") or "internal"),  # type: ignore[arg-type]
                         item_type=str(pld.get("event_type", "") or "event"),
                         item_id=str(pld.get("event_id", "") or ""),
-                        content=str(pld.get("reason", "") or ""),
+                        content=_to_json_text(pld),
                     )
                 )
 

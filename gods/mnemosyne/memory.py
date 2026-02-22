@@ -13,13 +13,11 @@ from typing import Any
 from gods.mnemosyne.contracts import MemoryDecision, MemoryIntent, MemorySinkPolicy
 from gods.mnemosyne.policy_registry import (
     MemoryPolicyMissingError,
-    MemoryTemplateMissingError,
     ensure_intent_policy_rule,
     ensure_memory_policy,
     load_memory_policy as _load_strict_policy,
 )
 from gods.mnemosyne.intent_schema_registry import observe_intent_payload, validate_intent_contract
-from gods.mnemosyne.template_registry import render_memory_template
 from gods.paths import mnemosyne_dir
 from gods.mnemosyne.compaction import ensure_compacted
 from gods.mnemosyne.context_index import append_context_index_entry
@@ -201,29 +199,24 @@ def _resolve_policy(intent: MemoryIntent) -> MemorySinkPolicy:
         runtime_log_template_key=tpl_runtime,
         llm_context_template_key=tpl_llm,
     )
-    if sink.to_chronicle and not sink.chronicle_template_key:
-        raise MemoryTemplateMissingError(
-            f"to_chronicle=true requires chronicle_template_key for intent_key='{key}' (project={intent.project_id})"
-        )
     return sink
 
 
-def _render_template(intent: MemoryIntent, scope: str, template_key: str) -> str:
-    if not template_key:
-        return str(intent.fallback_text or "")
-    render_vars = dict(intent.payload or {})
-    if scope == "chronicle":
-        _apply_chronicle_redaction(intent, render_vars)
-    render_vars.setdefault("project_id", intent.project_id)
-    render_vars.setdefault("agent_id", intent.agent_id)
-    render_vars.setdefault("intent_key", intent.intent_key)
+def _render_intent_json(intent: MemoryIntent) -> str:
+    payload = intent.payload if isinstance(intent.payload, dict) else {}
+    doc = {
+        "intent_key": str(intent.intent_key or ""),
+        "project_id": str(intent.project_id or ""),
+        "agent_id": str(intent.agent_id or ""),
+        "source_kind": str(intent.source_kind or ""),
+        "timestamp": float(intent.timestamp or time.time()),
+        "fallback_text": str(intent.fallback_text or ""),
+        "payload": payload,
+    }
     try:
-        return render_memory_template(intent.project_id, scope, template_key, render_vars)
-    except Exception as e:
-        raise MemoryTemplateMissingError(
-            f"template '{template_key}' not found for intent_key='{intent.intent_key}' "
-            f"(project={intent.project_id})"
-        ) from e
+        return json.dumps(doc, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return str(intent.fallback_text or "")
 
 
 def _apply_chronicle_redaction(intent: MemoryIntent, render_vars: dict[str, Any]) -> None:
@@ -276,9 +269,7 @@ def _render_intent_for_llm_context(intent: MemoryIntent) -> str | None:
         sink = _resolve_policy(intent)
         if not sink.to_llm_context:
             return None
-        if sink.llm_context_template_key:
-            return _render_template(intent, "llm_context", sink.llm_context_template_key)
-        return str(intent.fallback_text or "")
+        return _render_intent_json(intent)
     except Exception:
         return None
 
@@ -293,12 +284,9 @@ def _persist_intent(intent: MemoryIntent) -> dict[str, Any]:
     chronicle_text = ""
     runtime_text = ""
     if sink.to_chronicle:
-        chronicle_text = _render_template(intent, "chronicle", sink.chronicle_template_key)
+        chronicle_text = _render_intent_json(intent)
     if sink.to_runtime_log:
-        if sink.runtime_log_template_key:
-            runtime_text = _render_template(intent, "runtime_log", sink.runtime_log_template_key)
-        else:
-            runtime_text = _render_runtime_fallback(intent)
+        runtime_text = _render_intent_json(intent)
 
     llm_context_rendered = _render_intent_for_llm_context(intent)
 

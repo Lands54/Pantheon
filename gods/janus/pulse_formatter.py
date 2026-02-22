@@ -204,9 +204,9 @@ def _append_tool_call_xml(parent: ET.Element, tc: PulseToolCallItem) -> None:
         },
     )
     args_el = ET.SubElement(tc_el, "args")
-    args_el.text = _xml_safe_text(_json_text(_sanitize_tool_args(dict(tc.args or {}))))
+    args_el.text = _xml_safe_text(_json_text(dict(tc.args or {})))
     result_el = ET.SubElement(tc_el, "result")
-    result_el.text = _xml_safe_text(_clean_context_payload_text(tc.result))
+    result_el.text = _xml_safe_text(_json_text(tc.result))
 
 
 def build_pulse_frames(cards: list[dict]) -> list[PulseFrame]:

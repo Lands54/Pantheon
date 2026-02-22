@@ -342,3 +342,21 @@ def reconcile_stale(project_id: str, timeout_sec: int, domain: str = "") -> int:
         return rows, recovered
 
     return int(_with_lock(project_id, _mut) or 0)
+
+
+def set_event_meta_field(project_id: str, event_id: str, key: str, value: Any) -> bool:
+    k = str(key or "").strip()
+    if not k:
+        return False
+
+    def _mut(rows: list[dict[str, Any]]):
+        for row in rows:
+            if str(row.get("event_id", "")) != event_id:
+                continue
+            meta = dict(row.get("meta", {}) or {})
+            meta[k] = value
+            row["meta"] = meta
+            return rows, True
+        return rows, False
+
+    return bool(_with_lock(project_id, _mut))

@@ -24,6 +24,11 @@
         "reserve_port",
         "release_port",
         "list_port_leases",
+        "council_status",
+        "council_confirm",
+        "council_action",
+        "council_ledger",
+        "council_resolutions",
         "mnemo_write_agent",
         "mnemo_list_agent",
         "mnemo_read_agent",
@@ -315,6 +320,29 @@
             }
         },
         "event.system": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.sync_council_turn_event": {
             "source_kind": "event",
             "policy": {
                 "to_chronicle": false,

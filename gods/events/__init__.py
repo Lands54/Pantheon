@@ -12,6 +12,7 @@ from gods.events.store import (
     reconcile_stale,
     requeue_or_dead,
     retry_event,
+    set_event_meta_field,
     transition_state,
 )
 from gods.events.catalog import event_catalog, event_meta
@@ -35,6 +36,7 @@ __all__ = [
     "requeue_or_dead",
     "retry_event",
     "reconcile_stale",
+    "set_event_meta_field",
     "event_catalog",
     "event_meta",
 ]

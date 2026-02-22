@@ -157,12 +157,8 @@ def ensure_memory_policy(project_id: str) -> Path:
         raw.pop(legacy_key, None)
         changed = True
 
-    # Prune unknown keys and add missing ones based on semantics.json
+    # Weak-mode: keep unknown keys and only add/normalize registered defaults.
     required_keys = set(default_payload.keys())
-    unknown_keys = [k for k in list(raw.keys()) if k not in required_keys]
-    for k in unknown_keys:
-        raw.pop(k, None)
-        changed = True
 
     for k in required_keys:
         if k not in raw:
@@ -184,17 +180,14 @@ def ensure_intent_policy_rule(project_id: str, intent_key: str) -> dict[str, Any
     key = str(intent_key or "").strip()
     if not key:
         raise MemoryPolicyMissingError("intent_key is required")
-    if not is_registered_intent_key(key):
-        raise MemoryPolicyMissingError(
-            f"unregistered intent_key='{key}' in project={project_id}; register in required_intent_keys first"
-        )
     path = ensure_memory_policy(project_id)
     raw = _load_raw_policy(path, project_id=project_id)
     rule = raw.get(key)
     if rule is None:
-        raise MemoryPolicyMissingError(
-            f"memory policy missing registered key '{key}' in project={project_id}"
-        )
+        # Weak-mode: allow dynamic intent keys and auto-seed default rule.
+        rule = default_intent_rule(key)
+        raw[key] = rule
+        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     if not isinstance(rule, dict):
         raise MemoryPolicyMissingError(f"memory policy key must be object for '{key}' in project={project_id}")
     return _normalize_rule(rule, intent_key=key, project_id=project_id)
@@ -219,15 +212,22 @@ def validate_memory_policy(project_id: str, *, ensure_exists: bool = True) -> di
     policy = load_memory_policy(project_id, ensure_exists=ensure_exists)
     required = required_intent_keys()
     missing = [k for k in required if k not in policy]
-    if missing:
-        raise MemoryPolicyMissingError(
-            f"memory policy missing {len(missing)} key(s) in project={project_id}: {', '.join(missing[:20])}"
-        )
+    # Weak-mode: unknown keys are tolerated; missing registered keys are
+    # auto-filled from defaults for forward progress.
     unknown = [k for k in policy.keys() if k not in set(required)]
-    if unknown:
-        raise MemoryPolicyMissingError(
-            f"memory policy has unregistered key(s) in project={project_id}: {', '.join(sorted(unknown)[:20])}"
-        )
+    if missing:
+        path = policy_path(project_id)
+        raw = _load_raw_policy(path, project_id=project_id)
+        changed = False
+        for k in missing:
+            if k in raw and isinstance(raw.get(k), dict):
+                continue
+            raw[k] = default_intent_rule(k)
+            changed = True
+        if changed:
+            path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        policy = load_memory_policy(project_id, ensure_exists=False)
+        missing = [k for k in required if k not in policy]
 
     runtime_keys = set(list_memory_templates(project_id, "runtime_log").keys())
     chronicle_keys = set(list_memory_templates(project_id, "chronicle").keys())
@@ -244,23 +244,16 @@ def validate_memory_policy(project_id: str, *, ensure_exists: bool = True) -> di
         if runtime_tpl and runtime_tpl not in runtime_keys:
             missing_templates.append(f"{key}:runtime_log:{runtime_tpl}")
 
-    if chronicle_template_required_missing:
-        raise MemoryTemplateMissingError(
-            f"memory policy requires chronicle template for {len(chronicle_template_required_missing)} key(s) "
-            f"in project={project_id}: {', '.join(chronicle_template_required_missing[:20])}"
-        )
-    if missing_templates:
-        raise MemoryTemplateMissingError(
-            f"memory policy template missing {len(missing_templates)} key(s) in project={project_id}: "
-            + ", ".join(missing_templates[:20])
-        )
+    # Weak-mode: template presence is no longer a hard requirement.
 
     return {
         "project_id": project_id,
         "required_keys": len(required),
-        "validated_keys": len(required),
-        "missing_keys": [],
-        "missing_templates": [],
+        "validated_keys": len(policy),
+        "missing_keys": missing,
+        "unknown_keys": unknown,
+        "missing_templates": missing_templates,
+        "missing_chronicle_templates": chronicle_template_required_missing,
     }
 
 
@@ -282,17 +275,12 @@ def upsert_policy_rule(
     key = str(intent_key or "").strip()
     if not key:
         raise MemoryPolicyMissingError("intent_key is required")
-    if not is_registered_intent_key(key):
-        raise MemoryPolicyMissingError(
-            f"unregistered intent_key='{key}' in project={project_id}; register in required_intent_keys first"
-        )
     path = ensure_memory_policy(project_id)
     raw = _load_raw_policy(path, project_id=project_id)
     current = raw.get(key)
     if current is None:
-        raise MemoryPolicyMissingError(
-            f"memory policy missing registered key '{key}' in project={project_id}"
-        )
+        current = default_intent_rule(key)
+        raw[key] = current
     if not isinstance(current, dict):
         raise MemoryPolicyMissingError(f"memory policy key must be object for '{key}' in project={project_id}")
     normalized = _normalize_rule(current, intent_key=key, project_id=project_id)

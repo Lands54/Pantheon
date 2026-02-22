@@ -153,7 +153,18 @@ class ThemisOrchestrator:
     def render_tools_desc(self, node_name: str = "llm_think") -> str:
         items = []
         for t in self.get_tools_for_node(node_name):
-            items.append(f"- [[{t.name}({', '.join(t.args)})]]: {t.description}")
+            desc = str(getattr(t, "description", "") or "")
+            if str(getattr(t, "name", "") or "") == "council_action":
+                try:
+                    from gods.angelia import sync_council as council_sync
+
+                    win = council_sync.action_window(self.project_id, self.agent_id) or {}
+                    allowed = list(win.get("allowed_actions", []) or [])
+                    if allowed:
+                        desc = f"{desc} Current allowed_actions: {', '.join(allowed)}."
+                except Exception:
+                    pass
+            items.append(f"- [[{t.name}({', '.join(t.args)})]]: {desc}")
         return "\n".join(items)
 
     def execute_tool(self, name: str, args: dict, node_name: str = "", pulse_id: str = "") -> str:

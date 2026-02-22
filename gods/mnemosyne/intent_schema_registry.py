@@ -124,7 +124,14 @@ def _expect_field_type(payload: dict[str, Any], key: str, expected: type, *, whe
 
 
 def validate_intent_contract(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
-    _validate_intent_contract_strict(intent_key, source_kind, payload)
+    # Weak-mode contract: keep only minimal shape checks to avoid write blocking
+    # during rapid schema evolution.
+    key = str(intent_key or "").strip()
+    if not key:
+        raise ValueError("invalid intent: intent_key is required")
+    if payload is not None and not isinstance(payload, dict):
+        raise ValueError(f"invalid intent '{key}': payload must be object")
+    return
 
 def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
     """

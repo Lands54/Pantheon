@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 
 from gods.config.models import AgentModelConfig, ProjectConfig, SystemConfig
 from gods.identity import is_valid_agent_id
@@ -30,6 +31,13 @@ _PHASE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _LEGACY_TOOL_NAME_MAP = {
     "list_agents": "list",
 }
+
+
+def _agent_entity_exists(project_id: str, agent_id: str) -> bool:
+    base = Path("projects") / str(project_id or "")
+    agent_dir = base / "agents" / agent_id
+    profile = base / "mnemosyne" / "agent_profiles" / f"{agent_id}.md"
+    return agent_dir.is_dir() and profile.exists()
 
 
 def _clamp_int(value: int, low: int, high: int) -> int:
@@ -221,6 +229,11 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
             raise ValueError(
                 f"invalid active_agents item '{aa}' in project '{project_id}': "
                 "expected ^[a-z][a-z0-9_]{0,63}$ and not reserved human identity"
+            )
+        if not _agent_entity_exists(project_id, aa):
+            raise ValueError(
+                f"invalid active_agents item '{aa}' in project '{project_id}': "
+                "agent entity not found (requires projects/<pid>/agents/<aid> and mnemosyne/agent_profiles/<aid>.md)"
             )
         if aa in seen_active:
             continue
