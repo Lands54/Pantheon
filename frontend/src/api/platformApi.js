@@ -121,6 +121,16 @@ export function getContextSnapshotDerived(projectId, agentId, limit = 100) {
   )
 }
 
+export function getContextPulses(projectId, agentId, fromSeq = 0, limit = 500) {
+  return apiGet(
+    `/projects/${encodeURIComponent(projectId)}/context/pulses${qp({
+      agent_id: agentId,
+      from_seq: fromSeq,
+      limit,
+    })}`
+  )
+}
+
 export function listOutboxReceipts(projectId, fromAgentId, status = '', limit = 50) {
   return apiGet(`/projects/${encodeURIComponent(projectId)}/inbox/outbox${qp({ from_agent_id: fromAgentId, status, limit })}`)
 }
@@ -214,4 +224,16 @@ export function gatewaySendMessage(projectId, fromId, toId, title, message, atta
     message,
     attachments,
   })
+}
+
+export function startSyncCouncil(projectId, payload) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/start`, payload || {})
+}
+
+export function confirmSyncCouncil(projectId, agentId) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/confirm`, { agent_id: agentId })
+}
+
+export function getSyncCouncil(projectId) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council`)
 }
