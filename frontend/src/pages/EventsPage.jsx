@@ -16,7 +16,6 @@ const INITIAL_FILTER = {
 export function EventsPage({ projectId }) {
   const [filters, setFilters] = useState(INITIAL_FILTER)
   const [hideDone, setHideDone] = useState(true)
-  const [hideFeedsLlmFalse, setHideFeedsLlmFalse] = useState(false)
   const [error, setError] = useState('')
   const [catalogByType, setCatalogByType] = useState({})
   const stream = useEventsStream(projectId, filters)
@@ -25,7 +24,6 @@ export function EventsPage({ projectId }) {
     const meta = catalogByType[String(row?.event_type || '')] || {}
     return {
       ...row,
-      feeds_llm: meta.feeds_llm,
       description: meta.description || '',
       event_title: meta.title || '',
     }
@@ -34,7 +32,6 @@ export function EventsPage({ projectId }) {
   const visibleItems = (stream.items || [])
     .map(enrich)
     .filter((x) => !(hideDone && String(x?.state || '').toLowerCase() === 'done'))
-    .filter((x) => !(hideFeedsLlmFalse && x?.feeds_llm === false))
 
   const load = async () => {
     try {
@@ -101,7 +98,6 @@ export function EventsPage({ projectId }) {
   const resetFilters = () => {
     setFilters(INITIAL_FILTER)
     setHideDone(true)
-    setHideFeedsLlmFalse(false)
   }
 
   return (
@@ -125,10 +121,6 @@ export function EventsPage({ projectId }) {
         <label className="checkbox-row top-gap">
           <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} />
           Hide done
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={hideFeedsLlmFalse} onChange={(e) => setHideFeedsLlmFalse(e.target.checked)} />
-          Hide feeds_llm=false
         </label>
       </div>
 

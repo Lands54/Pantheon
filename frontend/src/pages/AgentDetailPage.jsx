@@ -7,9 +7,150 @@ import {
   getContextSnapshot,
   getContextSnapshotCompressions,
   getContextSnapshotDerived,
+  getContextPulses,
   listEvents,
   listOutboxReceipts,
 } from '../api/platformApi'
+
+function extractXmlCandidate(text) {
+  const raw = String(text || '')
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  const fenced = trimmed.match(/^```xml\s*([\s\S]*?)\s*```$/i)
+  if (fenced && fenced[1]) return fenced[1].trim()
+  return trimmed
+}
+
+function isLikelyXml(text) {
+  const s = extractXmlCandidate(text)
+  if (!s) return false
+  if (s.startsWith('<?xml')) return true
+  if (/<\s*context(\s|>)/i.test(s)) return true
+  if (/<\s*pulse(\s|>)/i.test(s)) return true
+  return false
+}
+
+function parseXml(xmlText) {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(String(xmlText || ''), 'application/xml')
+  const err = doc.querySelector('parsererror')
+  if (err) {
+    return { ok: false, error: err.textContent || 'Invalid XML', doc: null }
+  }
+  return { ok: true, error: '', doc }
+}
+
+function escapeXmlText(s) {
+  return String(s || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+function formatXmlNode(node, indent = '') {
+  if (!node) return ''
+  if (node.nodeType === Node.TEXT_NODE) {
+    const txt = (node.nodeValue || '').trim()
+    if (!txt) return ''
+    return `${indent}${escapeXmlText(txt)}\n`
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return ''
+
+  const tag = node.tagName
+  const attrs = Array.from(node.attributes || [])
+    .map((a) => `${a.name}="${escapeXmlText(a.value)}"`)
+    .join(' ')
+  const head = attrs ? `<${tag} ${attrs}>` : `<${tag}>`
+  const children = Array.from(node.childNodes || [])
+  const hasElementChild = children.some((c) => c.nodeType === Node.ELEMENT_NODE)
+  const textOnly = children.every((c) => c.nodeType === Node.TEXT_NODE) && children.length > 0
+
+  if (!children.length) {
+    return `${indent}${head}</${tag}>\n`
+  }
+  if (textOnly) {
+    const txt = children.map((c) => (c.nodeValue || '').trim()).join('').trim()
+    return `${indent}${head}${escapeXmlText(txt)}</${tag}>\n`
+  }
+  let out = `${indent}${head}\n`
+  for (const child of children) {
+    out += formatXmlNode(child, `${indent}  `)
+  }
+  out += `${indent}</${tag}>\n`
+  if (!hasElementChild) return out
+  return out
+}
+
+function formatXml(xmlText) {
+  const parsed = parseXml(xmlText)
+  if (!parsed.ok || !parsed.doc?.documentElement) {
+    return { ok: false, text: String(xmlText || ''), error: parsed.error || 'Invalid XML', doc: null }
+  }
+  const header = "<?xml version='1.0' encoding='utf-8'?>\n"
+  const body = formatXmlNode(parsed.doc.documentElement, '')
+  return { ok: true, text: `${header}${body}`.trimEnd(), error: '', doc: parsed.doc }
+}
+
+function XmlTreeNode({ node }) {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) return null
+  const attrs = Array.from(node.attributes || [])
+  const children = Array.from(node.children || [])
+  const text = (node.textContent || '').trim()
+  const hasChildren = children.length > 0
+
+  return (
+    <details className="xml-tree-node" open>
+      <summary className="xml-tree-summary">
+        <span className="mono">&lt;{node.tagName}&gt;</span>
+        {!!attrs.length && (
+          <span className="mono dim xml-attrs">
+            {' '}
+            {attrs.map((a) => `${a.name}="${a.value}"`).join(' ')}
+          </span>
+        )}
+      </summary>
+      {!hasChildren && !!text && <pre className="xml-tree-text mono">{text}</pre>}
+      {!!hasChildren && (
+        <div className="xml-tree-children">
+          {children.map((c, i) => (
+            <XmlTreeNode key={`${c.tagName}-${i}`} node={c} />
+          ))}
+        </div>
+      )}
+    </details>
+  )
+}
+
+function XmlContextViewer({ xmlText }) {
+  const rawXml = extractXmlCandidate(xmlText)
+  const formatted = formatXml(rawXml)
+  return (
+    <div className="stack-sm">
+      {!formatted.ok && <div className="warn">XML parse failed: {formatted.error}</div>}
+      <div className="row-between">
+        <div className="mono dim">XML Context</div>
+        <button
+          className="ghost-btn"
+          onClick={() => navigator.clipboard?.writeText(String(rawXml || ''))}
+          title="Copy raw XML"
+        >
+          Copy Raw
+        </button>
+      </div>
+      <pre className="xml-block mono">{formatted.text}</pre>
+      {formatted.ok && formatted.doc?.documentElement && (
+        <details className="xml-tree-wrap">
+          <summary>Tree View</summary>
+          <div className="top-gap">
+            <XmlTreeNode node={formatted.doc.documentElement} />
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
 
 export function AgentDetailPage({ projectId, agentId }) {
   const [preview, setPreview] = useState(null)
@@ -18,6 +159,10 @@ export function AgentDetailPage({ projectId, agentId }) {
   const [snapshotCursor, setSnapshotCursor] = useState(0)
   const [snapshotCompressLogs, setSnapshotCompressLogs] = useState([])
   const [snapshotDerivedLogs, setSnapshotDerivedLogs] = useState([])
+  const [pulseRows, setPulseRows] = useState([])
+  const [pulseErrors, setPulseErrors] = useState([])
+  const [intentRows, setIntentRows] = useState([])
+  const [selectedPulseId, setSelectedPulseId] = useState('')
   const [reports, setReports] = useState([])
   const [events, setEvents] = useState([])
   const [receipts, setReceipts] = useState([])
@@ -28,6 +173,7 @@ export function AgentDetailPage({ projectId, agentId }) {
   const [eventState, setEventState] = useState('')
   const [eventLimit, setEventLimit] = useState(100)
   const [error, setError] = useState('')
+  const [forceXmlView, setForceXmlView] = useState(false)
 
   const renderMessageContent = (msg) => {
     const raw = msg?.content
@@ -53,7 +199,7 @@ export function AgentDetailPage({ projectId, agentId }) {
   const load = async () => {
     if (!agentId) return
     try {
-      const [p, r, e, out, llm, snap, comp, derived] = await Promise.all([
+      const [p, r, e, out, llm, snap, comp, derived, pulses] = await Promise.all([
         getContextPreview(projectId, agentId),
         getContextReports(projectId, agentId, 20),
         listEvents({
@@ -69,6 +215,7 @@ export function AgentDetailPage({ projectId, agentId }) {
         getContextSnapshot(projectId, agentId, 0),
         getContextSnapshotCompressions(projectId, agentId, 20),
         getContextSnapshotDerived(projectId, agentId, 50),
+        getContextPulses(projectId, agentId, 0, 500),
       ])
       setPreview(p.preview || p)
       setSnapshotMeta({
@@ -81,6 +228,9 @@ export function AgentDetailPage({ projectId, agentId }) {
       setSnapshotCursor(Number(snap.base_intent_seq || 0))
       setSnapshotCompressLogs(Array.isArray(comp.items) ? comp.items : [])
       setSnapshotDerivedLogs(Array.isArray(derived.items) ? derived.items : [])
+      setPulseRows(Array.isArray(pulses.pulses) ? pulses.pulses : [])
+      setPulseErrors(Array.isArray(pulses.errors) ? pulses.errors : [])
+      setIntentRows(Array.isArray(pulses.intents) ? pulses.intents : [])
       setReports(r.reports || [])
       setEvents(e.items || [])
       setReceipts(out.items || [])
@@ -137,6 +287,12 @@ export function AgentDetailPage({ projectId, agentId }) {
         setSnapshotCompressLogs(Array.isArray(comp.items) ? comp.items : [])
         const derived = await getContextSnapshotDerived(projectId, agentId, 50)
         setSnapshotDerivedLogs(Array.isArray(derived.items) ? derived.items : [])
+        // Keep pulse ledger view stable: always refresh from dedicated pulse API
+        // instead of replacing with snapshot delta window.
+        const pulsesLive = await getContextPulses(projectId, agentId, 0, 500)
+        setPulseRows(Array.isArray(pulsesLive.pulses) ? pulsesLive.pulses : [])
+        setPulseErrors(Array.isArray(pulsesLive.errors) ? pulsesLive.errors : [])
+        setIntentRows(Array.isArray(pulsesLive.intents) ? pulsesLive.intents : [])
       } catch (e) {
         // ignore polling errors; full reload path still available
       }
@@ -162,41 +318,91 @@ export function AgentDetailPage({ projectId, agentId }) {
 
       <div className="panel">
         <div className="row-between">
-          <h3>Janus Snapshot (Incremental)</h3>
+          <h3>Pulse + Intent 联动视图</h3>
           <div className="mono dim">
-            base_intent_seq={snapshotMeta.base_intent_seq} | cards={snapshotCards.length} | tokens~{snapshotMeta.token_estimate}
+            base_seq={snapshotMeta.base_intent_seq} | pulses={pulseRows.length} | intents={intentRows.length}
           </div>
         </div>
-        {!snapshotMeta.available && <div className="dim">No snapshot yet. Trigger at least one LLM pulse.</div>}
-        {!!snapshotMeta.available && (
+        {!!pulseErrors.length && (
+          <div className="warn">
+            {pulseErrors.map((x, i) => <div key={`pe-${i}`} className="mono">{String(x)}</div>)}
+          </div>
+        )}
+        <div className="action-row top-gap">
+          <div className="mono dim">Pulse 过滤:</div>
+          <select value={selectedPulseId} onChange={(e) => setSelectedPulseId(e.target.value)}>
+            <option value="">(全部)</option>
+            {pulseRows.map((p) => (
+              <option key={`pf-${p.pulse_id}`} value={p.pulse_id}>{p.pulse_id}</option>
+            ))}
+          </select>
+          <button className="ghost-btn" onClick={() => setSelectedPulseId('')}>清除过滤</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="top-gap">
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>card_id</th>
-                  <th>kind</th>
-                  <th>priority</th>
-                  <th>source_seq</th>
-                  <th>text</th>
+                  <th>pulse_id</th>
+                  <th>trigger</th>
+                  <th>llm</th>
+                  <th>tools</th>
+                  <th>finish</th>
                 </tr>
               </thead>
               <tbody>
-                {snapshotCards.map((c) => (
-                  <tr key={c.card_id}>
-                    <td className="mono">{c.card_id}</td>
-                    <td>{c.kind}</td>
-                    <td>{c.priority}</td>
-                    <td>{c.source_intent_seq_max}</td>
-                    <td className="mono">{String(c.text || '')}</td>
-                  </tr>
-                ))}
-                {!snapshotCards.length && (
-                  <tr><td colSpan={5}>No cards</td></tr>
+                {pulseRows.map((p) => {
+                  const active = selectedPulseId && selectedPulseId === p.pulse_id
+                  return (
+                    <tr
+                      key={p.pulse_id}
+                      style={{ background: active ? 'rgba(80,120,240,0.08)' : 'transparent', cursor: 'pointer' }}
+                      onClick={() => setSelectedPulseId((x) => (x === p.pulse_id ? '' : p.pulse_id))}
+                    >
+                      <td className="mono">{p.pulse_id}</td>
+                      <td className="mono">{(p.triggers || []).length}</td>
+                      <td className="mono">{(p.llm || []).length}</td>
+                      <td className="mono">{(p.tools || []).length}</td>
+                      <td className="mono">{p.finish ? 'yes' : 'no'}</td>
+                    </tr>
+                  )
+                })}
+                {!pulseRows.length && (
+                  <tr><td colSpan={5}>No pulse records</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-        )}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>intent_seq</th>
+                  <th>pulse_id</th>
+                  <th>intent_key</th>
+                  <th>fallback_text</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(intentRows || [])
+                  .filter((x) => !selectedPulseId || String(x?.pulse_id || '') === selectedPulseId)
+                  .slice()
+                  .sort((a, b) => Number(a?.intent_seq || 0) - Number(b?.intent_seq || 0))
+                  .map((x) => (
+                    <tr key={`i-${x.intent_seq}-${x.intent_id || ''}`}>
+                      <td className="mono">{x.intent_seq}</td>
+                      <td className="mono">{x.pulse_id || '-'}</td>
+                      <td className="mono">{x.intent_key || '-'}</td>
+                      <td>{x.fallback_text || '-'}</td>
+                    </tr>
+                  ))}
+                {!intentRows.length && (
+                  <tr><td colSpan={4}>No intent records</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div className="panel">
@@ -256,10 +462,18 @@ export function AgentDetailPage({ projectId, agentId }) {
         {!!llmTrace && (
           <div className="stack-md">
             <div className="mono dim">ts: {new Date((llmTrace.ts || 0) * 1000).toLocaleString()} | mode: {llmTrace.mode || '-'} | model: {llmTrace.model || '-'}</div>
+            <label className="inline-row mono dim">
+              <input type="checkbox" checked={forceXmlView} onChange={(e) => setForceXmlView(!!e.target.checked)} />
+              Force XML Viewer
+            </label>
             {(llmTrace.request_messages || []).map((msg, idx) => (
               <div key={`llm-msg-${idx}`} className="panel">
                 <div className="mono dim">[{idx + 1}] {msg?.type || 'Message'} {msg?.name ? `(${msg.name})` : ''}</div>
-                <ReactMarkdown>{renderMessageContent(msg)}</ReactMarkdown>
+                {(forceXmlView || isLikelyXml(renderMessageContent(msg))) ? (
+                  <XmlContextViewer xmlText={renderMessageContent(msg)} />
+                ) : (
+                  <ReactMarkdown>{renderMessageContent(msg)}</ReactMarkdown>
+                )}
               </div>
             ))}
           </div>

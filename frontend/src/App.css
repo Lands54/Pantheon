@@ -364,6 +364,59 @@ tbody tr:hover {
   font-size: 0.82rem;
 }
 
+.xml-block {
+  margin: 0;
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid rgba(30, 41, 53, 0.16);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.xml-tree-wrap {
+  border: 1px dashed rgba(30, 41, 53, 0.24);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.xml-tree-node {
+  border-left: 2px solid rgba(45, 76, 99, 0.22);
+  margin-left: 8px;
+  padding-left: 8px;
+}
+
+.xml-tree-summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.xml-tree-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.xml-tree-text {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(30, 41, 53, 0.1);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.85);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.xml-attrs {
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

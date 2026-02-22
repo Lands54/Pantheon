@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  getEventCatalog,
   getMemoryPolicy,
   getMemoryTemplates,
   getTemplateVars,
@@ -14,7 +13,6 @@ export function MemoryPolicyPage({ projectId }) {
 
   const [templates, setTemplates] = useState({ runtime_log: {}, chronicle: {} })
   const [policy, setPolicy] = useState({})
-  const [catalogByType, setCatalogByType] = useState({})
   const [selectedIntentKey, setSelectedIntentKey] = useState('')
   const [selectedScope, setSelectedScope] = useState('runtime_log')
   const [selectedTemplateKey, setSelectedTemplateKey] = useState('')
@@ -28,16 +26,11 @@ export function MemoryPolicyPage({ projectId }) {
   })
 
   const loadAll = async () => {
-    const [tpl, pol, cat] = await Promise.all([getMemoryTemplates(projectId), getMemoryPolicy(projectId), getEventCatalog(projectId)])
+    const [tpl, pol] = await Promise.all([getMemoryTemplates(projectId), getMemoryPolicy(projectId)])
     const nextTemplates = { runtime_log: tpl.runtime_log || {}, chronicle: tpl.chronicle || {} }
     const nextPolicy = pol.items || {}
-    const nextCatalogByType = {}
-    for (const row of (cat.items || [])) {
-      nextCatalogByType[String(row.event_type || '')] = row
-    }
     setTemplates(nextTemplates)
     setPolicy(nextPolicy)
-    setCatalogByType(nextCatalogByType)
     const intentKeys = Object.keys(nextPolicy).sort()
     const intent = intentKeys.includes(selectedIntentKey) ? selectedIntentKey : (intentKeys[0] || '')
     setSelectedIntentKey(intent)
@@ -133,15 +126,6 @@ export function MemoryPolicyPage({ projectId }) {
     setTemplateBody(k ? String((templates[selectedScope] || {})[k] || '') : '')
   }
 
-  const feedsByIntentKey = (intentKey) => {
-    const key = String(intentKey || '')
-    if (!key.startsWith('event.')) return null
-    const et = key.slice('event.'.length)
-    const meta = catalogByType[et] || null
-    if (!meta) return null
-    return meta.feeds_llm
-  }
-
   return (
     <div className="stack-lg">
       <div className="panel">
@@ -154,11 +138,7 @@ export function MemoryPolicyPage({ projectId }) {
             Intent Key
             <select value={selectedIntentKey} onChange={(e) => setSelectedIntentKey(e.target.value)}>
               {!intentKeys.length && <option value="">(no intent keys)</option>}
-              {intentKeys.map((k) => {
-                const v = feedsByIntentKey(k)
-                const tag = v === true ? 'feeds_llm=yes' : v === false ? 'feeds_llm=no' : 'feeds_llm=-'
-                return <option key={k} value={k}>{`${k} (${tag})`}</option>
-              })}
+              {intentKeys.map((k) => <option key={k} value={k}>{k}</option>)}
             </select>
           </label>
           <label>
@@ -256,7 +236,6 @@ export function MemoryPolicyPage({ projectId }) {
             <thead>
               <tr>
                 <th>intent_key</th>
-                <th>feeds_llm</th>
                 <th>to_runtime_log</th>
                 <th>to_chronicle</th>
                 <th>runtime_log_template_key</th>
@@ -271,12 +250,9 @@ export function MemoryPolicyPage({ projectId }) {
                 const toChronicle = !!row.to_chronicle
                 const runtimeKey = String(row.runtime_log_template_key || '')
                 const chronicleKey = String(row.chronicle_template_key || '')
-                const f = feedsByIntentKey(key)
-                const fText = f === true ? 'yes' : f === false ? 'no' : '-'
                 return (
                   <tr key={key}>
                     <td className="mono">{key}</td>
-                    <td>{fText}</td>
                     <td><input type="checkbox" checked={toRuntime} onChange={(e) => quickUpdatePolicy(key, { to_runtime_log: e.target.checked })} /></td>
                     <td><input type="checkbox" checked={toChronicle} onChange={(e) => quickUpdatePolicy(key, { to_chronicle: e.target.checked })} /></td>
                     <td className="mono">{runtimeKey || '-'}</td>
@@ -300,7 +276,7 @@ export function MemoryPolicyPage({ projectId }) {
                   </tr>
                 )
               })}
-              {!intentKeys.length && <tr><td colSpan={7}>No policy rules</td></tr>}
+              {!intentKeys.length && <tr><td colSpan={6}>No policy rules</td></tr>}
             </tbody>
           </table>
         </div>

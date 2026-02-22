@@ -3,6 +3,7 @@ import {
   gatewayCheckInbox,
   gatewayCheckOutbox,
   gatewaySendMessage,
+  listEvents,
   submitInteractionMessage,
 } from '../api/platformApi'
 import { HUMAN_IDENTITY } from '../types/models'
@@ -21,6 +22,9 @@ export function MessageCenterPage({ projectId, agents = [], selectedAgentId, onP
   const [privateInbox, setPrivateInbox] = useState([])
   const [privateOutbox, setPrivateOutbox] = useState([])
   const [loadingPrivate, setLoadingPrivate] = useState(false)
+  const [matrixLoading, setMatrixLoading] = useState(false)
+  const [matrixNodes, setMatrixNodes] = useState([])
+  const [matrixCounts, setMatrixCounts] = useState({})
 
   const targetOptions = useMemo(() => agents.map((a) => a.agent_id), [agents])
 
@@ -54,8 +58,42 @@ export function MessageCenterPage({ projectId, agents = [], selectedAgentId, onP
 
   useEffect(() => {
     refreshPrivateBox()
+    refreshMatrix()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
+
+  const refreshMatrix = async () => {
+    setMatrixLoading(true)
+    setError('')
+    try {
+      const res = await listEvents({
+        project_id: projectId,
+        event_type: 'interaction.message.sent',
+        limit: 2000,
+      })
+      const rows = Array.isArray(res?.items) ? res.items : []
+      const counts = {}
+      const nodeSet = new Set((agents || []).map((a) => String(a?.agent_id || '').trim()).filter(Boolean))
+      nodeSet.add(HUMAN_IDENTITY)
+
+      for (const row of rows) {
+        const payload = row?.payload || {}
+        const from = String(payload?.sender_id || '').trim()
+        const to = String(payload?.to_id || '').trim()
+        if (!from || !to) continue
+        nodeSet.add(from)
+        nodeSet.add(to)
+        if (!counts[from]) counts[from] = {}
+        counts[from][to] = (Number(counts[from][to]) || 0) + 1
+      }
+      setMatrixNodes(Array.from(nodeSet).sort())
+      setMatrixCounts(counts)
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setMatrixLoading(false)
+    }
+  }
 
   const sendPrivate = async () => {
     setStatus('')
@@ -166,6 +204,61 @@ export function MessageCenterPage({ projectId, agents = [], selectedAgentId, onP
             </div>
           </>
         )}
+      </div>
+
+      <div className="panel">
+        <h3>Message Traffic Matrix</h3>
+        <div className="muted" style={{ marginBottom: 8 }}>
+          统计来源：interaction.message.sent（sender_id → to_id）
+        </div>
+        <div className="action-row" style={{ marginBottom: 12 }}>
+          <button className="ghost-btn" onClick={refreshMatrix} disabled={matrixLoading}>
+            {matrixLoading ? 'Refreshing...' : 'Refresh Matrix'}
+          </button>
+        </div>
+        <div style={{ overflow: 'auto' }}>
+          <table className="data-table" style={{ minWidth: 780 }}>
+            <thead>
+              <tr>
+                <th>From \\ To</th>
+                {matrixNodes.map((to) => (
+                  <th key={`col-${to}`} className="mono">{to}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrixNodes.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="muted">No message traffic yet.</td>
+                </tr>
+              )}
+              {(() => {
+                let maxCount = 0
+                for (const from of matrixNodes) {
+                  for (const to of matrixNodes) {
+                    const v = Number(matrixCounts?.[from]?.[to] || 0)
+                    if (v > maxCount) maxCount = v
+                  }
+                }
+                return matrixNodes.map((from) => (
+                  <tr key={`row-${from}`}>
+                    <td className="mono">{from}</td>
+                    {matrixNodes.map((to) => {
+                      const value = Number(matrixCounts?.[from]?.[to] || 0)
+                      const ratio = maxCount > 0 ? (value / maxCount) : 0
+                      const bg = value > 0 ? `rgba(56, 189, 248, ${0.10 + ratio * 0.55})` : 'transparent'
+                      return (
+                        <td key={`${from}->${to}`} className="mono" style={{ background: bg }}>
+                          {value}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))
+              })()}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {mode === 'event' && (

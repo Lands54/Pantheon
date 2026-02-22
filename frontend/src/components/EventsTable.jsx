@@ -15,7 +15,6 @@ export function EventsTable({ items = [], onRetry, onAck }) {
               <th>Domain</th>
               <th>Type</th>
               <th>State</th>
-              <th>feeds_llm</th>
               <th>Agent</th>
               <th>Created</th>
               <th>Description</th>
@@ -33,9 +32,6 @@ export function EventsTable({ items = [], onRetry, onAck }) {
                   <td>{item.domain}</td>
                   <td>{item.event_type}</td>
                   <td>{item.state}</td>
-                  <td>
-                    {item.feeds_llm === true ? 'yes' : item.feeds_llm === false ? 'no' : '-'}
-                  </td>
                   <td>{agent}</td>
                   <td>{fmt(item.created_at)}</td>
                   <td>{item.description || '-'}</td>
@@ -55,7 +51,7 @@ export function EventsTable({ items = [], onRetry, onAck }) {
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={10}>No events</td>
+                <td colSpan={9}>No events</td>
               </tr>
             )}
           </tbody>

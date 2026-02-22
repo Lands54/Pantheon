@@ -15,7 +15,6 @@ function eventTooltip(item) {
     `state: ${item?.state || '-'}`,
     `agent: ${eventAgent(item)}`,
     `created: ${item?.created_at ? new Date(item.created_at * 1000).toLocaleString() : 'N/A'}`,
-    `feeds_llm: ${item?.feeds_llm === true ? 'yes' : item?.feeds_llm === false ? 'no' : '-'}`,
   ]
   if (item?.description) lines.push(`desc: ${item.description}`)
   if (item?.error_message) lines.push(`error: ${item.error_message}`)
