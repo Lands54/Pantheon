@@ -647,24 +647,6 @@
     "chronicle_template_key": "",
     "runtime_log_template_key": ""
   },
-  "tool.run_command_detach.ok": {
-    "to_chronicle": true,
-    "to_runtime_log": false,
-    "chronicle_template_key": "memory_tool_ok",
-    "runtime_log_template_key": ""
-  },
-  "tool.run_command_detach.error": {
-    "to_chronicle": true,
-    "to_runtime_log": true,
-    "chronicle_template_key": "memory_tool_error",
-    "runtime_log_template_key": ""
-  },
-  "tool.run_command_detach.blocked": {
-    "to_chronicle": false,
-    "to_runtime_log": true,
-    "chronicle_template_key": "",
-    "runtime_log_template_key": ""
-  },
   "tool.send_message.ok": {
     "to_chronicle": true,
     "to_runtime_log": false,
