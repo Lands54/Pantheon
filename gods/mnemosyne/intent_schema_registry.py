@@ -123,14 +123,8 @@ def _expect_field_type(payload: dict[str, Any], key: str, expected: type, *, whe
     return value
 
 
-import logging
-logger = logging.getLogger(__name__)
-
 def validate_intent_contract(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
-    try:
-        _validate_intent_contract_strict(intent_key, source_kind, payload)
-    except ValueError as e:
-        logger.warning(f"Intent schema validation failed (softened): {e}")
+    _validate_intent_contract_strict(intent_key, source_kind, payload)
 
 def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload: dict[str, Any] | None) -> None:
     """
@@ -154,7 +148,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
     if key == "llm.response":
         if str(source_kind or "").strip() != "llm":
             raise ValueError("invalid intent 'llm.response': source_kind must be 'llm'")
-        allowed = {"phase", "content", "anchor_seq"}
+        allowed = {"phase", "content", "anchor_seq", "pulse_id", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -164,6 +158,10 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "content", str, where=key)
         if "anchor_seq" in data and data.get("anchor_seq") is not None:
             _expect_field_type(data, "anchor_seq", int, where=key)
+        if "pulse_id" in data and data.get("pulse_id") is not None:
+            _expect_field_type(data, "pulse_id", str, where=key)
+        if "origin" in data and data.get("origin") is not None:
+            _expect_field_type(data, "origin", str, where=key)
         return
 
     if key.startswith("tool.call."):
@@ -175,7 +173,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         if str(source_kind or "").strip() != "tool":
             raise ValueError(f"invalid intent '{key}': source_kind must be 'tool'")
         tool_from_key = str(m.group(1))
-        allowed = {"tool_name", "args", "call_id", "node"}
+        allowed = {"tool_name", "args", "call_id", "node", "pulse_id", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -185,6 +183,10 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "args", dict, where=key)
         _expect_field_type(data, "call_id", str, where=key)
         _expect_field_type(data, "node", str, where=key)
+        if "pulse_id" in data:
+            _expect_field_type(data, "pulse_id", str, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         if str(tool_name).strip() != tool_from_key:
             raise ValueError(
                 f"invalid intent '{key}': payload.tool_name must equal '{tool_from_key}'"
@@ -201,7 +203,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
             raise ValueError(f"invalid intent '{key}': source_kind must be 'tool'")
         tool_from_key = str(m.group(1))
         status_from_key = str(m.group(2))
-        allowed = {"tool_name", "status", "args", "result", "result_compact", "call_id"}
+        allowed = {"tool_name", "status", "args", "result", "result_compact", "call_id", "pulse_id", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -212,6 +214,10 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "args", dict, where=key)
         if "call_id" in data:
             _expect_field_type(data, "call_id", str, where=key)
+        if "pulse_id" in data:
+            _expect_field_type(data, "pulse_id", str, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         _expect_field_type(data, "result", str, where=key)
         _expect_field_type(data, "result_compact", str, where=key)
         if str(tool_name).strip() != tool_from_key:
@@ -238,6 +244,10 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "attempt", int, where=key)
         _expect_field_type(data, "max_attempts", int, where=key)
         _expect_field_type(data, "payload", dict, where=key)
+        if "pulse_id" in data:
+            _expect_field_type(data, "pulse_id", str, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         if str(event_type).strip() != str(m.group(1)):
             raise ValueError(
                 f"invalid intent '{key}': payload.event_type must equal '{m.group(1)}'"
@@ -247,7 +257,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
     if key == "inbox.read_ack":
         if str(source_kind or "").strip() != "inbox":
             raise ValueError("invalid intent 'inbox.read_ack': source_kind must be 'inbox'")
-        allowed = {"event_ids", "count"}
+        allowed = {"event_ids", "count", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -257,12 +267,14 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         if not all(isinstance(x, str) for x in event_ids):
             raise ValueError("invalid intent 'inbox.read_ack': payload.event_ids must be string array")
         _expect_field_type(data, "count", int, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         return
 
     if key == "inbox.received.unread" or _INBOX_NOTICE_RE.match(key):
         if str(source_kind or "").strip() != "inbox":
             raise ValueError(f"invalid intent '{key}': source_kind must be 'inbox'")
-        allowed = {"title", "sender", "message_id", "msg_type", "content", "payload", "attachments"}
+        allowed = {"title", "sender", "message_id", "msg_type", "content", "payload", "attachments", "pulse_id", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -274,6 +286,10 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "msg_type", str, where=key)
         _expect_field_type(data, "content", str, where=key)
         _expect_field_type(data, "payload", dict, where=key)
+        if "pulse_id" in data:
+            _expect_field_type(data, "pulse_id", str, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         if "attachments" in data:
             rows = _expect_field_type(data, "attachments", list, where=key)
             if not all(isinstance(x, str) for x in rows):
@@ -283,7 +299,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
     if _INBOX_SECTION_RE.match(key):
         if str(source_kind or "").strip() != "inbox":
             raise ValueError(f"invalid intent '{key}': source_kind must be 'inbox'")
-        allowed = {"section", "title", "rows"}
+        allowed = {"section", "title", "rows", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -292,6 +308,8 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         section = _expect_field_type(data, "section", str, where=key)
         _expect_field_type(data, "title", str, where=key)
         _expect_field_type(data, "rows", str, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         expect_section = key.split(".")[-1]
         if str(section).strip() != expect_section:
             raise ValueError(
@@ -305,7 +323,7 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
             raise ValueError(f"invalid intent '{key}': malformed outbox status key")
         if str(source_kind or "").strip() != "inbox":
             raise ValueError(f"invalid intent '{key}': source_kind must be 'inbox'")
-        allowed = {"title", "to_agent_id", "message_id", "status", "error_message", "attachments_count"}
+        allowed = {"title", "to_agent_id", "message_id", "status", "error_message", "attachments_count", "origin"}
         unknown = sorted(set(data.keys()) - allowed)
         if unknown:
             raise ValueError(
@@ -318,6 +336,8 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
         _expect_field_type(data, "error_message", str, where=key)
         if "attachments_count" in data:
             _expect_field_type(data, "attachments_count", int, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
         if str(status).strip().lower() != str(m.group(1)):
             raise ValueError(
                 f"invalid intent '{key}': payload.status must equal '{m.group(1)}'"
@@ -377,6 +397,69 @@ def _validate_intent_contract_strict(intent_key: str, source_kind: str, payload:
             raise ValueError(
                 f"invalid intent '{key}': payload.phase must equal '{m.group(1)}'"
             )
+        return
+
+    if key == "phase.pulse.start":
+        if str(source_kind or "").strip() != "phase":
+            raise ValueError("invalid intent 'phase.pulse.start': source_kind must be 'phase'")
+        allowed = {
+            "pulse_id",
+            "reason",
+            "trigger_count",
+            "trigger_event_ids",
+            "trigger_event_types",
+            "base_intent_seq",
+            "origin",
+        }
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                "invalid intent 'phase.pulse.start': unsupported payload keys: "
+                + ", ".join(unknown)
+            )
+        _expect_field_type(data, "pulse_id", str, where=key)
+        _expect_field_type(data, "reason", str, where=key)
+        _expect_field_type(data, "trigger_count", int, where=key)
+        _expect_field_type(data, "trigger_event_ids", list, where=key)
+        _expect_field_type(data, "trigger_event_types", list, where=key)
+        _expect_field_type(data, "base_intent_seq", int, where=key)
+        if not all(isinstance(x, str) for x in list(data.get("trigger_event_ids") or [])):
+            raise ValueError("invalid intent 'phase.pulse.start': payload.trigger_event_ids must be string array")
+        if not all(isinstance(x, str) for x in list(data.get("trigger_event_types") or [])):
+            raise ValueError("invalid intent 'phase.pulse.start': payload.trigger_event_types must be string array")
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
+        return
+
+    if key == "phase.pulse.finish":
+        if str(source_kind or "").strip() != "phase":
+            raise ValueError("invalid intent 'phase.pulse.finish': source_kind must be 'phase'")
+        allowed = {
+            "pulse_id",
+            "next_step",
+            "finalize_mode",
+            "tool_call_count",
+            "tool_result_count",
+            "llm_text_len",
+            "origin",
+            "error",
+        }
+        unknown = sorted(set(data.keys()) - allowed)
+        if unknown:
+            raise ValueError(
+                "invalid intent 'phase.pulse.finish': unsupported payload keys: "
+                + ", ".join(unknown)
+            )
+        _expect_field_type(data, "pulse_id", str, where=key)
+        _expect_field_type(data, "next_step", str, where=key)
+        _expect_field_type(data, "finalize_mode", str, where=key)
+        _expect_field_type(data, "tool_call_count", int, where=key)
+        _expect_field_type(data, "tool_result_count", int, where=key)
+        _expect_field_type(data, "llm_text_len", int, where=key)
+        if "origin" in data:
+            _expect_field_type(data, "origin", str, where=key)
+        if "error" in data:
+            _expect_field_type(data, "error", str, where=key)
         return
 
 

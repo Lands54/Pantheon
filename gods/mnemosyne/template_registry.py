@@ -31,6 +31,8 @@ _DEFAULT_RUNTIME_LOG_TEMPLATES: dict[str, str] = {
     "memory_phase_retry_reason": "[PHASE_RETRY] reason -> $message",
     "memory_phase_retry_act": "[PHASE_RETRY] act -> $message",
     "memory_phase_retry_observe": "[PHASE_RETRY] observe -> $message",
+    "memory_phase_pulse_start": "[PULSE_START] pulse_id=$pulse_id reason=$reason triggers=$trigger_count base_seq=$base_intent_seq",
+    "memory_phase_pulse_finish": "[PULSE_FINISH] pulse_id=$pulse_id next_step=$next_step finalize=$finalize_mode tools=$tool_call_count/$tool_result_count llm_text_len=$llm_text_len error=$error",
     "memory_tool_call": "[[ACTION_CALL]] $tool_name id=$call_id node=$node args=$args",
     "memory_tool_ok": "[[ACTION]] $tool_name (ok) -> $result_compact",
     "memory_tool_error": "[[ACTION]] $tool_name (error) -> $result_compact",
@@ -59,6 +61,8 @@ _DEFAULT_LLM_CONTEXT_TEMPLATES: dict[str, str] = {
     "memory_tool_error": "[TOOL ERROR]\nTool: $tool_name\nStatus: Error\nDetails: $result_compact\nSuggestion: Check arguments and retry.",
     "memory_tool_blocked": "[TOOL BLOCKED]\nTool: $tool_name\nReason: Policy Restriction\nDetails: $result_compact",
     "memory_tool_call": "[TOOL CALL]\nTool: $tool_name\nCallId: $call_id\nNode: $node\nArgs: $args",
+    "memory_phase_pulse_start": "[PULSE_START]\npulse_id=$pulse_id\nreason=$reason\ntriggers=$trigger_count\ntrigger_event_ids=$trigger_event_ids\ntrigger_event_types=$trigger_event_types\nbase_seq=$base_intent_seq",
+    "memory_phase_pulse_finish": "[PULSE_FINISH]\npulse_id=$pulse_id\nnext_step=$next_step\nfinalize=$finalize_mode\ntools=$tool_call_count/$tool_result_count\nllm_text_len=$llm_text_len\nerror=$error",
     "memory_janus_compaction_base": "[COMPACTED_BASE]\nbase_intent_seq=$base_intent_seq\n$summary",
 }
 

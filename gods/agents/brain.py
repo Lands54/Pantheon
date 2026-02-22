@@ -3,6 +3,7 @@ Gods Platform - Brain Module (Dynamic API Version)
 Manages LLM instances using runtime configuration.
 """
 import json
+import logging
 import os
 import threading
 import time
@@ -16,6 +17,12 @@ from gods.paths import runtime_debug_dir
 _LLM_IMPORT_LOCK = threading.Lock()
 _CHAT_OPENAI_CLS = None
 _CHAT_OPENAI_IMPORT_ERROR: Exception | None = None
+logger = logging.getLogger(__name__)
+
+
+class LLMInvocationError(RuntimeError):
+    """Raised when LLM invocation cannot complete and should stay server-side."""
+    pass
 
 
 def prewarm_llm_runtime() -> tuple[bool, str]:
@@ -222,6 +229,9 @@ class GodBrain:
             openai_api_key=api_key,
             openai_api_base="https://openrouter.ai/api/v1",
             timeout=request_timeout_sec,
+            # Keep retry policy in our own control plane; avoid hidden client retries
+            # that can exceed upstream RPM and distort limiter accounting.
+            max_retries=0,
             temperature=0.7,
             max_tokens=4096,
             default_headers={
@@ -236,7 +246,9 @@ class GodBrain:
         Performs a plain text inference Request.
         """
         if not runtime_config.openrouter_api_key:
-            return "❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings."
+            msg = "OPENROUTER_API_KEY is not set"
+            logger.error("LLM_INVOKE_CONFIG_ERROR: %s (agent=%s project=%s)", msg, self.agent_id, self.project_id)
+            raise LLMInvocationError(msg)
 
         ticket = None
         try:
@@ -255,7 +267,11 @@ class GodBrain:
                 )
             return response.content
         except LLMControlAcquireTimeout as e:
-            return f"Error in reasoning: {str(e)}"
+            logger.warning(
+                "LLM_INVOKE_TIMEOUT: agent=%s project=%s err=%s",
+                self.agent_id, self.project_id, e,
+            )
+            raise LLMInvocationError(str(e)) from e
         except Exception as e:
             model = self._resolve_model()
             self._write_llm_trace(
@@ -267,7 +283,11 @@ class GodBrain:
                 error=str(e),
                 trace_meta=trace_meta,
             )
-            return f"Error in reasoning: {str(e)}"
+            logger.exception(
+                "LLM_INVOKE_ERROR: agent=%s project=%s model=%s",
+                self.agent_id, self.project_id, model,
+            )
+            raise LLMInvocationError(str(e)) from e
         finally:
             if ticket is not None:
                 ticket.release()
@@ -277,7 +297,9 @@ class GodBrain:
         Performs inference with support for structured tool-calling.
         """
         if not runtime_config.openrouter_api_key:
-            return AIMessage(content="❌ ERROR: OPENROUTER_API_KEY is not set. Please configure via settings.")
+            msg = "OPENROUTER_API_KEY is not set"
+            logger.error("LLM_INVOKE_CONFIG_ERROR: %s (agent=%s project=%s)", msg, self.agent_id, self.project_id)
+            raise LLMInvocationError(msg)
 
         ticket = None
         try:
@@ -309,7 +331,11 @@ class GodBrain:
             )
             return wrapped
         except LLMControlAcquireTimeout as e:
-            return AIMessage(content=f"Error in reasoning: {str(e)}")
+            logger.warning(
+                "LLM_INVOKE_TIMEOUT: agent=%s project=%s err=%s",
+                self.agent_id, self.project_id, e,
+            )
+            raise LLMInvocationError(str(e)) from e
         except Exception as e:
             self._write_llm_trace(
                 mode="tools",
@@ -321,7 +347,11 @@ class GodBrain:
                 error=str(e),
                 trace_meta=trace_meta,
             )
-            return AIMessage(content=f"Error in reasoning: {str(e)}")
+            logger.exception(
+                "LLM_INVOKE_ERROR: agent=%s project=%s model=%s",
+                self.agent_id, self.project_id, self._resolve_model(),
+            )
+            raise LLMInvocationError(str(e)) from e
         finally:
             if ticket is not None:
                 ticket.release()

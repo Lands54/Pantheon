@@ -5,6 +5,7 @@ from gods.iris.service import (
     ack_handled,
     build_inbox_overview,
     enqueue_message,
+    fetch_mailbox_intents,
     get_mailbox_glance,
     fetch_inbox_context,
     has_pending,
@@ -20,5 +21,6 @@ __all__ = [
     "has_pending",
     "list_outbox_receipts",
     "build_inbox_overview",
+    "fetch_mailbox_intents",
     "mark_as_delivered",
 ]

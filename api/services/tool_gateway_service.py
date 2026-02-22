@@ -14,7 +14,7 @@ from gods.hestia import facade as hestia_facade
 from gods.identity import HUMAN_AGENT_ID, is_valid_agent_id
 from gods.interaction import facade as interaction_facade
 from gods.mnemosyne import facade as mnemosyne_facade
-from gods.mnemosyne.intent_builders import intent_from_tool_result
+from gods.mnemosyne.facade import intent_from_tool_result
 from gods.tools import facade as tools_facade
 
 logger = logging.getLogger(__name__)

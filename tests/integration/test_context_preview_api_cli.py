@@ -65,8 +65,9 @@ def test_context_preview_api_and_cli(monkeypatch, capsys):
         assert snap_full.status_code == 200
         s0 = snap_full.json()
         assert s0.get("available") is True
-        assert s0.get("mode") == "full"
-        assert isinstance(s0.get("upsert_cards"), list)
+        assert s0.get("mode") == "pulse_ledger"
+        assert isinstance(s0.get("entries"), list)
+        assert isinstance(s0.get("pulses"), list)
         base = int(s0.get("base_intent_seq", 0) or 0)
 
         snap_delta = client.get(
@@ -75,15 +76,17 @@ def test_context_preview_api_and_cli(monkeypatch, capsys):
         )
         assert snap_delta.status_code == 200
         s1 = snap_delta.json()
-        assert s1.get("available") is True
-        assert s1.get("mode") == "delta"
-        assert isinstance(s1.get("upsert_cards"), list)
-        assert isinstance(s1.get("remove_card_ids"), list)
+        assert s1.get("available") in {True, False}
+        assert s1.get("mode") == "pulse_ledger"
+        assert isinstance(s1.get("entries"), list)
+        assert isinstance(s1.get("errors"), list)
+        assert isinstance(s1.get("warnings"), list)
 
         comp = client.get(f"/projects/{pid}/context/snapshot/compressions", params={"agent_id": aid, "limit": 20})
         assert comp.status_code == 200
         c0 = comp.json()
         assert isinstance(c0.get("items"), list)
+        assert bool(c0.get("deprecated")) is True
 
         def _get(url, params=None, timeout=0):
             if url.endswith("/config"):

@@ -118,6 +118,11 @@ class ConfigRegistry:
             allowed = ", ".join(entry.enum)
             raise ValueError(f"invalid config '{where}': expected one of [{allowed}]")
 
+        if entry.key == "metis_refresh_mode" and isinstance(value, str) and value.strip().lower() == "node":
+            warnings.append(
+                f"config normalized: {where}=node is ignored under sequential_v1 and will run as pulse"
+            )
+
         cons = entry.constraints or {}
         if entry.type in {"integer", "number"}:
             if "min" in cons and float(value) < float(cons["min"]):

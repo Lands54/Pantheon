@@ -4,6 +4,7 @@ from __future__ import annotations
 from gods.agents.runtime_policy import resolve_phase_strategy
 from gods.chaos.snapshot import build_resource_snapshot, pull_incremental_materials
 from gods.config import runtime_config
+from gods.janus.context_policy import resolve_context_strategy
 from gods.metis.contracts import ResourceSnapshot, RuntimeEnvelope
 from gods.metis.strategy_specs import get_strategy_spec
 
@@ -22,6 +23,13 @@ def resolve_refresh_mode(state: dict) -> str:
         mode = str(getattr(proj, "metis_refresh_mode", "pulse") or "pulse").strip().lower()
     if not mode:
         mode = str(st.get("__metis_refresh_mode", "pulse") or "pulse").strip().lower()
+    # SequentialV1 uses pulse-start-only event fetch; node-level incremental pulls are disabled.
+    if project_id and agent_id:
+        try:
+            if str(resolve_context_strategy(project_id, agent_id) or "").strip() == "sequential_v1":
+                return "pulse"
+        except Exception:
+            pass
     return "node" if mode == "node" else "pulse"
 
 
@@ -55,8 +63,7 @@ def refresh_runtime_envelope(
     seq = int((state or {}).get("__metis_refresh_seq", 0) or 0) + 1
     state["__metis_refresh_seq"] = seq
     incremental_patch: dict | None = None
-    if mode == "node":
-        incremental_patch = pull_incremental_materials(agent, state)
+    # Node-level incremental pull is intentionally disabled under pulse-only fetch policy.
     envelope = build_runtime_envelope(agent, state, strategy=strategy)
     if isinstance(incremental_patch, dict) and incremental_patch:
         envelope.resource_snapshot = envelope.resource_snapshot.update(**incremental_patch)

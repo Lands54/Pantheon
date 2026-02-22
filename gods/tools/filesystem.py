@@ -14,6 +14,7 @@ from gods.iris.facade import list_outbox_receipts
 from gods.iris.store import list_mail_events
 from gods.hermes import facade as hermes_facade
 from gods.mnemosyne import facade as mnemosyne_facade
+from gods.runtime import facade as runtime_facade
 from gods.paths import agent_dir, mnemosyne_dir, project_dir
 
 RESERVED_SYSTEM_FILES = {"memory.md", "memory_archive.md", "agent.md", "runtime_state.json"}
@@ -22,6 +23,7 @@ MAIL_SCHEME = "mail://"
 ARTIFACT_SCHEME = "artifact://"
 CONTRACT_SCHEME = "contract://"
 AGENT_SCHEME = "agent://"
+DETACH_SCHEME = "detach://"
 
 
 def _is_reserved_path(path: Path, agent_territory: Path) -> bool:
@@ -431,6 +433,127 @@ def _read_contract_virtual(agent_territory: Path, path_val: str, project_id: str
     return _cwd_prefix(agent_territory, body)
 
 
+def _list_detach_virtual(agent_territory: Path, path_val: str, caller_id: str, project_id: str, page_size: int, page: int) -> str:
+    rel = path_val[len(DETACH_SCHEME):].strip().strip("/")
+    if not rel:
+        rel = "jobs"
+    parts = [x for x in rel.split("/") if x]
+    if not parts or parts[0] != "jobs":
+        return _format_fs_error(
+            agent_territory,
+            "Path Error",
+            f"unsupported detach path: {path_val}",
+            "Use detach://jobs or detach://jobs/<status>.",
+        )
+    status = ""
+    if len(parts) >= 2:
+        status = str(parts[1] or "").strip().lower()
+        if status not in {"queued", "running", "stopping", "stopped", "failed", "lost"}:
+            return _format_fs_error(
+                agent_territory,
+                "Path Error",
+                f"unsupported detach status filter: {status}",
+                "Use one of queued|running|stopping|stopped|failed|lost.",
+            )
+    rows = runtime_facade.detach_list_for_api(
+        project_id=project_id,
+        agent_id=caller_id,
+        status=status,
+        limit=2000,
+    ).get("items", [])
+    rows = sorted(rows, key=lambda x: float(x.get("created_at", 0) or 0), reverse=True)
+    paged = _slice_page(rows, page=page, page_size=page_size)
+    lines = [f"[DETACH:jobs] page={page} page_size={page_size} total={len(rows)} status={status or 'all'}"]
+    for x in paged:
+        lines.append(
+            f"[DETACH_JOB] id={x.get('job_id','')} status={x.get('status','')} "
+            f"created_at={x.get('created_at','')} command={x.get('command','')}"
+        )
+    if not paged:
+        lines.append("[EMPTY] No rows in this page.")
+    return _cwd_prefix(agent_territory, "\n".join(lines))
+
+
+def _read_detach_virtual(agent_territory: Path, path_val: str, caller_id: str, project_id: str, start: int, end: int) -> str:
+    rel = path_val[len(DETACH_SCHEME):].strip().strip("/")
+    parts = [x for x in rel.split("/") if x]
+    if not parts:
+        return _format_fs_error(
+            agent_territory,
+            "Path Error",
+            f"unsupported detach path: {path_val}",
+            "Use detach://<job_id> or detach://log/<job_id>.",
+        )
+    if parts[0] == "jobs":
+        return _format_fs_error(
+            agent_territory,
+            "Path Error",
+            f"unsupported detach read path: {path_val}",
+            "Use list('detach://jobs') to browse jobs first, then read detach://<job_id>.",
+        )
+    if parts[0] == "log" and len(parts) == 2:
+        job_id = parts[1]
+    elif len(parts) == 1:
+        job_id = parts[0]
+    else:
+        return _format_fs_error(
+            agent_territory,
+            "Path Error",
+            f"unsupported detach path: {path_val}",
+            "Use detach://<job_id> or detach://log/<job_id>.",
+        )
+
+    rows = runtime_facade.detach_list_for_api(
+        project_id=project_id,
+        agent_id=caller_id,
+        status="",
+        limit=2000,
+    ).get("items", [])
+    target = next((x for x in rows if str(x.get("job_id", "")) == str(job_id)), None)
+    if not isinstance(target, dict):
+        return _format_fs_error(
+            agent_territory,
+            "Permission Error",
+            f"detach job not found (or not owned by caller): {job_id}",
+            "Use list('detach://jobs') and read your own job id.",
+        )
+    payload = runtime_facade.detach_get_logs(project_id=project_id, job_id=job_id) or {}
+    text = str(payload.get("tail", "") or "")
+    lines = text.splitlines()
+    s = int(start or 1)
+    e = int(end or 0)
+    if s < 1:
+        return _format_fs_error(agent_territory, "Range Error", "start must be >= 1.", "Pass start=1 or greater.")
+    if e > 0 and e < s:
+        return _format_fs_error(agent_territory, "Range Error", "end must be >= start (or 0 for EOF).", "Adjust start/end.")
+    total = len(lines)
+    if total == 0:
+        selected = ""
+        range_label = f"{s}-0"
+    else:
+        if s > total:
+            return _format_fs_error(
+                agent_territory,
+                "Range Error",
+                f"start={s} exceeds total lines={total}.",
+                "Use valid line range.",
+            )
+        end_idx = total if e <= 0 else min(e, total)
+        selected = "\n".join(lines[s - 1:end_idx])
+        range_label = f"{s}-{end_idx}"
+    body = (
+        "[READ_DETACH_LOG]\n"
+        f"path: {path_val}\n"
+        f"job_id: {job_id}\n"
+        f"status: {str(target.get('status', '') or '')}\n"
+        f"line_range: {range_label}\n"
+        f"total_lines: {total}\n"
+        "---\n"
+        f"{selected}"
+    )
+    return _cwd_prefix(agent_territory, body)
+
+
 @tool
 def read(
     path: str = "",
@@ -440,13 +563,14 @@ def read(
     end: int = 0,
 ) -> str:
     """
-    Read the contents of local files, mailbox records, artifacts, or Hermes contracts.
+    Read the contents of local files, mailbox records, artifacts, Hermes contracts, or detach logs.
     
     Supported path formats:
     - Local file: Specify the relative path within your territory (e.g., 'src/main.py', 'data.json').
     - Mailbox record: Use 'mail://inbox/<event_id>' to read a received message, or 'mail://outbox/<receipt_id>' to check sent message status.
     - Artifact: Use 'artifact://<artifact_id>' to read the contents of an uploaded binary or text artifact.
     - Contract: Use 'contract://<title>@<version>' to read a Hermes contract detail payload.
+    - Detach log: Use 'detach://<job_id>' (or 'detach://log/<job_id>') to read your detach job log.
     
     Pagination/Range reading:
     - Use 'start' and 'end' (1-based, inclusive) to read a specific slice of the text.
@@ -465,6 +589,8 @@ def read(
             return _read_artifact_virtual(agent_territory, aid, caller_id, project_id, start, end)
         if path_val.startswith(CONTRACT_SCHEME):
             return _read_contract_virtual(agent_territory, path_val, project_id, start, end)
+        if path_val.startswith(DETACH_SCHEME):
+            return _read_detach_virtual(agent_territory, path_val, caller_id, project_id, start, end)
         if path_val.startswith(MAIL_SCHEME):
             return _read_mail_virtual(agent_territory, path_val, caller_id, project_id, start, end)
 
@@ -715,7 +841,7 @@ def multi_replace(path: str, replacements_json: str, caller_id: str, project_id:
 @tool
 def list(path: str = ".", caller_id: str = "default", project_id: str = "default", page_size: int = 20, page: int = 1) -> str:
     """
-    List directory contents, mailbox history, artifacts, or Hermes contracts within your territory.
+    List directory contents, mailbox history, artifacts, Hermes contracts, or detach jobs within your territory.
     
     Supported path formats:
     - Agent roster: Use 'agent://reachable' (default) to list agents reachable by Hestia graph, or 'agent://all' to list all agents.
@@ -723,6 +849,7 @@ def list(path: str = ".", caller_id: str = "default", project_id: str = "default
     - Mailbox history: Use 'mail://inbox' to list received messages or 'mail://outbox' to list sent messages.
     - Artifacts: Use 'artifact://agent', 'artifact://project', or 'artifact://global' to list artifacts within a specific scope.
     - Contracts: Use 'contract://active' (default) or 'contract://all' to list Hermes contracts.
+    - Detach jobs: Use 'detach://jobs' (or 'detach://jobs/<status>') to list your detach jobs.
     
     Pagination:
     - Use the 'page' (1-based) and 'page_size' (default 20) arguments to paginate through large directories or long histories.
@@ -810,6 +937,8 @@ def list(path: str = ".", caller_id: str = "default", project_id: str = "default
             if not paged:
                 lines.append("[EMPTY] No rows in this page.")
             return _cwd_prefix(_agent_territory(project_id, caller_id), "\n".join(lines))
+        if path_val.startswith(DETACH_SCHEME):
+            return _list_detach_virtual(_agent_territory(project_id, caller_id), path_val, caller_id, project_id, page_size, page)
 
         dir_path = validate_path(caller_id, project_id, path_val)
         agent_territory = _agent_territory(project_id, caller_id)

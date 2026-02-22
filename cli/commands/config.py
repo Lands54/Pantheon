@@ -42,6 +42,14 @@ def _resolve_project_key(raw_key: str) -> str:
         "hermes.timeout": "hermes_default_timeout_sec",
         "hermes.rate": "hermes_default_rate_per_minute",
         "hermes.concurrency": "hermes_default_max_concurrency",
+        "llm.control": "llm_control_enabled",
+        "llm.global.max_concurrency": "llm_global_max_concurrency",
+        "llm.global.rate": "llm_global_rate_per_minute",
+        "llm.project.max_concurrency": "llm_project_max_concurrency",
+        "llm.project.rate": "llm_project_rate_per_minute",
+        "llm.acquire_timeout": "llm_acquire_timeout_sec",
+        "llm.request_timeout": "llm_request_timeout_sec",
+        "llm.retry_interval_ms": "llm_retry_interval_ms",
     }
     return alias.get(key, key)
 
@@ -210,7 +218,7 @@ def cmd_config(args):
             
             # Parse key path (e.g., "simulation.enabled" or "agent.genesis.model")
             parts = args.key.split('.')
-            direct_key = args.key.strip()
+            direct_key = resolved_key
 
             if direct_key in {
                 "pulse_event_inject_budget",
@@ -252,6 +260,14 @@ def cmd_config(args):
                 "context_include_inbox_status_hints",
                 "context_write_build_report",
                 "metis_refresh_mode",
+                "llm_control_enabled",
+                "llm_global_max_concurrency",
+                "llm_global_rate_per_minute",
+                "llm_project_max_concurrency",
+                "llm_project_rate_per_minute",
+                "llm_acquire_timeout_sec",
+                "llm_request_timeout_sec",
+                "llm_retry_interval_ms",
             }:
                 if direct_key in {
                     "pulse_event_inject_budget",
@@ -725,7 +741,22 @@ def cmd_config(args):
                 print("  detach.ttl (seconds)")
                 print("  detach.stop_grace (seconds)")
                 print("  detach.log_tail_chars (int)")
+                print("  llm_control_enabled (true/false)")
+                print("  llm_global_max_concurrency (int)")
+                print("  llm_global_rate_per_minute (int)")
+                print("  llm_project_max_concurrency (int)")
+                print("  llm_project_rate_per_minute (int)")
+                print("  llm_acquire_timeout_sec (int)")
                 print("  llm_request_timeout_sec (int)")
+                print("  llm_retry_interval_ms (int)")
+                print("  llm.control (true/false)")
+                print("  llm.global.max_concurrency (int)")
+                print("  llm.global.rate (int)")
+                print("  llm.project.max_concurrency (int)")
+                print("  llm.project.rate (int)")
+                print("  llm.acquire_timeout (int)")
+                print("  llm.request_timeout (int)")
+                print("  llm.retry_interval_ms (int)")
                 print("  agent.<agent_id>.model (model name)")
                 print("  agent.<agent_id>.context_strategy (structured_v1)")
                 print("  agent.<agent_id>.context_token_budget_total (tokens)")

@@ -48,11 +48,9 @@ def test_context_preview_no_legacy_sections():
 
         snap = client.get(f"/projects/{pid}/context/snapshot", params={"agent_id": aid, "since_intent_seq": 0})
         assert snap.status_code == 200
-        rows = list((snap.json() or {}).get("upsert_cards", []) or [])
-        assert rows
-        texts = "\n".join([str(x.get("text", "") or "") for x in rows if isinstance(x, dict)])
-        assert "[CHRONICLE]" not in texts
-        assert "# CONTEXT_INDEX" not in texts
+        payload = snap.json() or {}
+        assert payload.get("mode") == "pulse_ledger"
+        assert isinstance(payload.get("pulses"), list)
     finally:
         runtime_config.current_project = old_cur
         if old is None:
@@ -60,4 +58,3 @@ def test_context_preview_no_legacy_sections():
         else:
             runtime_config.projects[pid] = old
         shutil.rmtree(Path("projects") / pid, ignore_errors=True)
-

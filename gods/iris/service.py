@@ -11,15 +11,35 @@ from gods.iris.store import (
     list_mailbox_events,
     mark_mailbox_events_handled,
 )
-from gods.mnemosyne import load_memory_policy, record_intent, MemoryIntent
+from gods.mnemosyne import load_memory_policy
 from gods.mnemosyne.facade import (
-    intent_from_mailbox_section,
-    intent_from_inbox_read,
     intent_from_inbox_received,
-    intent_from_inbox_summary,
-    intent_from_outbox_status,
     record_inbox_digest,
 )
+
+
+def _enqueue_semantic_event(
+    *,
+    project_id: str,
+    agent_id: str,
+    event_type: str,
+    payload: dict,
+) -> None:
+    from gods.angelia import facade as angelia_facade
+
+    try:
+        weights = angelia_facade.get_priority_weights(project_id)
+        priority = int(weights.get("system", 60))
+    except Exception:
+        priority = 60
+    angelia_facade.enqueue_event(
+        project_id=project_id,
+        agent_id=agent_id,
+        event_type=event_type,
+        payload=dict(payload or {}),
+        priority=priority,
+        dedupe_key="",
+    )
 
 def _resolve_inbox_received_intent_key(project_id: str, msg_type: str) -> str:
     mt = str(msg_type or "").strip().lower()
@@ -134,16 +154,20 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
             status=OutboxReceiptStatus.DELIVERED,
         )
         for rec in updated:
-            record_intent(
-                intent_from_outbox_status(
-                    project_id=project_id,
-                    agent_id=rec.from_agent_id,
-                    to_agent_id=rec.to_agent_id,
-                    title=rec.title,
-                    message_id=rec.message_id,
-                    status=rec.status.value,
-                    attachments_count=0,
-                )
+            _enqueue_semantic_event(
+                project_id=project_id,
+                agent_id=rec.from_agent_id,
+                event_type="outbox_status_event",
+                payload={
+                    "reason": "outbox_status",
+                    "agent_id": rec.from_agent_id,
+                    "to_agent_id": rec.to_agent_id,
+                    "title": rec.title,
+                    "message_id": rec.message_id,
+                    "status": rec.status.value,
+                    "error_message": "",
+                    "attachments_count": 0,
+                },
             )
 
     lines = []
@@ -219,6 +243,34 @@ def fetch_inbox_context(project_id: str, agent_id: str, budget: int) -> tuple[st
     except Exception:
         pass
     return text, ids
+
+
+def fetch_mailbox_intents(project_id: str, agent_id: str, budget: int = 10) -> list[MemoryIntent]:
+    """Return mailbox intents for current unread/deferred events without mutating state."""
+    rows = list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.QUEUED, limit=max(1, int(budget)))
+    rows += list_mailbox_events(project_id=project_id, agent_id=agent_id, state=MailEventState.DEFERRED, limit=max(1, int(budget)))
+    rows.sort(key=lambda x: x.created_at)
+    rows = rows[-max(1, int(budget)) :]
+    out: list[MemoryIntent] = []
+    for item in rows:
+        payload = dict(item.payload or {})
+        msg_type = str(item.msg_type or "private")
+        out.append(
+            intent_from_inbox_received(
+                project_id=project_id,
+                agent_id=agent_id,
+                title=item.title,
+                sender=item.sender,
+                message_id=item.event_id,
+                content=item.content,
+                payload=payload,
+                msg_type=msg_type,
+                attachments=list(item.attachments or []),
+                intent_key=_resolve_inbox_received_intent_key(project_id, msg_type),
+                origin="external",
+            )
+        )
+    return out
 
 
 def build_inbox_overview(project_id: str, agent_id: str, budget: int = 20) -> str:
@@ -301,29 +353,36 @@ def ack_handled(project_id: str, event_ids: list[str], agent_id: str = ""):
             status=OutboxReceiptStatus.HANDLED,
         )
         for rec in updated:
-            record_intent(
-                intent_from_outbox_status(
-                    project_id=project_id,
-                    agent_id=rec.from_agent_id,
-                    to_agent_id=rec.to_agent_id,
-                    title=rec.title,
-                    message_id=rec.message_id,
-                    status=rec.status.value,
-                    attachments_count=0,
-                )
+            _enqueue_semantic_event(
+                project_id=project_id,
+                agent_id=rec.from_agent_id,
+                event_type="outbox_status_event",
+                payload={
+                    "reason": "outbox_status",
+                    "agent_id": rec.from_agent_id,
+                    "to_agent_id": rec.to_agent_id,
+                    "title": rec.title,
+                    "message_id": rec.message_id,
+                    "status": rec.status.value,
+                    "error_message": "",
+                    "attachments_count": 0,
+                },
             )
     if not agent_id:
         return
     ids = [str(x.event_id) for x in handled]
     if not ids:
         return
-    record_intent(
-        intent_from_inbox_read(
-            project_id=project_id,
-            agent_id=agent_id,
-            delivered_ids=ids,
-            count=len(ids),
-        )
+    _enqueue_semantic_event(
+        project_id=project_id,
+        agent_id=agent_id,
+        event_type="inbox_read_event",
+        payload={
+            "reason": "inbox_read_ack",
+            "agent_id": agent_id,
+            "delivered_ids": ids,
+            "count": len(ids),
+        },
     )
 
 
@@ -358,14 +417,18 @@ def mark_as_delivered(project_id: str, message_id: str):
         status=OutboxReceiptStatus.DELIVERED,
     )
     for rec in updated:
-        record_intent(
-            intent_from_outbox_status(
-                project_id=project_id,
-                agent_id=rec.from_agent_id,
-                to_agent_id=rec.to_agent_id,
-                title=rec.title,
-                message_id=rec.message_id,
-                status=rec.status.value,
-                attachments_count=0,
-            )
+        _enqueue_semantic_event(
+            project_id=project_id,
+            agent_id=rec.from_agent_id,
+            event_type="outbox_status_event",
+            payload={
+                "reason": "outbox_status",
+                "agent_id": rec.from_agent_id,
+                "to_agent_id": rec.to_agent_id,
+                "title": rec.title,
+                "message_id": rec.message_id,
+                "status": rec.status.value,
+                "error_message": "",
+                "attachments_count": 0,
+            },
         )

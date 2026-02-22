@@ -25,7 +25,7 @@ from gods.mnemosyne.policy_registry import (
     upsert_policy_rule,
     validate_memory_policy,
 )
-from gods.mnemosyne.intent_schema_registry import template_vars_for_intent
+from gods.mnemosyne.intent_schema_registry import template_vars_for_intent, validate_intent_contract
 from gods.mnemosyne.compaction import (
     ensure_compacted,
     load_chronicle_for_context,
@@ -65,6 +65,16 @@ from gods.mnemosyne.janus_snapshot import (
     validate_context_card,
     validate_card_buckets,
 )
+from gods.mnemosyne.pulse_ledger import (
+    PulseIntegrityReport,
+    append_pulse_entry,
+    append_pulse_entries,
+    discard_incomplete_frames,
+    list_pulse_entries,
+    group_pulses,
+    trim_truncated_head,
+    validate_pulse_integrity,
+)
 
 __all__ = [
     "write_entry",
@@ -91,6 +101,7 @@ __all__ = [
     "upsert_policy_rule",
     "validate_memory_policy",
     "template_vars_for_intent",
+    "validate_intent_contract",
     "ensure_compacted",
     "load_chronicle_for_context",
     "note_llm_token_io",
@@ -125,4 +136,12 @@ __all__ = [
     "CHAOS_CARD_BUCKET_KEYS",
     "validate_context_card",
     "validate_card_buckets",
+    "append_pulse_entry",
+    "append_pulse_entries",
+    "discard_incomplete_frames",
+    "list_pulse_entries",
+    "group_pulses",
+    "trim_truncated_head",
+    "validate_pulse_integrity",
+    "PulseIntegrityReport",
 ]

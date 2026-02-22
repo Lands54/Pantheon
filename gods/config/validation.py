@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 
-from gods.config.models import ProjectConfig, SystemConfig
+from gods.config.models import AgentModelConfig, ProjectConfig, SystemConfig
 from gods.identity import is_valid_agent_id
 
 logger = logging.getLogger("GodsConfig")
@@ -197,6 +197,12 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
         "metis_refresh_mode",
         project_id,
     )
+    if proj.context_strategy == "sequential_v1" and proj.metis_refresh_mode == "node":
+        logger.warning(
+            "metis_refresh_mode=node is not supported under sequential_v1 in project '%s'; coerced to 'pulse'",
+            project_id,
+        )
+        proj.metis_refresh_mode = "pulse"
 
     proj.tool_loop_max = _clamp_int(proj.tool_loop_max, 1, 64)
     proj.tool_policies = _normalize_tool_policies(
@@ -274,7 +280,18 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
         "timer": weights.get("timer", 10),
     }
 
-    for aid, settings in list((proj.agent_settings or {}).items()):
+    raw_agent_settings = dict(proj.agent_settings or {})
+    stale = [aid for aid in raw_agent_settings.keys() if aid not in set(proj.active_agents or [])]
+    if stale:
+        logger.warning(
+            "project '%s': prune %s stale agent_settings not in active_agents: %s",
+            project_id,
+            len(stale),
+            ", ".join(sorted(stale)),
+        )
+    normalized_settings: dict[str, AgentModelConfig] = {}
+    for aid in list(proj.active_agents or []):
+        settings = raw_agent_settings.get(aid) or AgentModelConfig()
         if not is_valid_agent_id(aid):
             raise ValueError(
                 f"invalid agent_settings key '{aid}' in project '{project_id}': "
@@ -305,12 +322,27 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
                 f"agent.{aid}.metis_refresh_mode",
                 project_id,
             )
+            effective_ctx = (
+                settings.context_strategy
+                if str(settings.context_strategy or "").strip()
+                else proj.context_strategy
+            )
+            if str(effective_ctx or "").strip() == "sequential_v1" and settings.metis_refresh_mode == "node":
+                logger.warning(
+                    "agent.%s.metis_refresh_mode=node is not supported under sequential_v1 in project '%s'; coerced to 'pulse'",
+                    aid,
+                    project_id,
+                )
+                settings.metis_refresh_mode = "pulse"
         settings.tool_policies = _normalize_tool_policies(
             settings.tool_policies,
             project_id=project_id,
             owner=f"agent.{aid}",
             known_tools=known_tools,
         )
+        normalized_settings[aid] = settings
+
+    proj.agent_settings = normalized_settings
 
     return proj
 

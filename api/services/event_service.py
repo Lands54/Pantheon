@@ -37,7 +37,6 @@ class EventService:
                     "domain": "unknown",
                     "title": "未登记事件",
                     "description": "该事件在运行中出现，但尚未在事件目录中登记。",
-                    "feeds_llm": None,
                     "llm_note": "未知，请补充事件目录定义。",
                 }
             )

@@ -61,7 +61,8 @@ def test_inbox_context_contains_handled_semantics_for_agent_confidence():
         agent.brain = brain
         agent.process(state)
 
-        assert "[INBOX_UNREAD]" in brain.seen
+        assert "<pulse" in brain.seen
+        assert "<event" in brain.seen
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

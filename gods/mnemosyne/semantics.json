@@ -10,7 +10,6 @@
         "replace_content",
         "insert_content",
         "run_command",
-        "run_command_detach",
         "detach_list",
         "detach_stop",
         "post_to_synod",
@@ -338,6 +337,52 @@
                 "runtime_log": "memory_event_system"
             }
         },
+        "event.outbox_status_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
+        "event.inbox_read_event": {
+            "source_kind": "event",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": false
+            },
+            "schema": {
+                "guaranteed": [
+                    "stage",
+                    "event_id",
+                    "event_type",
+                    "priority",
+                    "attempt",
+                    "max_attempts",
+                    "payload"
+                ],
+                "optional": []
+            },
+            "templates": {
+                "runtime_log": "memory_event_system"
+            }
+        },
         "phase.retry.reason": {
             "source_kind": "phase",
             "policy": {
@@ -390,6 +435,57 @@
             },
             "templates": {
                 "runtime_log": "memory_phase_retry_observe"
+            }
+        },
+        "phase.pulse.start": {
+            "source_kind": "phase",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "pulse_id",
+                    "reason",
+                    "trigger_count",
+                    "trigger_event_ids",
+                    "trigger_event_types",
+                    "base_intent_seq"
+                ],
+                "optional": [
+                    "origin"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_phase_pulse_start",
+                "llm_context": "memory_phase_pulse_start"
+            }
+        },
+        "phase.pulse.finish": {
+            "source_kind": "phase",
+            "policy": {
+                "to_chronicle": false,
+                "to_runtime_log": true,
+                "to_llm_context": true
+            },
+            "schema": {
+                "guaranteed": [
+                    "pulse_id",
+                    "next_step",
+                    "finalize_mode",
+                    "tool_call_count",
+                    "tool_result_count",
+                    "llm_text_len"
+                ],
+                "optional": [
+                    "origin",
+                    "error"
+                ]
+            },
+            "templates": {
+                "runtime_log": "memory_phase_pulse_finish",
+                "llm_context": "memory_phase_pulse_finish"
             }
         },
         "event.interaction.message.sent": {
@@ -936,6 +1032,10 @@
             "category": "policy"
         },
         "material.inbox_hint": {
+            "allow_without_intent": true,
+            "category": "mailbox"
+        },
+        "material.mailbox": {
             "allow_without_intent": true,
             "category": "mailbox"
         },

@@ -1,21 +1,33 @@
 """Reusable LangGraph nodes for agent runtime."""
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from typing import Any
 
 from langchain_core.messages import ToolMessage
 
-from gods.angelia.facade import inject_inbox_after_action_if_any
 from gods.metis.snapshot import refresh_runtime_envelope, resolve_refresh_mode
 from gods.janus import janus_service
+from gods.agents.brain import LLMInvocationError
 from gods.mnemosyne.intent_builders import (
     intent_from_agent_marker,
     intent_from_llm_response,
 )
+from gods.mnemosyne.facade import append_pulse_entry
 
 from .models import RuntimeState
+
+logger = logging.getLogger(__name__)
+
+
+def _extract_pulse_id(state: RuntimeState) -> str:
+    """Robustly extract pulse_id from state, checking both key variants."""
+    pid = str(((state.get("__pulse_meta", {}) or {}).get("pulse_id", "") or ""))
+    if not pid:
+        pid = str(((state.get("pulse_meta", {}) or {}).get("pulse_id", "") or ""))
+    return pid
 
 
 def _strategy_envelope(agent, state: RuntimeState, *, node_name: str = ""):
@@ -57,16 +69,57 @@ def build_context_node(agent, state: RuntimeState) -> RuntimeState:
 def llm_think_node(agent, state: RuntimeState) -> RuntimeState:
     env = _strategy_envelope(agent, state, node_name="llm_think")
     llm_messages = list(state.get("llm_messages_buffer", []) or [])
-    response = agent.brain.think_with_tools(
-        llm_messages,
-        agent.get_tools_for_node("llm_think"),
-        trace_meta=(env.resource_snapshot.runtime_meta or {}).get("pulse_meta", {}) if isinstance(state, dict) else {},
-    )
+    try:
+        response = agent.brain.think_with_tools(
+            llm_messages,
+            agent.get_tools_for_node("llm_think"),
+            trace_meta=(env.resource_snapshot.runtime_meta or {}).get("pulse_meta", {}) if isinstance(state, dict) else {},
+        )
+    except LLMInvocationError as exc:
+        logger.error(
+            "LLM_INVOKE_SUPPRESSED: agent=%s project=%s pulse=%s err=%s",
+            agent.agent_id,
+            agent.project_id,
+            _extract_pulse_id(state),
+            exc,
+        )
+        state["tool_calls"] = []
+        state["next_step"] = "continue"
+        state["route"] = "done"
+        return state
     state.setdefault("messages", []).append(response)
     raw_content = response.content
     content_text = str(raw_content or "").strip()
+    pulse_id = _extract_pulse_id(state)
     # Tool-only turns may legitimately have empty assistant text; skip llm.response intent in that case.
     if content_text and (not agent._is_transient_llm_error_text(content_text)):
+        if not pulse_id:
+            logger.warning(
+                "PULSE_LEDGER_SKIP: llm.response skipped because pulse_id is empty "
+                "(agent=%s, project=%s). State keys: %s",
+                agent.agent_id, agent.project_id,
+                list(state.keys()) if isinstance(state, dict) else "non-dict",
+            )
+        else:
+            try:
+                append_pulse_entry(
+                    agent.project_id,
+                    agent.agent_id,
+                    pulse_id=pulse_id,
+                    kind="llm.response",
+                    payload={
+                        "content": content_text,
+                        "phase": str(env.strategy or state.get("strategy", "react_graph")),
+                        "anchor_seq": int(state.get("__chaos_synced_seq", 0) or 0),
+                    },
+                    origin="internal",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "PULSE_LEDGER_WRITE_FAIL: llm.response write failed "
+                    "(agent=%s, project=%s, pulse_id=%s): %s",
+                    agent.agent_id, agent.project_id, pulse_id, exc,
+                )
         agent._record_intent(
             intent_from_llm_response(
                 project_id=agent.project_id,
@@ -74,6 +127,8 @@ def llm_think_node(agent, state: RuntimeState) -> RuntimeState:
                 phase=str(env.strategy or state.get("strategy", "react_graph")),
                 content=content_text,
                 anchor_seq=int(state.get("__chaos_synced_seq", 0) or 0),
+                pulse_id=pulse_id,
+                origin="internal",
             )
         )
     state["tool_calls"] = list(getattr(response, "tool_calls", []) or [])
@@ -84,11 +139,17 @@ def dispatch_tools_node(agent, state: RuntimeState) -> RuntimeState:
     _ = _strategy_envelope(agent, state, node_name="dispatch_tools")
     calls = list(state.get("tool_calls", []) or [])
     results: list[str] = []
+    pulse_id = _extract_pulse_id(state)
     for call in calls:
         tool_name = str(call.get("name", "") or "")
         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
         tool_call_id = call.get("id") or f"{tool_name}_{uuid.uuid4().hex[:8]}"
-        obs = agent.execute_tool(tool_name, args, node_name="dispatch_tools")
+        obs = agent.execute_tool(
+            tool_name,
+            args,
+            node_name="dispatch_tools",
+            pulse_id=pulse_id,
+        )
         results.append(str(obs))
         state.setdefault("messages", []).append(
             ToolMessage(content=str(obs), tool_call_id=tool_call_id, name=tool_name)
@@ -107,16 +168,6 @@ def dispatch_tools_node(agent, state: RuntimeState) -> RuntimeState:
             state["finalize_control"] = agent._finalize_control_from_args(args)
             state["next_step"] = "finish"
             break
-        injected = inject_inbox_after_action_if_any(state, agent.project_id, agent.agent_id)
-        if injected > 0:
-            agent._record_intent(
-                intent_from_agent_marker(
-                    project_id=agent.project_id,
-                    agent_id=agent.agent_id,
-                    marker="event_injected",
-                    payload={"count": int(injected)},
-                )
-            )
     state["tool_results"] = results
     return state
 

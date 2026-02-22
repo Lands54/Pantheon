@@ -36,6 +36,9 @@ _LEGACY_INTENT_KEY_MAP: dict[str, str] = {
     "tool.list_dir.ok": "tool.list.ok",
     "tool.list_dir.error": "tool.list.error",
     "tool.list_dir.blocked": "tool.list.blocked",
+    "tool.run_command_detach.ok": "tool.run_command.ok",
+    "tool.run_command_detach.error": "tool.run_command.error",
+    "tool.run_command_detach.blocked": "tool.run_command.blocked",
 }
 
 
@@ -145,8 +148,22 @@ def ensure_memory_policy(project_id: str) -> Path:
     raw = _load_raw_policy(path, project_id=project_id)
     changed = False
     
-    # Prune legacy keys or add missing ones based on semantics.json
+    # Migrate known legacy keys first.
+    for legacy_key, new_key in _LEGACY_INTENT_KEY_MAP.items():
+        if legacy_key not in raw:
+            continue
+        if new_key in default_payload and new_key not in raw and isinstance(raw.get(legacy_key), dict):
+            raw[new_key] = _normalize_rule(raw[legacy_key], intent_key=legacy_key, project_id=project_id)
+        raw.pop(legacy_key, None)
+        changed = True
+
+    # Prune unknown keys and add missing ones based on semantics.json
     required_keys = set(default_payload.keys())
+    unknown_keys = [k for k in list(raw.keys()) if k not in required_keys]
+    for k in unknown_keys:
+        raw.pop(k, None)
+        changed = True
+
     for k in required_keys:
         if k not in raw:
             raw[k] = default_payload[k]

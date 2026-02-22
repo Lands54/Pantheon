@@ -503,7 +503,7 @@ def _prepare_tool_prompt(project_id: str, agent_id: str, tool_name: str) -> str:
         "list": base + " 参数: {path:'.'}。",
         "validate_path": base + " 参数: {path:'bench.txt'}。",
         "run_command": base + " 参数: {command:'python -c \"print(123)\"'}。",
-        "run_command_detach": base + " 参数: {command:'python sleeper.py'}。",
+        "run_command_detach": base + " 参数: {command:'python sleeper.py', detach:true}。",
         "detach_list": base + " 参数: {limit:20}。",
         "detach_stop": base + " 参数: {job_id:'__JOB_ID__'}。",
         "call_protocol": base + " 参数: {name:'health_check', payload_json:'{}', mode:'sync'}。",
@@ -554,7 +554,7 @@ def _prepare_tool_preconditions(project_id: str, agent_id: str, tool_name: str) 
             trigger_pulse=False,
             pulse_priority=100,
         )
-    if tool_name in {"run_command_detach", "detach_stop"}:
+    if tool_name in {"run_command", "run_command_detach", "detach_stop"}:
         p = Path("projects") / project_id / "agents" / agent_id / "sleeper.py"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("import time\nfor _ in range(60):\n    time.sleep(1)\n", encoding="utf-8")

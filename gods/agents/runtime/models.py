@@ -29,3 +29,8 @@ class RuntimeState(TypedDict, total=False):
     __metis_envelope: Any
     __metis_refresh_mode: str
     __metis_refresh_seq: int
+    # Pulse lifecycle keys injected by Angelia worker / engine.
+    # These MUST be declared so LangGraph preserves them across node transitions.
+    __pulse_meta: dict[str, Any]
+    __chaos_synced_seq: int
+    __inbox_delivered_ids: list[str]

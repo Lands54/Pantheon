@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 import gods.agents.llm_control as llm_control
-from gods.agents.brain import GodBrain
+from gods.agents.brain import GodBrain, LLMInvocationError
 from gods.config import AgentModelConfig, ProjectConfig, runtime_config
 from langchain_core.messages import HumanMessage
 
@@ -63,7 +63,7 @@ def test_llm_control_plane_rate_timeout_with_fake_clock(monkeypatch):
         runtime_config.projects = old_projects
 
 
-def test_brain_returns_error_when_llm_control_timeout(monkeypatch):
+def test_brain_raises_when_llm_control_timeout(monkeypatch):
     project_id = "unit_brain_llm_control_timeout"
     agent_id = "tester"
     old_projects = runtime_config.projects.copy()
@@ -80,7 +80,7 @@ def test_brain_returns_error_when_llm_control_timeout(monkeypatch):
         "acquire",
         lambda project_id: (_ for _ in ()).throw(llm_control.LLMControlAcquireTimeout("timeout")),
     )
-    out = brain.think_with_tools([HumanMessage(content="hello")], tools=[])
-    assert "timeout" in str(out.content)
+    with pytest.raises(LLMInvocationError, match="timeout"):
+        brain.think_with_tools([HumanMessage(content="hello")], tools=[])
     runtime_config.openrouter_api_key = old_key
     runtime_config.projects = old_projects

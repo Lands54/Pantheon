@@ -50,8 +50,8 @@ def test_structured_v1_recent_messages_not_fixed_eight():
         }
         agent.process(state)
         assert brain.last_recent_count == 0
-        assert "# CARD_CONTEXT" in brain.last_system_text
-        assert "[STATE_WINDOW]" not in brain.last_system_text
+        assert "<context>" in brain.last_system_text
+        assert "<pulse" in brain.last_system_text
     finally:
         if old is None:
             runtime_config.projects.pop(project_id, None)

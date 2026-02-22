@@ -9,7 +9,14 @@ from typing import Any
 from gods.mnemosyne.contracts import MemoryIntent
 
 
-def intent_from_angelia_event(event: Any, stage: str, extra_payload: dict[str, Any] | None = None) -> MemoryIntent:
+def intent_from_angelia_event(
+    event: Any,
+    stage: str,
+    extra_payload: dict[str, Any] | None = None,
+    *,
+    pulse_id: str = "",
+    origin: str = "",
+) -> MemoryIntent:
     event_type = str(getattr(event, "event_type", "system") or "system")
     payload = {
         "stage": str(stage or "processing"),
@@ -22,6 +29,10 @@ def intent_from_angelia_event(event: Any, stage: str, extra_payload: dict[str, A
     }
     if extra_payload:
         payload.update(extra_payload)
+    if pulse_id:
+        payload["pulse_id"] = str(pulse_id)
+    if origin:
+        payload["origin"] = str(origin)
     reason = str(payload.get("payload", {}).get("reason") or event_type)
     return MemoryIntent(
         intent_key=f"event.{event_type}",
@@ -43,6 +54,8 @@ def intent_from_tool_result(
     result: str,
     *,
     call_id: str = "",
+    pulse_id: str = "",
+    origin: str = "",
 ) -> MemoryIntent:
     st = str(status or "ok").strip().lower()
     if st not in {"ok", "blocked", "error"}:
@@ -50,19 +63,24 @@ def intent_from_tool_result(
     tn = str(tool_name or "unknown").strip()
     raw_result = str(result or "")
     compact = _compact_tool_result(raw_result)
+    pld = {
+        "tool_name": tn,
+        "status": st,
+        "args": args or {},
+        "call_id": str(call_id or "").strip(),
+        "result": raw_result,
+        "result_compact": compact,
+    }
+    if pulse_id:
+        pld["pulse_id"] = str(pulse_id)
+    if origin:
+        pld["origin"] = str(origin)
     return MemoryIntent(
         intent_key=f"tool.{tn}.{st}",
         project_id=project_id,
         agent_id=agent_id,
         source_kind="tool",
-        payload={
-            "tool_name": tn,
-            "status": st,
-            "args": args or {},
-            "call_id": str(call_id or "").strip(),
-            "result": raw_result,
-            "result_compact": compact,
-        },
+        payload=pld,
         fallback_text=f"[[ACTION]] {tn} ({st}) -> {result}",
         timestamp=time.time(),
     )
@@ -76,21 +94,28 @@ def intent_from_tool_call(
     *,
     node_name: str = "",
     call_id: str = "",
+    pulse_id: str = "",
+    origin: str = "",
 ) -> MemoryIntent:
     tn = str(tool_name or "unknown").strip()
     cid = str(call_id or "").strip() or f"call_{uuid.uuid4().hex[:16]}"
     node = str(node_name or "").strip()
+    pld = {
+        "tool_name": tn,
+        "args": args or {},
+        "call_id": cid,
+        "node": node,
+    }
+    if pulse_id:
+        pld["pulse_id"] = str(pulse_id)
+    if origin:
+        pld["origin"] = str(origin)
     return MemoryIntent(
         intent_key=f"tool.call.{tn}",
         project_id=project_id,
         agent_id=agent_id,
         source_kind="tool",
-        payload={
-            "tool_name": tn,
-            "args": args or {},
-            "call_id": cid,
-            "node": node,
-        },
+        payload=pld,
         fallback_text=f"[[ACTION_CALL]] {tn} id={cid} node={node or '-'} args={args or {}}",
         timestamp=time.time(),
     )
@@ -119,15 +144,96 @@ def intent_from_llm_response(
     content: str,
     *,
     anchor_seq: int = 0,
+    pulse_id: str = "",
+    origin: str = "",
 ) -> MemoryIntent:
     anchor = int(anchor_seq or 0)
+    pld = {"phase": str(phase or ""), "content": str(content or ""), "anchor_seq": anchor}
+    if pulse_id:
+        pld["pulse_id"] = str(pulse_id)
+    if origin:
+        pld["origin"] = str(origin)
     return MemoryIntent(
         intent_key="llm.response",
         project_id=project_id,
         agent_id=agent_id,
         source_kind="llm",
-        payload={"phase": str(phase or ""), "content": str(content or ""), "anchor_seq": anchor},
+        payload=pld,
         fallback_text=str(content or "[No textual response]"),
+        timestamp=time.time(),
+    )
+
+
+def intent_from_pulse_start(
+    project_id: str,
+    agent_id: str,
+    *,
+    pulse_id: str,
+    reason: str,
+    trigger_event_ids: list[str] | None = None,
+    trigger_event_types: list[str] | None = None,
+    trigger_count: int = 0,
+    base_intent_seq: int = 0,
+    origin: str = "internal",
+) -> MemoryIntent:
+    ids = [str(x).strip() for x in list(trigger_event_ids or []) if str(x).strip()]
+    types = [str(x).strip() for x in list(trigger_event_types or []) if str(x).strip()]
+    pld = {
+        "pulse_id": str(pulse_id or ""),
+        "reason": str(reason or ""),
+        "trigger_count": int(max(0, int(trigger_count or 0))),
+        "trigger_event_ids": ids,
+        "trigger_event_types": types,
+        "base_intent_seq": int(max(0, int(base_intent_seq or 0))),
+        "origin": str(origin or "internal"),
+    }
+    return MemoryIntent(
+        intent_key="phase.pulse.start",
+        project_id=project_id,
+        agent_id=agent_id,
+        source_kind="phase",
+        payload=pld,
+        fallback_text=(
+            f"[PULSE_START] pulse_id={pld['pulse_id']} reason={pld['reason']} "
+            f"triggers={pld['trigger_count']} base_seq={pld['base_intent_seq']}"
+        ),
+        timestamp=time.time(),
+    )
+
+
+def intent_from_pulse_finish(
+    project_id: str,
+    agent_id: str,
+    *,
+    pulse_id: str,
+    next_step: str,
+    finalize_mode: str,
+    tool_call_count: int,
+    tool_result_count: int,
+    llm_text_len: int,
+    origin: str = "internal",
+    error: str = "",
+) -> MemoryIntent:
+    pld = {
+        "pulse_id": str(pulse_id or ""),
+        "next_step": str(next_step or ""),
+        "finalize_mode": str(finalize_mode or ""),
+        "tool_call_count": int(max(0, int(tool_call_count or 0))),
+        "tool_result_count": int(max(0, int(tool_result_count or 0))),
+        "llm_text_len": int(max(0, int(llm_text_len or 0))),
+        "origin": str(origin or "internal"),
+        "error": str(error or ""),
+    }
+    return MemoryIntent(
+        intent_key="phase.pulse.finish",
+        project_id=project_id,
+        agent_id=agent_id,
+        source_kind="phase",
+        payload=pld,
+        fallback_text=(
+            f"[PULSE_FINISH] pulse_id={pld['pulse_id']} next_step={pld['next_step']} "
+            f"finalize={pld['finalize_mode']} tools={pld['tool_call_count']}/{pld['tool_result_count']}"
+        ),
         timestamp=time.time(),
     )
 
@@ -156,21 +262,28 @@ def intent_from_inbox_received(
     payload: dict[str, Any] | None = None,
     msg_type: str = "",
     intent_key: str = "inbox.received.unread",
+    pulse_id: str = "",
+    origin: str = "",
 ) -> MemoryIntent:
+    pld = {
+        "title": title,
+        "sender": sender,
+        "message_id": message_id,
+        "msg_type": str(msg_type or ""),
+        "content": str(content or ""),
+        "attachments": [str(x).strip() for x in list(attachments or []) if str(x).strip()],
+        "payload": payload or {},
+    }
+    if pulse_id:
+        pld["pulse_id"] = str(pulse_id)
+    if origin:
+        pld["origin"] = str(origin)
     return MemoryIntent(
         intent_key=str(intent_key or "inbox.received.unread"),
         project_id=project_id,
         agent_id=agent_id,
         source_kind="inbox",
-        payload={
-            "title": title,
-            "sender": sender,
-            "message_id": message_id,
-            "msg_type": str(msg_type or ""),
-            "content": str(content or ""),
-            "attachments": [str(x).strip() for x in list(attachments or []) if str(x).strip()],
-            "payload": payload or {},
-        },
+        payload=pld,
         fallback_text=(
             f"[INBOX_UNREAD] title={title} from={sender} id={message_id} "
             f"attachments={len([str(x).strip() for x in list(attachments or []) if str(x).strip()])}\n"
@@ -229,6 +342,7 @@ def intent_from_outbox_status(
     status: str,
     error_message: str = "",
     attachments_count: int = 0,
+    origin: str = "",
 ) -> MemoryIntent:
     st = str(status or "").strip().lower()
     if st not in {"pending", "delivered", "handled", "failed"}:
@@ -241,6 +355,8 @@ def intent_from_outbox_status(
         "error_message": str(error_message or ""),
         "attachments_count": int(max(0, int(attachments_count or 0))),
     }
+    if origin:
+        payload["origin"] = str(origin)
     return MemoryIntent(
         intent_key=f"outbox.sent.{st}",
         project_id=project_id,

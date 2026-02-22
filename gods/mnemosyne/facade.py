@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from gods.mnemosyne import (
     VALID_VAULTS,
+    MemoryIntent,
     list_entries,
     read_entry,
     write_entry,
@@ -55,6 +56,16 @@ from gods.mnemosyne.janus_snapshot import (
     validate_context_card,
     validate_card_buckets,
 )
+from gods.mnemosyne.pulse_ledger import (
+    PulseIntegrityReport,
+    append_pulse_entry,
+    append_pulse_entries,
+    discard_incomplete_frames,
+    list_pulse_entries,
+    group_pulses,
+    trim_truncated_head,
+    validate_pulse_integrity,
+)
 from gods.mnemosyne.intent_builders import (
     intent_from_angelia_event,
     intent_from_mailbox_section,
@@ -65,7 +76,27 @@ from gods.mnemosyne.intent_builders import (
     intent_from_tool_call,
     intent_from_tool_result,
     intent_from_janus_compaction_base,
+    intent_from_pulse_finish,
+    intent_from_pulse_start,
 )
+from gods.mnemosyne.intent_schema_registry import validate_intent_contract
+
+
+def memory_intent_from_row(row: dict[str, Any]) -> MemoryIntent | None:
+    if not isinstance(row, dict):
+        return None
+    try:
+        return MemoryIntent(
+            intent_key=str(row.get("intent_key", "") or "").strip(),
+            project_id=str(row.get("project_id", "") or "").strip(),
+            agent_id=str(row.get("agent_id", "") or "").strip(),
+            source_kind=str(row.get("source_kind", "agent") or "agent"),  # type: ignore[arg-type]
+            payload=dict(row.get("payload", {}) or {}),
+            fallback_text=str(row.get("fallback_text", "") or ""),
+            timestamp=float(row.get("timestamp", 0.0) or 0.0),
+        )
+    except Exception:
+        return None
 
 
 def render_intents_for_llm(intents: list[Any]) -> list[str]:
@@ -108,6 +139,8 @@ __all__ = [
     "intent_from_inbox_summary",
     "intent_from_outbox_status",
     "intent_from_janus_compaction_base",
+    "intent_from_pulse_start",
+    "intent_from_pulse_finish",
     "record_janus_compaction_base_intent",
     "render_intents_for_llm",
     "load_chronicle_for_context",
@@ -151,4 +184,14 @@ __all__ = [
     "validate_context_card",
     "validate_card_buckets",
     "fetch_intents_between",
+    "append_pulse_entry",
+    "append_pulse_entries",
+    "discard_incomplete_frames",
+    "list_pulse_entries",
+    "group_pulses",
+    "trim_truncated_head",
+    "validate_pulse_integrity",
+    "PulseIntegrityReport",
+    "validate_intent_contract",
+    "memory_intent_from_row",
 ]

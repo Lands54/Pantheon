@@ -24,7 +24,7 @@ def test_health_check():
     assert "version" in data
 
 
-def test_events_catalog_contains_llm_flag():
+def test_events_catalog_contains_event_description():
     response = client.get("/events/catalog")
     assert response.status_code == 200
     data = response.json()
@@ -32,7 +32,6 @@ def test_events_catalog_contains_llm_flag():
     items = data.get("items", [])
     row = next((x for x in items if x.get("event_type") == "interaction.message.sent"), None)
     assert row is not None
-    assert row.get("feeds_llm") is False
     assert "description" in row
 
 

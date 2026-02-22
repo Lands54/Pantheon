@@ -1,6 +1,7 @@
 """Themis orchestrator: tool policy resolution and execution."""
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from pathlib import Path
@@ -8,9 +9,12 @@ from typing import Any, Callable
 
 from gods.agents.runtime_policy import resolve_phase_strategy
 from gods.config import runtime_config
+from gods.mnemosyne.facade import append_pulse_entry
 from gods.mnemosyne.intent_builders import intent_from_tool_call, intent_from_tool_result
 from gods.tools import GODS_TOOLS
 from gods.tools.communication import reset_inbox_guard
+
+logger = logging.getLogger(__name__)
 
 
 class ThemisOrchestrator:
@@ -152,7 +156,7 @@ class ThemisOrchestrator:
             items.append(f"- [[{t.name}({', '.join(t.args)})]]: {t.description}")
         return "\n".join(items)
 
-    def execute_tool(self, name: str, args: dict, node_name: str = "") -> str:
+    def execute_tool(self, name: str, args: dict, node_name: str = "", pulse_id: str = "") -> str:
         path_aware_tools = {
             "read",
             "write_file",
@@ -170,10 +174,44 @@ class ThemisOrchestrator:
                 return msg
             return f"[Current CWD: {self.agent_dir.resolve()}] Content: {msg}"
 
+        def append_ledger(kind: str, payload: dict[str, Any]) -> None:
+            pid = str(pulse_id or "").strip()
+            if not pid:
+                logger.warning(
+                    "PULSE_LEDGER_SKIP: %s skipped because pulse_id is empty "
+                    "(agent=%s, tool=%s)",
+                    kind, self.agent_id, name,
+                )
+                return
+            try:
+                append_pulse_entry(
+                    self.project_id,
+                    self.agent_id,
+                    pulse_id=pid,
+                    kind=kind,  # type: ignore[arg-type]
+                    payload=payload,
+                    origin="internal",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "PULSE_LEDGER_WRITE_FAIL: %s write failed "
+                    "(agent=%s, pulse_id=%s): %s",
+                    kind, self.agent_id, pid, exc,
+                )
+
         invoke_args = dict(args or {})
         invoke_args["caller_id"] = self.agent_id
         invoke_args["project_id"] = self.project_id
         call_id = f"call_{uuid.uuid4().hex[:16]}"
+        append_ledger(
+            "tool.call",
+            {
+                "tool_name": str(name or ""),
+                "args": dict(invoke_args or {}),
+                "call_id": call_id,
+                "node": str(node_name or "dispatch_tools"),
+            },
+        )
         self._intent_recorder(
             intent_from_tool_call(
                 project_id=self.project_id,
@@ -182,6 +220,8 @@ class ThemisOrchestrator:
                 args=invoke_args,
                 node_name=node_name or "dispatch_tools",
                 call_id=call_id,
+                pulse_id=str(pulse_id or ""),
+                origin="internal",
             )
         )
 
@@ -203,7 +243,19 @@ class ThemisOrchestrator:
                         invoke_args,
                         blocked,
                         call_id=call_id,
+                        pulse_id=str(pulse_id or ""),
+                        origin="internal",
                     )
+                )
+                append_ledger(
+                    "tool.result",
+                    {
+                        "tool_name": str(name or ""),
+                        "status": "blocked",
+                        "args": dict(invoke_args or {}),
+                        "result": str(blocked),
+                        "call_id": call_id,
+                    },
                 )
                 return blocked
 
@@ -222,7 +274,19 @@ class ThemisOrchestrator:
                     invoke_args,
                     blocked,
                     call_id=call_id,
+                    pulse_id=str(pulse_id or ""),
+                    origin="internal",
                 )
+            )
+            append_ledger(
+                "tool.result",
+                {
+                    "tool_name": str(name or ""),
+                    "status": "blocked",
+                    "args": dict(invoke_args or {}),
+                    "result": str(blocked),
+                    "call_id": call_id,
+                },
             )
             return blocked
         for tool_func in self.get_tools_for_node(node_name or "dispatch_tools"):
@@ -245,7 +309,19 @@ class ThemisOrchestrator:
                         invoke_args,
                         str(result),
                         call_id=call_id,
+                        pulse_id=str(pulse_id or ""),
+                        origin="internal",
                     )
+                )
+                append_ledger(
+                    "tool.result",
+                    {
+                        "tool_name": str(name or ""),
+                        "status": str(status or ""),
+                        "args": dict(invoke_args or {}),
+                        "result": str(result),
+                        "call_id": call_id,
+                    },
                 )
                 return str(result)
             except Exception as e:
@@ -263,7 +339,19 @@ class ThemisOrchestrator:
                         invoke_args,
                         err,
                         call_id=call_id,
+                        pulse_id=str(pulse_id or ""),
+                        origin="internal",
                     )
+                )
+                append_ledger(
+                    "tool.result",
+                    {
+                        "tool_name": str(name or ""),
+                        "status": "error",
+                        "args": dict(invoke_args or {}),
+                        "result": str(err),
+                        "call_id": call_id,
+                    },
                 )
                 return err
 
@@ -282,6 +370,18 @@ class ThemisOrchestrator:
                 invoke_args,
                 unknown,
                 call_id=call_id,
+                pulse_id=str(pulse_id or ""),
+                origin="internal",
             )
+        )
+        append_ledger(
+            "tool.result",
+            {
+                "tool_name": str(name or ""),
+                "status": "error",
+                "args": dict(invoke_args or {}),
+                "result": str(unknown),
+                "call_id": call_id,
+            },
         )
         return unknown

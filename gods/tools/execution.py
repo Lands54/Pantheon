@@ -4,6 +4,7 @@ Command execution with scoped capabilities and runtime safeguards.
 """
 from __future__ import annotations
 
+import json
 import shlex
 import threading
 from pathlib import Path
@@ -13,6 +14,7 @@ from langchain_core.tools import tool
 
 from gods.config import runtime_config
 from gods.runtime.execution_backend import ExecutionLimits, resolve_execution_backend
+from gods.runtime.detach import DetachError as RuntimeDetachError, submit as detach_submit
 from .filesystem import validate_path
 
 
@@ -176,8 +178,27 @@ def _get_agent_lock(project_id: str, caller_id: str) -> threading.Lock:
 
 
 @tool
-def run_command(command: str, caller_id: str = "default", project_id: str = "default") -> str:
-    """Run an approved command within your project territory, with resource and concurrency limits."""
+def run_command(command: str, caller_id: str = "default", project_id: str = "default", detach: bool = False) -> str:
+    """Run an approved command within your project territory (detach=true submits background job)."""
+    if bool(detach):
+        try:
+            res = detach_submit(project_id=project_id, agent_id=caller_id, command=str(command or ""))
+            return json.dumps(res, ensure_ascii=False)
+        except Exception as e:
+            if isinstance(e, RuntimeDetachError):
+                return _format_exec_error(
+                    None,
+                    "Detach Error",
+                    f"[{e.code}] {e.message}",
+                    "Check detach policy/backend or command safety, then retry.",
+                )
+            return _format_exec_error(
+                None,
+                "Detach Error",
+                str(e),
+                "Check detach policy/backend or command safety, then retry.",
+            )
+
     if _has_forbidden_shell_syntax(command):
         return _format_exec_error(
             None,

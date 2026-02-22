@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 from gods.events.models import EventRecord, EventState
 from gods.events.enqueue_hooks import dispatch_enqueue_hooks
 from gods.paths import runtime_dir, runtime_locks_dir
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_TRANSITIONS: dict[EventState, set[EventState]] = {
     EventState.QUEUED: {
@@ -62,15 +65,28 @@ def _read_rows(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     out: list[dict[str, Any]] = []
-    with open(path, "r", encoding="utf-8") as f:
+    bad_decode = 0
+    bad_json = 0
+    # Be tolerant to occasional partial/corrupt bytes from interrupted writes.
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
+            if "\ufffd" in line:
+                bad_decode += 1
             line = line.strip()
             if not line:
                 continue
             try:
                 out.append(json.loads(line))
             except Exception:
+                bad_json += 1
                 continue
+    if bad_decode or bad_json:
+        logger.warning(
+            "EVENT_STORE_READ_TOLERANT: path=%s bad_decode_lines=%s bad_json_lines=%s",
+            str(path),
+            bad_decode,
+            bad_json,
+        )
     return out
 
 
@@ -104,6 +120,29 @@ def _with_lock(project_id: str, mutator):
     if last_err is not None:
         raise last_err
     raise RuntimeError("events lock failed unexpectedly")
+
+
+def _read_rows_with_lock(project_id: str) -> list[dict[str, Any]]:
+    """Read events.jsonl under the same lock used by mutating paths."""
+    last_err: Exception | None = None
+    for _ in range(3):
+        try:
+            lp = lock_path(project_id)
+            lp.touch(exist_ok=True)
+            ep = events_path(project_id)
+            with open(lp, "r+", encoding="utf-8") as lf:
+                fcntl.flock(lf, fcntl.LOCK_SH)
+                try:
+                    return _read_rows(ep)
+                finally:
+                    fcntl.flock(lf, fcntl.LOCK_UN)
+        except (FileNotFoundError, FileExistsError, OSError) as e:
+            last_err = e
+            time.sleep(0.01)
+            continue
+    if last_err is not None:
+        raise last_err
+    return _read_rows(events_path(project_id))
 
 
 def append_event(record: EventRecord, dedupe_window_sec: int = 0) -> EventRecord:
@@ -146,7 +185,7 @@ def list_events(
     limit: int = 100,
     agent_id: str = "",
 ) -> list[EventRecord]:
-    rows = _read_rows(events_path(project_id))
+    rows = _read_rows_with_lock(project_id)
     out: list[EventRecord] = []
     for row in rows:
         if domain and str(row.get("domain", "")) != domain:

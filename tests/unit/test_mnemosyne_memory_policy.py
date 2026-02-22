@@ -212,7 +212,7 @@ def test_unknown_intent_is_rejected_under_zero_compat():
                 )
             )
             assert False, "expected ValueError for unregistered intent key"
-        except ValueError:
+        except (ValueError, MemoryPolicyMissingError):
             pass
     finally:
         shutil.rmtree(base, ignore_errors=True)

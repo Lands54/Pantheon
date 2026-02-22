@@ -8,6 +8,7 @@ import shutil
 from gods.tools.filesystem import validate_path
 from gods.tools.filesystem import list
 from gods.tools.filesystem import read, write_file
+from gods.tools.execution import run_command
 from gods.tools.hermes import register_contract, list_contracts
 from gods.config import runtime_config, ProjectConfig
 from gods.iris.facade import enqueue_message
@@ -361,3 +362,111 @@ def test_read_and_list_contract_virtual_paths():
         proj_dir = Path("projects") / project_id
         if proj_dir.exists():
             shutil.rmtree(proj_dir)
+
+
+def test_list_and_read_detach_virtual_paths(monkeypatch):
+    project_id = "unit_detach_virtual_paths"
+    caller_id = "alpha"
+    (Path("projects") / project_id / "agents" / caller_id).mkdir(parents=True, exist_ok=True)
+    fake_items = [
+        {
+            "job_id": "job_1",
+            "agent_id": caller_id,
+            "status": "running",
+            "created_at": 100.0,
+            "command": "python app.py",
+        },
+        {
+            "job_id": "job_2",
+            "agent_id": caller_id,
+            "status": "failed",
+            "created_at": 90.0,
+            "command": "pytest -q",
+        },
+    ]
+
+    from gods.tools import filesystem as fs_mod
+
+    monkeypatch.setattr(
+        fs_mod.runtime_facade,
+        "detach_list_for_api",
+        lambda project_id, agent_id="", status="", limit=50: {
+            "project_id": project_id,
+            "items": [x for x in fake_items if (not status or x["status"] == status)],
+        },
+    )
+    monkeypatch.setattr(
+        fs_mod.runtime_facade,
+        "detach_get_logs",
+        lambda project_id, job_id: {
+            "project_id": project_id,
+            "job_id": job_id,
+            "tail": "line1\nline2\nline3",
+        },
+    )
+
+    out_list = list.invoke(
+        {"path": "detach://jobs", "caller_id": caller_id, "project_id": project_id, "page_size": 10, "page": 1}
+    )
+    assert "[DETACH:jobs]" in out_list
+    assert "job_1" in out_list and "job_2" in out_list
+
+    out_read = read.invoke(
+        {"path": "detach://job_1", "caller_id": caller_id, "project_id": project_id, "start": 2, "end": 3}
+    )
+    assert "[READ_DETACH_LOG]" in out_read
+    assert "job_id: job_1" in out_read
+    assert "line2" in out_read and "line3" in out_read
+    assert "line1" not in out_read
+
+
+def test_read_detach_virtual_path_blocks_non_owner(monkeypatch):
+    project_id = "unit_detach_virtual_forbidden"
+    caller_id = "alpha"
+    (Path("projects") / project_id / "agents" / caller_id).mkdir(parents=True, exist_ok=True)
+
+    from gods.tools import filesystem as fs_mod
+
+    monkeypatch.setattr(
+        fs_mod.runtime_facade,
+        "detach_list_for_api",
+        lambda project_id, agent_id="", status="", limit=50: {"project_id": project_id, "items": []},
+    )
+    monkeypatch.setattr(
+        fs_mod.runtime_facade,
+        "detach_get_logs",
+        lambda project_id, job_id: {"project_id": project_id, "job_id": job_id, "tail": "should_not_be_seen"},
+    )
+
+    out = read.invoke(
+        {"path": "detach://other_job", "caller_id": caller_id, "project_id": project_id, "start": 1, "end": 0}
+    )
+    assert "Permission Error" in out
+    assert "not owned by caller" in out
+
+
+def test_run_command_with_detach_flag_submits_background_job(monkeypatch):
+    from gods.tools import execution as exec_mod
+
+    monkeypatch.setattr(
+        exec_mod,
+        "detach_submit",
+        lambda project_id, agent_id, command: {
+            "ok": True,
+            "job_id": "job_det_1",
+            "status": "queued",
+            "project_id": project_id,
+            "agent_id": agent_id,
+            "command": command,
+        },
+    )
+    out = run_command.invoke(
+        {
+            "command": "python app.py",
+            "caller_id": "alpha",
+            "project_id": "unit_cmd_detach",
+            "detach": True,
+        }
+    )
+    assert '"ok": true' in out.lower()
+    assert "job_det_1" in out

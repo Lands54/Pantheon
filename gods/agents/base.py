@@ -78,8 +78,8 @@ class GodAgent:
     def _finalize_control_from_args(args: dict) -> dict:
         return ThemisOrchestrator.finalize_control_from_args(args)
 
-    def execute_tool(self, name: str, args: dict, node_name: str = "") -> str:
-        return self.themis.execute_tool(name, args, node_name=node_name)
+    def execute_tool(self, name: str, args: dict, node_name: str = "", pulse_id: str = "") -> str:
+        return self.themis.execute_tool(name, args, node_name=node_name, pulse_id=pulse_id)
 
 
 

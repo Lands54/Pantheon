@@ -18,7 +18,7 @@ class _FakeBrain:
         return AIMessage(content="done", tool_calls=[])
 
 
-def test_context_snapshot_incremental_card_only():
+def test_context_snapshot_incremental_pulse_ledger():
     pid = "it_context_snapshot_incremental_card_only"
     aid = "alpha"
     agent_dir = Path("projects") / pid / "agents" / aid
@@ -51,21 +51,20 @@ def test_context_snapshot_incremental_card_only():
         assert full.status_code == 200
         d0 = full.json()
         assert d0.get("available") is True
-        assert d0.get("mode") == "full"
-        cards = list(d0.get("upsert_cards", []) or [])
-        assert cards
-        assert all("card_id" in c and "kind" in c and "text" in c for c in cards)
-        assert "chronicle" not in d0
-        assert "context_index_rendered" not in d0
+        assert d0.get("mode") == "pulse_ledger"
+        entries = list(d0.get("entries", []) or [])
+        pulses = list(d0.get("pulses", []) or [])
+        assert entries
+        assert pulses
 
-        base = int(d0.get("base_intent_seq", 0) or 0)
+        base = int(d0.get("base_seq", 0) or 0)
         delta = client.get(f"/projects/{pid}/context/snapshot", params={"agent_id": aid, "since_intent_seq": max(1, base)})
         assert delta.status_code == 200
         d1 = delta.json()
         assert d1.get("available") is True
-        assert d1.get("mode") == "delta"
-        assert isinstance(d1.get("upsert_cards"), list)
-        assert isinstance(d1.get("remove_card_ids"), list)
+        assert d1.get("mode") == "pulse_ledger"
+        assert isinstance(d1.get("entries"), list)
+        assert isinstance(d1.get("pulses"), list)
     finally:
         runtime_config.current_project = old_cur
         if old is None:
@@ -73,4 +72,3 @@ def test_context_snapshot_incremental_card_only():
         else:
             runtime_config.projects[pid] = old
         shutil.rmtree(Path("projects") / pid, ignore_errors=True)
-
