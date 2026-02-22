@@ -6,6 +6,7 @@ from pathlib import Path
 
 from gods import events as events_bus
 from gods.angelia.models import AgentRuntimeStatus, AngeliaEvent
+from gods.angelia import sync_council
 
 
 def _assert_queue_domain_allowed(project_id: str, row) -> None:
@@ -150,6 +151,9 @@ def pick_next_event(
     preempt_types: set[str],
     force_after_sec: float = 0.0,
 ) -> AngeliaEvent | None:
+    gate = sync_council.evaluate_pick_gate(project_id, agent_id)
+    if not gate.allowed:
+        return None
     rows = events_bus.list_events(
         project_id=project_id,
         state=events_bus.EventState.QUEUED,
@@ -185,6 +189,9 @@ def pick_batch_events(
     limit: int = 10,
     force_after_sec: float = 0.0,
 ) -> list[AngeliaEvent]:
+    gate = sync_council.evaluate_pick_gate(project_id, agent_id)
+    if not gate.allowed:
+        return []
     rows = events_bus.list_events(
         project_id=project_id,
         state=events_bus.EventState.QUEUED,

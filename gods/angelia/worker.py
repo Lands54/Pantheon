@@ -14,9 +14,18 @@ from gods.angelia.metrics import angelia_metrics
 from gods.angelia.models import AgentRunState, AgentRuntimeStatus, AngeliaEvent
 from gods import events as events_bus
 from gods.iris.facade import ack_handled, has_pending, mark_as_delivered
-from gods.mnemosyne.facade import intent_from_angelia_event, intent_from_inbox_received
+from gods.mnemosyne.facade import (
+    append_pulse_entry,
+    intent_from_angelia_event,
+    intent_from_inbox_read,
+    intent_from_inbox_received,
+    intent_from_outbox_status,
+    intent_from_pulse_finish,
+    intent_from_pulse_start,
+)
 from gods.mnemosyne import record_intent
 from gods.angelia.pulse.policy import get_inject_budget
+from gods.angelia import sync_council
 
 _INTERACTION_HANDLERS_READY = False
 logger = logging.getLogger(__name__)
@@ -70,8 +79,6 @@ def _resolve_handler(event_type: str) -> events_bus.EventHandler | None:
     meta = events_bus.event_meta(event_type)
     if meta is None:
         raise ValueError(f"EVENT_CATALOG_MISSING: event_type '{event_type}' is not registered in catalog")
-    if meta.get("feeds_llm") is False:
-        return None
     h = events_bus.get_handler(event_type)
     if h is not None:
         return h
@@ -80,9 +87,30 @@ def _resolve_handler(event_type: str) -> events_bus.EventHandler | None:
     return _DEFAULT_AGENT_RUN_HANDLER
 
 
-def _record_event_lifecycle_intent(event: Any, stage: str, extra_payload: dict[str, Any] | None = None) -> None:
+def _record_event_lifecycle_intent(
+    event: Any,
+    stage: str,
+    extra_payload: dict[str, Any] | None = None,
+    *,
+    pulse_id: str = "",
+) -> None:
     try:
-        record_intent(intent_from_angelia_event(event, stage=stage, extra_payload=extra_payload))
+        try:
+            intent = intent_from_angelia_event(
+                event,
+                stage=stage,
+                extra_payload=extra_payload,
+                pulse_id=pulse_id,
+                origin="angelia",
+            )
+        except TypeError:
+            # Keep test/mocking compatibility for builder stubs without new kwargs.
+            intent = intent_from_angelia_event(
+                event,
+                stage=stage,
+                extra_payload=extra_payload,
+            )
+        record_intent(intent)
     except Exception as e:
         logger.warning(
             "ANGELIA_EVENT_INTENT_RECORD_FAILED project=%s agent=%s event_id=%s stage=%s err=%s",
@@ -119,10 +147,48 @@ def _run_agent(
 
     from gods.mnemosyne.facade import latest_intent_seq
     base_seq = latest_intent_seq(project_id, agent_id)
+
+    try:
+        start_event_ids = [str(getattr(r, "event_id", "") or "").strip() for r in list(event_records or []) if str(getattr(r, "event_id", "") or "").strip()]
+        start_event_types = [str(getattr(r, "event_type", "") or "").strip() for r in list(event_records or []) if str(getattr(r, "event_type", "") or "").strip()]
+        record_intent(
+            intent_from_pulse_start(
+                project_id=project_id,
+                agent_id=agent_id,
+                pulse_id=pulse_id,
+                reason=reason,
+                trigger_event_ids=start_event_ids,
+                trigger_event_types=start_event_types,
+                trigger_count=len(list(event_records or [])),
+                base_intent_seq=base_seq,
+                origin="angelia",
+            )
+        )
+        append_pulse_entry(
+            project_id,
+            agent_id,
+            pulse_id=pulse_id,
+            kind="pulse.start",
+            payload={
+                "pulse_id": pulse_id,
+                "reason": reason,
+                "trigger_count": len(list(event_records or [])),
+                "trigger_event_ids": start_event_ids,
+                "trigger_event_types": start_event_types,
+                "base_intent_seq": int(base_seq),
+            },
+            origin="angelia",
+        )
+    except Exception as exc:
+        logger.warning(
+            "PULSE_START_WRITE_FAIL: project=%s agent=%s pulse=%s err=%s",
+            project_id, agent_id, pulse_id, exc,
+        )
     
     # 1. Trigger Events (Batch)
     trigger_intents: list[MemoryIntent] = []
     delivered_ids: list[str] = []
+    trigger_written = False
     for rec in event_records:
         try:
             et = str(getattr(rec, "event_type", ""))
@@ -139,14 +205,77 @@ def _run_agent(
                     attachments=list(payload.get("attachments", [])),
                     msg_type=mt,
                     intent_key=_resolve_mail_intent_key(mt),
+                    pulse_id=pulse_id,
+                    origin="angelia",
+                )
+            elif et == "outbox_status_event":
+                payload = dict(getattr(rec, "payload", {}) or {})
+                intent = intent_from_outbox_status(
+                    project_id=project_id,
+                    agent_id=str(payload.get("agent_id", "") or ""),
+                    to_agent_id=str(payload.get("to_agent_id", "") or ""),
+                    title=str(payload.get("title", "") or ""),
+                    message_id=str(payload.get("message_id", "") or ""),
+                    status=str(payload.get("status", "") or ""),
+                    error_message=str(payload.get("error_message", "") or ""),
+                    attachments_count=int(payload.get("attachments_count", 0) or 0),
+                    origin="angelia",
+                )
+            elif et == "inbox_read_event":
+                payload = dict(getattr(rec, "payload", {}) or {})
+                delivered_ids = [str(x).strip() for x in list(payload.get("delivered_ids", []) or []) if str(x).strip()]
+                intent = intent_from_inbox_read(
+                    project_id=project_id,
+                    agent_id=str(payload.get("agent_id", "") or agent_id),
+                    delivered_ids=delivered_ids,
+                    count=int(payload.get("count", len(delivered_ids)) or len(delivered_ids)),
                 )
             else:
-                intent = intent_from_angelia_event(rec, stage="trigger")
+                intent = intent_from_angelia_event(rec, stage="trigger", pulse_id=pulse_id, origin="angelia")
+            try:
+                if et == "mail_event":
+                    append_pulse_entry(
+                        project_id,
+                        agent_id,
+                        pulse_id=pulse_id,
+                        kind="trigger.mail",
+                        payload={
+                            "event_id": str(getattr(rec, "event_id", "") or ""),
+                            "msg_type": str(payload.get("msg_type", "") if et == "mail_event" else ""),
+                            "title": str(payload.get("title", "") if et == "mail_event" else ""),
+                            "sender": str(payload.get("sender", "") if et == "mail_event" else ""),
+                            "content": str(payload.get("content", "") if et == "mail_event" else ""),
+                            "message_id": str(getattr(rec, "event_id", "") or ""),
+                        },
+                        origin="angelia",
+                    )
+                    trigger_written = True
+                else:
+                    ev_payload = dict(getattr(rec, "payload", {}) or {})
+                    append_pulse_entry(
+                        project_id,
+                        agent_id,
+                        pulse_id=pulse_id,
+                        kind="trigger.event",
+                        payload={
+                            "event_id": str(getattr(rec, "event_id", "") or ""),
+                            "event_type": str(getattr(rec, "event_type", "") or ""),
+                            "reason": str(ev_payload.get("reason", "") or getattr(rec, "event_type", "")),
+                        },
+                        origin="angelia",
+                    )
+                    trigger_written = True
+            except Exception as exc:
+                logger.warning(
+                    "PULSE_TRIGGER_WRITE_FAIL: project=%s agent=%s pulse=%s err=%s",
+                    project_id, agent_id, pulse_id, exc,
+                )
 
-            res = record_intent(intent)
-            setattr(intent, "intent_id", str(res.get("intent_id", "") or ""))
-            setattr(intent, "intent_seq", int(res.get("intent_seq", 0) or 0))
-            trigger_intents.append(intent)
+            if intent is not None:
+                res = record_intent(intent)
+                setattr(intent, "intent_id", str(res.get("intent_id", "") or ""))
+                setattr(intent, "intent_seq", int(res.get("intent_seq", 0) or 0))
+                trigger_intents.append(intent)
             
             # If it's a mail event, mark it as delivered in Iris for the sender's awareness
             if et == "mail_event":
@@ -156,8 +285,18 @@ def _run_agent(
                     mark_as_delivered(project_id, mid)
                 except Exception:
                     pass
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "PULSE_TRIGGER_RECORD_FAIL: project=%s agent=%s pulse=%s err=%s",
+                project_id, agent_id, pulse_id, exc,
+            )
+
+    # Hard invariant: trigger must come from real sources only.
+    if not trigger_written:
+        raise ValueError(
+            f"PULSE_TRIGGER_MISSING: project={project_id} agent={agent_id} pulse={pulse_id} "
+            "has no queue trigger"
+        )
 
     # 2. Mailbox & State Construction
     state = {
@@ -174,7 +313,46 @@ def _run_agent(
         "__chaos_synced_seq": base_seq,
     }
 
-    new_state = agent.process(state)
+    try:
+        new_state = agent.process(state)
+    except Exception as e:
+        try:
+            record_intent(
+                intent_from_pulse_finish(
+                    project_id=project_id,
+                    agent_id=agent_id,
+                    pulse_id=pulse_id,
+                    next_step="error",
+                    finalize_mode="",
+                    tool_call_count=0,
+                    tool_result_count=0,
+                    llm_text_len=0,
+                    origin="angelia",
+                    error=f"{type(e).__name__}: {e}",
+                )
+            )
+            append_pulse_entry(
+                project_id,
+                agent_id,
+                pulse_id=pulse_id,
+                kind="pulse.finish",
+                payload={
+                    "pulse_id": pulse_id,
+                    "next_step": "error",
+                    "finalize_mode": "",
+                    "tool_call_count": 0,
+                    "tool_result_count": 0,
+                    "llm_text_len": 0,
+                    "error": f"{type(e).__name__}: {e}",
+                },
+                origin="angelia",
+            )
+        except Exception as finish_exc:
+            logger.warning(
+                "PULSE_ERROR_FINISH_WRITE_FAIL: project=%s agent=%s pulse=%s err=%s",
+                project_id, agent_id, pulse_id, finish_exc,
+            )
+        raise
     if isinstance(new_state, dict):
         new_state["__worker_claimed_events"] = [r.to_dict() for r in claimed_records]
     
@@ -189,6 +367,49 @@ def _run_agent(
     delivered = list(new_state.get("__inbox_delivered_ids", []) or [])
     if delivered:
         ack_handled(project_id, delivered, agent_id)
+    try:
+        finalize_ctl = dict(new_state.get("finalize_control", {}) or {})
+        finalize_mode = str(finalize_ctl.get("mode", "") or "").strip()
+        llm_text = ""
+        for msg in reversed(list(new_state.get("messages", []) or [])):
+            content = getattr(msg, "content", None)
+            if isinstance(content, str) and content.strip():
+                llm_text = content
+                break
+        record_intent(
+            intent_from_pulse_finish(
+                project_id=project_id,
+                agent_id=agent_id,
+                pulse_id=pulse_id,
+                next_step=str(new_state.get("next_step", "") or ""),
+                finalize_mode=finalize_mode,
+                tool_call_count=len(list(new_state.get("tool_calls", []) or [])),
+                tool_result_count=len(list(new_state.get("tool_results", []) or [])),
+                llm_text_len=len(llm_text),
+                origin="angelia",
+            )
+        )
+        append_pulse_entry(
+            project_id,
+            agent_id,
+            pulse_id=pulse_id,
+            kind="pulse.finish",
+            payload={
+                "pulse_id": pulse_id,
+                "next_step": str(new_state.get("next_step", "") or ""),
+                "finalize_mode": finalize_mode,
+                "tool_call_count": len(list(new_state.get("tool_calls", []) or [])),
+                "tool_result_count": len(list(new_state.get("tool_results", []) or [])),
+                "llm_text_len": len(llm_text),
+                "error": "",
+            },
+            origin="angelia",
+        )
+    except Exception as exc:
+        logger.warning(
+            "PULSE_FINISH_WRITE_FAIL: project=%s agent=%s pulse=%s err=%s",
+            project_id, agent_id, pulse_id, exc,
+        )
     return new_state
 
 
@@ -298,6 +519,10 @@ def worker_loop(ctx: WorkerContext):
                 continue
 
             if not batch:
+                try:
+                    sync_council.tick(project_id, agent_id, has_queued=False)
+                except Exception:
+                    pass
                 if now >= float(st.cooldown_until or 0.0) and now >= float(st.backoff_until or 0.0):
                     st.run_state = AgentRunState.IDLE
                     _save_status(st)
@@ -332,9 +557,10 @@ def worker_loop(ctx: WorkerContext):
 
             start = time.time()
             result: dict = {}
+            pulse_id = uuid.uuid4().hex[:12]
             try:
                 for evt in batch:
-                    _record_event_lifecycle_intent(evt, stage="processing")
+                    _record_event_lifecycle_intent(evt, stage="processing", pulse_id=pulse_id)
                 
                 # Combine payloads or just pick first reason?
                 # The handler will now take list of records.
@@ -356,7 +582,6 @@ def worker_loop(ctx: WorkerContext):
                     # Direct call to robust batch method
                     primary_rec = records[0]
                     reason = str((primary_rec.payload or {}).get("reason") or primary_rec.event_type)
-                    pulse_id = uuid.uuid4().hex[:12]
                     result = _run_agent(project_id, agent_id, reason, pulse_id, records)
                 else:
                     # Fallback for non-agent handlers: process one by one?
@@ -372,7 +597,6 @@ def worker_loop(ctx: WorkerContext):
                     # Let's assume all picked events are for _run_agent.
                     primary_rec = records[0]
                     reason = str((primary_rec.payload or {}).get("reason") or primary_rec.event_type)
-                    pulse_id = uuid.uuid4().hex[:12]
                     result = _run_agent(project_id, agent_id, reason, pulse_id, records)
 
                 extra_events: list[AngeliaEvent] = []
@@ -405,13 +629,22 @@ def worker_loop(ctx: WorkerContext):
                 # Mark ALL done
                 for evt in all_events:
                     store.mark_done(project_id, evt.event_id)
-                    _record_event_lifecycle_intent(evt, stage="done", extra_payload={"next_step": next_step})
+                    _record_event_lifecycle_intent(
+                        evt,
+                        stage="done",
+                        extra_payload={"next_step": next_step},
+                        pulse_id=pulse_id,
+                    )
 
                 # on_success for primary? or all?
                 handler.on_success(records[0], result)
                 
                 _set_idle(st, cooldown)
                 angelia_metrics.inc("event_done", len(all_events))
+                try:
+                    sync_council.note_pulse_finished(project_id, agent_id)
+                except Exception:
+                    pass
 
             except Exception as e:
                 # Batch Failure: Fail ALL.
@@ -436,10 +669,19 @@ def worker_loop(ctx: WorkerContext):
                         error_message=str(e),
                         retry_delay_sec=min(30, max(2, 2 ** min(evt.attempt + 1, 5))),
                     )
-                    _record_event_lifecycle_intent(evt, stage="failed", extra_payload={"error": str(e)})
+                    _record_event_lifecycle_intent(
+                        evt,
+                        stage="failed",
+                        extra_payload={"error": str(e)},
+                        pulse_id=pulse_id,
+                    )
                 
                 _set_error_backoff(st, str(e), delay_sec=5)
                 angelia_metrics.inc("event_requeued", len(all_events))
+                try:
+                    sync_council.note_pulse_finished(project_id, agent_id)
+                except Exception:
+                    pass
 
             finally:
                 latency_ms = int((time.time() - start) * 1000)
