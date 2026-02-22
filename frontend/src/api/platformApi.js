@@ -237,3 +237,26 @@ export function confirmSyncCouncil(projectId, agentId) {
 export function getSyncCouncil(projectId) {
   return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council`)
 }
+
+export function syncCouncilAction(projectId, actorId, actionType, payload = {}) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/action`, {
+    actor_id: actorId,
+    action_type: actionType,
+    payload,
+  })
+}
+
+export function syncCouncilChair(projectId, action, actorId = 'human.overseer') {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/chair`, {
+    action,
+    actor_id: actorId,
+  })
+}
+
+export function getSyncCouncilLedger(projectId, sinceSeq = 0, limit = 200) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council/ledger${qp({ since_seq: sinceSeq, limit })}`)
+}
+
+export function getSyncCouncilResolutions(projectId, limit = 200) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council/resolutions${qp({ limit })}`)
+}

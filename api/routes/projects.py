@@ -183,6 +183,9 @@ async def sync_council_start(project_id: str, req: Request):
         participants=list(data.get("participants", []) or []),
         cycles=int(data.get("cycles", 1) or 1),
         initiator=str(data.get("initiator", "human.overseer") or "human.overseer"),
+        rules_profile=str(data.get("rules_profile", "roberts_core_v1") or "roberts_core_v1"),
+        agenda=list(data.get("agenda", []) or []),
+        timeouts=dict(data.get("timeouts", {}) or {}),
     )
 
 
@@ -200,3 +203,38 @@ async def sync_council_confirm(project_id: str, req: Request):
 async def sync_council_status(project_id: str):
     """Get current synchronous council session state."""
     return project_service.sync_council_status(project_id)
+
+
+@router.post("/{project_id}/sync-council/action")
+async def sync_council_action(project_id: str, req: Request):
+    """Submit one Robert-rules council action."""
+    data = await req.json()
+    return project_service.sync_council_action(
+        project_id=project_id,
+        actor_id=str(data.get("actor_id", "") or ""),
+        action_type=str(data.get("action_type", "") or ""),
+        payload=dict(data.get("payload", {}) or {}),
+    )
+
+
+@router.post("/{project_id}/sync-council/chair")
+async def sync_council_chair(project_id: str, req: Request):
+    """Chair override actions: pause/resume/terminate/skip_turn."""
+    data = await req.json()
+    return project_service.sync_council_chair(
+        project_id=project_id,
+        action=str(data.get("action", "") or ""),
+        actor_id=str(data.get("actor_id", "human.overseer") or "human.overseer"),
+    )
+
+
+@router.get("/{project_id}/sync-council/ledger")
+async def sync_council_ledger(project_id: str, since_seq: int = 0, limit: int = 200):
+    """Read sync-council ledger rows."""
+    return project_service.sync_council_ledger(project_id=project_id, since_seq=since_seq, limit=limit)
+
+
+@router.get("/{project_id}/sync-council/resolutions")
+async def sync_council_resolutions(project_id: str, limit: int = 200):
+    """Read sync-council resolution rows."""
+    return project_service.sync_council_resolutions(project_id=project_id, limit=limit)

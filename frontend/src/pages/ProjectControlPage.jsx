@@ -7,7 +7,20 @@ import {
   RefreshCw, Activity, Layers, Server,
   Inbox, X, Network, FileText, Users, Settings
 } from 'lucide-react'
-import { createAgent, deleteAgent, getHermesContracts, getHermesPorts, getSocialGraph } from '../api/platformApi'
+import {
+  confirmSyncCouncil,
+  createAgent,
+  deleteAgent,
+  getSyncCouncilLedger,
+  getSyncCouncilResolutions,
+  getHermesContracts,
+  getHermesPorts,
+  getSocialGraph,
+  getSyncCouncil,
+  syncCouncilAction,
+  syncCouncilChair,
+  startSyncCouncil,
+} from '../api/platformApi'
 
 function deepClone(v) {
   return JSON.parse(JSON.stringify(v))
@@ -22,6 +35,7 @@ const MODEL_PRESETS = [
 
 const STRATEGY_OPTIONS = ['react_graph', 'freeform']
 const INHERIT_STRATEGY = '__inherit__'
+const AGENT_ID_RE = /^[a-z][a-z0-9_]{0,63}$/
 
 function asList(v) {
   return Array.isArray(v) ? v : []
@@ -304,6 +318,19 @@ export function ProjectControlPage({
   const [socialLoading, setSocialLoading] = useState(false)
   const [socialData, setSocialData] = useState(null)
   const [projectToggleBusy, setProjectToggleBusy] = useState(false)
+  const [syncCouncil, setSyncCouncil] = useState(null)
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncAction, setSyncAction] = useState('motion_submit')
+  const [syncActionText, setSyncActionText] = useState('')
+  const [syncVoteChoice, setSyncVoteChoice] = useState('yes')
+  const [syncLedger, setSyncLedger] = useState([])
+  const [syncResolutions, setSyncResolutions] = useState([])
+  const [syncForm, setSyncForm] = useState({
+    title: '同步商议',
+    content: '',
+    cycles: 2,
+    participants: [],
+  })
 
   // Derived State
   const currentProject = useMemo(() => (config?.projects || {})[projectId] || {}, [config, projectId])
@@ -327,9 +354,37 @@ export function ProjectControlPage({
   }, [agentRows])
 
   const allAgentIds = useMemo(() => {
-    const ids = new Set([...activeAgents, ...Object.keys(agentSettings || {}), ...Array.from(statusMap.keys())])
-    return Array.from(ids).sort()
-  }, [activeAgents, agentSettings, statusMap])
+    const ids = new Set([...activeAgents, ...Object.keys(agentSettings || {})])
+    return Array.from(ids)
+      .map((x) => String(x || '').trim())
+      .filter((x) => AGENT_ID_RE.test(x))
+      .sort()
+  }, [activeAgents, agentSettings])
+
+  useEffect(() => {
+    setSyncForm((prev) => {
+      const valid = new Set(allAgentIds)
+      const kept = (prev.participants || []).filter((x) => valid.has(x))
+      return { ...prev, participants: kept }
+    })
+  }, [allAgentIds])
+
+  const refreshSyncCouncil = async () => {
+    try {
+      const [res, led, resol] = await Promise.all([
+        getSyncCouncil(projectId),
+        getSyncCouncilLedger(projectId, 0, 50).catch(() => ({ rows: [] })),
+        getSyncCouncilResolutions(projectId, 20).catch(() => ({ rows: [] })),
+      ])
+      setSyncCouncil(res?.sync_council || null)
+      setSyncLedger(Array.isArray(led?.rows) ? led.rows : [])
+      setSyncResolutions(Array.isArray(resol?.rows) ? resol.rows : [])
+    } catch {
+      setSyncCouncil(null)
+      setSyncLedger([])
+      setSyncResolutions([])
+    }
+  }
 
   // Sync Drafts
   useEffect(() => {
@@ -509,6 +564,105 @@ export function ProjectControlPage({
       }).catch(() => setSocialLoading(false))
     }
   }, [showSocial, projectId])
+
+  useEffect(() => {
+    refreshSyncCouncil()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  const toggleSyncParticipant = (aid) => {
+    setSyncForm((prev) => {
+      const cur = new Set(prev.participants || [])
+      if (cur.has(aid)) cur.delete(aid)
+      else cur.add(aid)
+      return { ...prev, participants: Array.from(cur).sort() }
+    })
+  }
+
+  const handleStartSyncCouncil = async () => {
+    setStatus('')
+    setError('')
+    if (!(syncForm.participants || []).length) {
+      setError('请至少选择一个参与 agent')
+      return
+    }
+    setSyncBusy(true)
+    try {
+      const payload = {
+        title: String(syncForm.title || '').trim(),
+        content: String(syncForm.content || ''),
+        participants: Array.from(syncForm.participants || []),
+        cycles: Math.max(1, Number(syncForm.cycles || 1)),
+        initiator: 'human.overseer',
+        rules_profile: 'roberts_core_v1',
+        agenda: [
+          {
+            id: 'agenda_1',
+            title: String(syncForm.title || '').trim() || '同步商议',
+            description: String(syncForm.content || ''),
+          }
+        ],
+        timeouts: { speaker: 90, action: 90, vote: 120 },
+      }
+      const res = await startSyncCouncil(projectId, payload)
+      setSyncCouncil(res?.sync_council || null)
+      setStatus('同步商议已启动')
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setSyncBusy(false)
+    }
+  }
+
+  const handleConfirmSyncCouncil = async (aid) => {
+    setStatus('')
+    setError('')
+    setSyncBusy(true)
+    try {
+      const res = await confirmSyncCouncil(projectId, aid)
+      setSyncCouncil(res?.sync_council || null)
+      setStatus(`已确认：${aid}`)
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setSyncBusy(false)
+    }
+  }
+
+  const handleChairAction = async (action) => {
+    setStatus('')
+    setError('')
+    setSyncBusy(true)
+    try {
+      const res = await syncCouncilChair(projectId, action, 'human.overseer')
+      setSyncCouncil(res?.sync_council || null)
+      await refreshSyncCouncil()
+      setStatus(`Chair action: ${action}`)
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setSyncBusy(false)
+    }
+  }
+
+  const handleSyncAction = async () => {
+    setStatus('')
+    setError('')
+    setSyncBusy(true)
+    try {
+      const payload = {}
+      if (syncAction === 'vote_cast') payload.choice = syncVoteChoice
+      if (['motion_submit', 'debate_speak', 'amend_submit'].includes(syncAction)) payload.text = syncActionText
+      const res = await syncCouncilAction(projectId, 'human.overseer', syncAction, payload)
+      setSyncCouncil(res?.sync_council || null)
+      await refreshSyncCouncil()
+      setStatus(`Action submitted: ${syncAction}`)
+    } catch (err) {
+      setError(String(err.message || err))
+    } finally {
+      setSyncBusy(false)
+    }
+  }
 
   return (
     <div className="stack-lg page-body">
@@ -708,6 +862,184 @@ export function ProjectControlPage({
       </div>
 
       <div className="top-gap">
+        <div className="panel" style={{ marginBottom: 12 }}>
+          <div className="section-title row-between" style={{ marginTop: 0 }}>
+            <span><Users size={16} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />同步商议模式</span>
+            <button className="ghost-btn" onClick={refreshSyncCouncil} disabled={syncBusy}>
+              <RefreshCw size={14} /> 刷新状态
+            </button>
+          </div>
+
+          <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <label>
+              议题标题
+              <input
+                className="glass-input"
+                value={syncForm.title}
+                onChange={(e) => setSyncForm((x) => ({ ...x, title: e.target.value }))}
+                placeholder="例如：生态协同接口对齐"
+              />
+            </label>
+            <label>
+              循环次数
+              <input
+                className="glass-input"
+                type="number"
+                min={1}
+                max={100}
+                value={syncForm.cycles}
+                onChange={(e) => setSyncForm((x) => ({ ...x, cycles: Number(e.target.value || 1) }))}
+              />
+            </label>
+            <label className="full-width">
+              商议内容
+              <textarea
+                className="glass-input"
+                rows={3}
+                value={syncForm.content}
+                onChange={(e) => setSyncForm((x) => ({ ...x, content: e.target.value }))}
+                placeholder="本轮需要达成的共识与约束..."
+              />
+            </label>
+          </div>
+
+          <div className="top-gap">
+            <div className="sub" style={{ marginBottom: 6 }}>参与 Agent</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {allAgentIds.map((aid) => {
+                const selected = (syncForm.participants || []).includes(aid)
+                return (
+                  <button
+                    key={`sync-participant-${aid}`}
+                    className={selected ? 'primary-btn' : 'ghost-btn'}
+                    style={{ padding: '4px 10px' }}
+                    onClick={() => toggleSyncParticipant(aid)}
+                    disabled={syncBusy}
+                  >
+                    {aid}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="action-row top-gap">
+            <button className="primary-btn" onClick={handleStartSyncCouncil} disabled={syncBusy}>
+              启动同步商议
+            </button>
+          </div>
+
+          <div className="top-gap" style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 10 }}>
+            <div className="sub">
+              状态: <span className="mono">{syncCouncil?.phase || 'none'}</span> |
+              enabled: <span className="mono">{String(!!syncCouncil?.enabled)}</span> |
+              speaker: <span className="mono">{syncCouncil?.current_speaker || '-'}</span> |
+              cycles_left: <span className="mono">{syncCouncil?.cycles_left ?? '-'}</span>
+            </div>
+            <div className="sub" style={{ marginTop: 4 }}>
+              title: <span className="mono">{syncCouncil?.title || '-'}</span>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>参与确认</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {asList(syncCouncil?.participants).map((aid) => {
+                  const confirmed = asList(syncCouncil?.confirmed_agents).includes(aid)
+                  return (
+                    <button
+                      key={`sync-confirm-${aid}`}
+                      className={confirmed ? 'ghost-btn' : 'primary-btn'}
+                      style={{ padding: '4px 10px' }}
+                      onClick={() => handleConfirmSyncCouncil(aid)}
+                      disabled={syncBusy || confirmed}
+                      title={confirmed ? '已确认' : '点击确认参与'}
+                    >
+                      {aid} {confirmed ? '✓' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>主席台控制</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button className="ghost-btn" disabled={syncBusy} onClick={() => handleChairAction('pause')}>暂停</button>
+                <button className="ghost-btn" disabled={syncBusy} onClick={() => handleChairAction('resume')}>恢复</button>
+                <button className="ghost-btn" disabled={syncBusy} onClick={() => handleChairAction('skip_turn')}>跳过发言</button>
+                <button className="ghost-btn" disabled={syncBusy} onClick={() => handleChairAction('terminate')}>终止</button>
+              </div>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>议事动作（human.overseer）</div>
+              <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <label>
+                  Action
+                  <select className="glass-input" value={syncAction} onChange={(e) => setSyncAction(e.target.value)}>
+                    <option value="motion_submit">motion_submit</option>
+                    <option value="motion_second">motion_second</option>
+                    <option value="debate_speak">debate_speak</option>
+                    <option value="amend_submit">amend_submit</option>
+                    <option value="amend_second">amend_second</option>
+                    <option value="procedural_call_question">procedural_call_question</option>
+                    <option value="procedural_table_motion">procedural_table_motion</option>
+                    <option value="vote_cast">vote_cast</option>
+                    <option value="reconsider_submit">reconsider_submit</option>
+                    <option value="reconsider_second">reconsider_second</option>
+                  </select>
+                </label>
+                <label>
+                  Vote Choice
+                  <select className="glass-input" value={syncVoteChoice} onChange={(e) => setSyncVoteChoice(e.target.value)}>
+                    <option value="yes">yes</option>
+                    <option value="no">no</option>
+                    <option value="abstain">abstain</option>
+                  </select>
+                </label>
+                <label className="full-width">
+                  Text/Payload
+                  <textarea
+                    className="glass-input"
+                    rows={2}
+                    value={syncActionText}
+                    onChange={(e) => setSyncActionText(e.target.value)}
+                    placeholder="motion/debate/amend text"
+                  />
+                </label>
+              </div>
+              <div className="action-row top-gap-sm">
+                <button className="primary-btn" disabled={syncBusy} onClick={handleSyncAction}>提交动作</button>
+              </div>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>当前动议</div>
+              <pre className="mono" style={{ whiteSpace: 'pre-wrap', maxHeight: 180, overflow: 'auto' }}>
+                {JSON.stringify(syncCouncil?.current_motion || {}, null, 2)}
+              </pre>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>Vote State</div>
+              <pre className="mono" style={{ whiteSpace: 'pre-wrap', maxHeight: 140, overflow: 'auto' }}>
+                {JSON.stringify(syncCouncil?.vote_state || {}, null, 2)}
+              </pre>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>Ledger（最近 50 条）</div>
+              <div className="mono" style={{ maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                {(syncLedger || []).length
+                  ? syncLedger.map((x) => `${x.seq}. [${x.phase}] ${x.actor_id} -> ${x.action_type} (${x.result})`).join('\n')
+                  : '(empty)'}
+              </div>
+            </div>
+            <div className="top-gap-sm">
+              <div className="sub" style={{ marginBottom: 6 }}>Resolutions</div>
+              <div className="mono" style={{ maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                {(syncResolutions || []).length
+                  ? syncResolutions.map((x) => `${x.resolution_id} ${x.decision} motion=${x.motion_id}`).join('\n')
+                  : '(empty)'}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button
           className="ghost-btn row-between"
           style={{ width: '100%', justifyContent: 'center' }}

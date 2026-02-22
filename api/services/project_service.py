@@ -309,6 +309,9 @@ class ProjectService:
         participants: list[str],
         cycles: int,
         initiator: str = "human.overseer",
+        rules_profile: str = "roberts_core_v1",
+        agenda: list[dict[str, Any]] | None = None,
+        timeouts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         self.ensure_exists(project_id)
         proj = runtime_config.projects[project_id]
@@ -334,10 +337,19 @@ class ProjectService:
                 participants=members,
                 cycles=max(1, int(cycles or 1)),
                 initiator=str(initiator or "human.overseer"),
+                rules_profile=str(rules_profile or "roberts_core_v1"),
+                agenda=list(agenda or []),
+                timeouts=dict(timeouts or {}),
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return {"project_id": project_id, "status": "started", "sync_council": state}
+        actor = str(initiator or "human.overseer")
+        return {
+            "project_id": project_id,
+            "status": "started",
+            "sync_council": state,
+            "action_window": angelia_sync_council.action_window(project_id, actor),
+        }
 
     def sync_council_confirm(self, *, project_id: str, agent_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
@@ -353,7 +365,81 @@ class ProjectService:
     def sync_council_status(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         state = angelia_sync_council.get_state(project_id)
-        return {"project_id": project_id, "sync_council": state}
+        state = dict(state or {})
+        state.setdefault("current_motion", {})
+        state.setdefault("motion_queue", [])
+        state.setdefault("vote_state", {})
+        state["deferred_events_count"] = len(list(state.get("deferred_event_ids", []) or []))
+        return {
+            "project_id": project_id,
+            "sync_council": state,
+            "action_window": angelia_sync_council.action_window(project_id, "human.overseer"),
+        }
+
+    def sync_council_action(
+        self,
+        *,
+        project_id: str,
+        actor_id: str,
+        action_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            state = angelia_sync_council.submit_action(
+                project_id,
+                actor_id=str(actor_id or "").strip(),
+                action_type=str(action_type or "").strip(),
+                payload=dict(payload or {}),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {
+            "project_id": project_id,
+            "status": "ok",
+            "sync_council": state,
+            "action_window": angelia_sync_council.action_window(project_id, str(actor_id or "").strip()),
+        }
+
+    def sync_council_chair(
+        self,
+        *,
+        project_id: str,
+        action: str,
+        actor_id: str = "human.overseer",
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            state = angelia_sync_council.chair_action(
+                project_id,
+                action=str(action or "").strip(),
+                actor_id=str(actor_id or "human.overseer").strip() or "human.overseer",
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {
+            "project_id": project_id,
+            "status": "ok",
+            "sync_council": state,
+            "action_window": angelia_sync_council.action_window(project_id, str(actor_id or "human.overseer").strip()),
+        }
+
+    def sync_council_ledger(self, *, project_id: str, since_seq: int = 0, limit: int = 200) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = angelia_sync_council.list_ledger(
+            project_id,
+            since_seq=max(0, int(since_seq or 0)),
+            limit=max(1, min(int(limit or 200), 2000)),
+        )
+        return {"project_id": project_id, "rows": rows}
+
+    def sync_council_resolutions(self, *, project_id: str, limit: int = 200) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = angelia_sync_council.list_resolutions(
+            project_id,
+            limit=max(1, min(int(limit or 200), 2000)),
+        )
+        return {"project_id": project_id, "rows": rows}
 
     def build_report(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
