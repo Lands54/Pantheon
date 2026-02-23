@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from gods.angelia.roberts_models import MeetingState
+from gods.athena.council_models import MeetingState
 from gods.paths import runtime_dir, runtime_locks_dir
 
 

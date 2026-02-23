@@ -9,8 +9,8 @@ from typing import Any
 
 from gods import events as events_bus
 from gods.angelia.mailbox import angelia_mailbox
-from gods.angelia.roberts_models import MeetingState, PickGateDecision
-from gods.angelia import roberts_policy, roberts_store
+from gods.athena.council_models import MeetingState, PickGateDecision
+from gods.athena import council_policy as roberts_policy, council_store as roberts_store
 
 
 PHASE_COLLECTING = "collecting"
