@@ -172,11 +172,75 @@ async def runtime_reconcile(project_id: str):
     return project_service.runtime_reconcile(project_id)
 
 
-@router.post("/{project_id}/sync-council/start")
-async def sync_council_start(project_id: str, req: Request):
-    """Start a synchronous council session for a group of agents."""
+@router.get("/{project_id}/athena/flows")
+async def athena_flows(project_id: str):
+    """List Athena built-in flow definitions."""
+    return project_service.athena_flows(project_id=project_id)
+
+
+@router.get("/{project_id}/athena/runs")
+async def athena_runs(project_id: str, include_inactive: bool = False):
+    """List Athena flow runs."""
+    return project_service.athena_runs(project_id=project_id, include_inactive=include_inactive)
+
+
+@router.post("/{project_id}/athena/runs/start")
+async def athena_run_start(project_id: str, req: Request):
+    """Start one Athena flow run with participant non-overlap guard."""
     data = await req.json()
-    return project_service.sync_council_start(
+    return project_service.athena_run_start(
+        project_id=project_id,
+        flow_key=str(data.get("flow_key", "") or ""),
+        participants=list(data.get("participants", []) or []),
+        title=str(data.get("title", "") or ""),
+        started_by=str(data.get("started_by", "human.overseer") or "human.overseer"),
+        config=dict(data.get("config", {}) or {}),
+    )
+
+
+@router.get("/{project_id}/athena/runs/{run_id}")
+async def athena_run_get(project_id: str, run_id: str):
+    """Get one Athena flow run."""
+    return project_service.athena_run_get(project_id=project_id, run_id=run_id)
+
+
+@router.post("/{project_id}/athena/runs/{run_id}/advance")
+async def athena_run_advance(project_id: str, run_id: str, req: Request):
+    """Advance one Athena flow run to next stage."""
+    data = await req.json()
+    return project_service.athena_run_advance(
+        project_id=project_id,
+        run_id=run_id,
+        next_stage=str(data.get("next_stage", "") or ""),
+        actor_id=str(data.get("actor_id", "human.overseer") or "human.overseer"),
+        note=str(data.get("note", "") or ""),
+    )
+
+
+@router.post("/{project_id}/athena/runs/{run_id}/finish")
+async def athena_run_finish(project_id: str, run_id: str, req: Request):
+    """Finish/abort/pause one Athena flow run."""
+    data = await req.json()
+    return project_service.athena_run_finish(
+        project_id=project_id,
+        run_id=run_id,
+        status=str(data.get("status", "completed") or "completed"),
+        actor_id=str(data.get("actor_id", "human.overseer") or "human.overseer"),
+        note=str(data.get("note", "") or ""),
+    )
+
+
+@router.get("/{project_id}/athena/ledger")
+async def athena_ledger(project_id: str, limit: int = 200):
+    """Read Athena orchestration ledger."""
+    return project_service.athena_ledger(project_id=project_id, limit=limit)
+
+
+@router.post("/{project_id}/athena/council/start")
+async def athena_council_start(project_id: str, req: Request):
+    """Start Athena-native council session for a group of agents."""
+    data = await req.json()
+    return project_service.athena_council_start(
         project_id=project_id,
         title=str(data.get("title", "") or ""),
         content=str(data.get("content", "") or ""),
@@ -189,27 +253,27 @@ async def sync_council_start(project_id: str, req: Request):
     )
 
 
-@router.post("/{project_id}/sync-council/confirm")
-async def sync_council_confirm(project_id: str, req: Request):
-    """Confirm one agent to participate in current synchronous council session."""
+@router.post("/{project_id}/athena/council/confirm")
+async def athena_council_confirm(project_id: str, req: Request):
+    """Confirm one agent for Athena council."""
     data = await req.json()
-    return project_service.sync_council_confirm(
+    return project_service.athena_council_confirm(
         project_id=project_id,
         agent_id=str(data.get("agent_id", "") or ""),
     )
 
 
-@router.get("/{project_id}/sync-council")
-async def sync_council_status(project_id: str):
-    """Get current synchronous council session state."""
-    return project_service.sync_council_status(project_id)
+@router.get("/{project_id}/athena/council")
+async def athena_council_status(project_id: str):
+    """Get Athena council state."""
+    return project_service.athena_council_status(project_id=project_id)
 
 
-@router.post("/{project_id}/sync-council/action")
-async def sync_council_action(project_id: str, req: Request):
-    """Submit one Robert-rules council action."""
+@router.post("/{project_id}/athena/council/action")
+async def athena_council_action(project_id: str, req: Request):
+    """Submit one Athena council action."""
     data = await req.json()
-    return project_service.sync_council_action(
+    return project_service.athena_council_action(
         project_id=project_id,
         actor_id=str(data.get("actor_id", "") or ""),
         action_type=str(data.get("action_type", "") or ""),
@@ -217,24 +281,24 @@ async def sync_council_action(project_id: str, req: Request):
     )
 
 
-@router.post("/{project_id}/sync-council/chair")
-async def sync_council_chair(project_id: str, req: Request):
-    """Chair override actions: pause/resume/terminate/skip_turn."""
+@router.post("/{project_id}/athena/council/chair")
+async def athena_council_chair(project_id: str, req: Request):
+    """Athena council chair actions: pause/resume/terminate/skip_turn."""
     data = await req.json()
-    return project_service.sync_council_chair(
+    return project_service.athena_council_chair(
         project_id=project_id,
         action=str(data.get("action", "") or ""),
         actor_id=str(data.get("actor_id", "human.overseer") or "human.overseer"),
     )
 
 
-@router.get("/{project_id}/sync-council/ledger")
-async def sync_council_ledger(project_id: str, since_seq: int = 0, limit: int = 200):
-    """Read sync-council ledger rows."""
-    return project_service.sync_council_ledger(project_id=project_id, since_seq=since_seq, limit=limit)
+@router.get("/{project_id}/athena/council/ledger")
+async def athena_council_ledger(project_id: str, since_seq: int = 0, limit: int = 200):
+    """Read Athena council ledger rows."""
+    return project_service.athena_council_ledger(project_id=project_id, since_seq=since_seq, limit=limit)
 
 
-@router.get("/{project_id}/sync-council/resolutions")
-async def sync_council_resolutions(project_id: str, limit: int = 200):
-    """Read sync-council resolution rows."""
-    return project_service.sync_council_resolutions(project_id=project_id, limit=limit)
+@router.get("/{project_id}/athena/council/resolutions")
+async def athena_council_resolutions(project_id: str, limit: int = 200):
+    """Read Athena council resolution rows."""
+    return project_service.athena_council_resolutions(project_id=project_id, limit=limit)

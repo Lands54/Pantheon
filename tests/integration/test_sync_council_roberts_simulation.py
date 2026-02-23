@@ -38,7 +38,7 @@ def test_roberts_sync_council_end_to_end_simulation():
         proj.agent_settings = cur
         runtime_config.save()
 
-        st = project_service.sync_council_start(
+        st = project_service.athena_council_start(
             project_id=pid,
             title="生态协商",
             content="讨论接口与节奏",
@@ -52,7 +52,7 @@ def test_roberts_sync_council_end_to_end_simulation():
         assert st["phase"] == "collecting"
 
         for aid in agents:
-            project_service.sync_council_confirm(project_id=pid, agent_id=aid)
+            project_service.athena_council_confirm(project_id=pid, agent_id=aid)
 
         rt = runtime_dir(pid)
         (rt / "angelia_agents.json").write_text(
@@ -81,24 +81,24 @@ def test_roberts_sync_council_end_to_end_simulation():
             limit=5,
             force_after_sec=0,
         )
-        st = project_service.sync_council_status(pid)["sync_council"]
+        st = project_service.athena_council_status(project_id=pid)["sync_council"]
         assert evt.event_id in set(st.get("deferred_event_ids", []))
 
-        project_service.sync_council_action(project_id=pid, actor_id="a1", action_type="motion_submit", payload={"text": "通过统一接口 v1"})
-        project_service.sync_council_action(project_id=pid, actor_id="a2", action_type="motion_second", payload={})
-        project_service.sync_council_action(project_id=pid, actor_id="a1", action_type="procedural_call_question", payload={})
-        project_service.sync_council_action(project_id=pid, actor_id="a1", action_type="vote_cast", payload={"choice": "yes"})
-        project_service.sync_council_action(project_id=pid, actor_id="a2", action_type="vote_cast", payload={"choice": "yes"})
-        project_service.sync_council_action(project_id=pid, actor_id="a3", action_type="vote_cast", payload={"choice": "no"})
+        project_service.athena_council_action(project_id=pid, actor_id="a1", action_type="motion_submit", payload={"text": "通过统一接口 v1"})
+        project_service.athena_council_action(project_id=pid, actor_id="a2", action_type="motion_second", payload={})
+        project_service.athena_council_action(project_id=pid, actor_id="a1", action_type="procedural_call_question", payload={})
+        project_service.athena_council_action(project_id=pid, actor_id="a1", action_type="vote_cast", payload={"choice": "yes"})
+        project_service.athena_council_action(project_id=pid, actor_id="a2", action_type="vote_cast", payload={"choice": "yes"})
+        project_service.athena_council_action(project_id=pid, actor_id="a3", action_type="vote_cast", payload={"choice": "no"})
 
-        resolutions = project_service.sync_council_resolutions(project_id=pid, limit=10).get("rows", [])
+        resolutions = project_service.athena_council_resolutions(project_id=pid, limit=10).get("rows", [])
         assert resolutions
         r0 = resolutions[0]
         assert r0.get("decision") in {"adopted", "rejected"}
         assert isinstance(r0.get("execution_tasks"), list)
         assert isinstance(r0.get("hermes_contract_draft"), dict)
 
-        project_service.sync_council_chair(project_id=pid, action="terminate", actor_id="human.overseer")
+        project_service.athena_council_chair(project_id=pid, action="terminate", actor_id="human.overseer")
 
         rows = list_events(project_id=pid, event_type="manual", state=None, limit=10, agent_id="a1")
         m = None
@@ -110,7 +110,7 @@ def test_roberts_sync_council_end_to_end_simulation():
         assert m.get("deferred_by_council") is False
         assert m.get("deferred_released_at")
 
-        led = project_service.sync_council_ledger(project_id=pid, since_seq=0, limit=200).get("rows", [])
+        led = project_service.athena_council_ledger(project_id=pid, since_seq=0, limit=200).get("rows", [])
         assert len(led) >= 8
     finally:
         try:

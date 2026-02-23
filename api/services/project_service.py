@@ -11,6 +11,15 @@ from fastapi import HTTPException
 
 from gods.angelia import facade as angelia_facade
 from gods.angelia import sync_council as angelia_sync_council
+from gods.athena import (
+    advance_flow_stage as athena_advance_flow_stage,
+    finish_flow_run as athena_finish_flow_run,
+    get_flow_run as athena_get_flow_run,
+    list_flow_definitions as athena_list_flow_definitions,
+    list_flow_ledger as athena_list_flow_ledger,
+    list_flow_runs as athena_list_flow_runs,
+    start_flow_run as athena_start_flow_run,
+)
 from gods.config import ProjectConfig, runtime_config
 from gods.iris import facade as iris_facade
 from gods.mnemosyne import facade as mnemosyne_facade
@@ -300,7 +309,8 @@ class ProjectService:
         except runtime_facade.DetachError as e:
             raise HTTPException(status_code=400, detail=f"{e.code}: {e.message}") from e
 
-    def sync_council_start(
+    # Athena-native council APIs (preferred).
+    def athena_council_start(
         self,
         *,
         project_id: str,
@@ -351,7 +361,7 @@ class ProjectService:
             "action_window": angelia_sync_council.action_window(project_id, actor),
         }
 
-    def sync_council_confirm(self, *, project_id: str, agent_id: str) -> dict[str, Any]:
+    def athena_council_confirm(self, *, project_id: str, agent_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         aid = str(agent_id or "").strip()
         if not aid:
@@ -362,7 +372,7 @@ class ProjectService:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {"project_id": project_id, "status": "confirmed", "sync_council": state}
 
-    def sync_council_status(self, project_id: str) -> dict[str, Any]:
+    def athena_council_status(self, *, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         state = angelia_sync_council.get_state(project_id)
         state = dict(state or {})
@@ -376,7 +386,7 @@ class ProjectService:
             "action_window": angelia_sync_council.action_window(project_id, "human.overseer"),
         }
 
-    def sync_council_action(
+    def athena_council_action(
         self,
         *,
         project_id: str,
@@ -401,7 +411,7 @@ class ProjectService:
             "action_window": angelia_sync_council.action_window(project_id, str(actor_id or "").strip()),
         }
 
-    def sync_council_chair(
+    def athena_council_chair(
         self,
         *,
         project_id: str,
@@ -424,7 +434,7 @@ class ProjectService:
             "action_window": angelia_sync_council.action_window(project_id, str(actor_id or "human.overseer").strip()),
         }
 
-    def sync_council_ledger(self, *, project_id: str, since_seq: int = 0, limit: int = 200) -> dict[str, Any]:
+    def athena_council_ledger(self, *, project_id: str, since_seq: int = 0, limit: int = 200) -> dict[str, Any]:
         self.ensure_exists(project_id)
         rows = angelia_sync_council.list_ledger(
             project_id,
@@ -433,12 +443,124 @@ class ProjectService:
         )
         return {"project_id": project_id, "rows": rows}
 
-    def sync_council_resolutions(self, *, project_id: str, limit: int = 200) -> dict[str, Any]:
+    def athena_council_resolutions(self, *, project_id: str, limit: int = 200) -> dict[str, Any]:
         self.ensure_exists(project_id)
         rows = angelia_sync_council.list_resolutions(
             project_id,
             limit=max(1, min(int(limit or 200), 2000)),
         )
+        return {"project_id": project_id, "rows": rows}
+
+    def athena_flows(self, *, project_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        return {
+            "project_id": project_id,
+            "flows": athena_list_flow_definitions(),
+        }
+
+    def athena_runs(self, *, project_id: str, include_inactive: bool = False) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        return {
+            "project_id": project_id,
+            "runs": athena_list_flow_runs(project_id, include_inactive=bool(include_inactive)),
+        }
+
+    def athena_run_get(self, *, project_id: str, run_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rid = str(run_id or "").strip()
+        if not rid:
+            raise HTTPException(status_code=400, detail="run_id is required")
+        row = athena_get_flow_run(project_id, rid)
+        if not isinstance(row, dict):
+            raise HTTPException(status_code=404, detail="flow run not found")
+        return {"project_id": project_id, "run": row}
+
+    def athena_run_start(
+        self,
+        *,
+        project_id: str,
+        flow_key: str,
+        participants: list[str],
+        title: str = "",
+        started_by: str = "human.overseer",
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        proj = runtime_config.projects[project_id]
+        active = {
+            str(x).strip()
+            for x in list(getattr(proj, "active_agents", []) or [])
+            if str(x).strip()
+        }
+        members = [str(x).strip() for x in list(participants or []) if str(x).strip()]
+        if not members:
+            raise HTTPException(status_code=400, detail="participants is required")
+        illegal = [x for x in members if x not in active]
+        if illegal:
+            raise HTTPException(
+                status_code=400,
+                detail=f"participants must be active agents. invalid={','.join(illegal)}",
+            )
+        try:
+            row = athena_start_flow_run(
+                project_id,
+                flow_key=str(flow_key or "").strip(),
+                participants=members,
+                title=str(title or "").strip(),
+                started_by=str(started_by or "human.overseer").strip() or "human.overseer",
+                config=dict(config or {}),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"project_id": project_id, "run": row}
+
+    def athena_run_advance(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        next_stage: str,
+        actor_id: str = "human.overseer",
+        note: str = "",
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            row = athena_advance_flow_stage(
+                project_id,
+                run_id=str(run_id or "").strip(),
+                next_stage=str(next_stage or "").strip(),
+                actor_id=str(actor_id or "human.overseer").strip() or "human.overseer",
+                note=str(note or ""),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"project_id": project_id, "run": row}
+
+    def athena_run_finish(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        status: str = "completed",
+        actor_id: str = "human.overseer",
+        note: str = "",
+    ) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        try:
+            row = athena_finish_flow_run(
+                project_id,
+                run_id=str(run_id or "").strip(),
+                status=str(status or "completed").strip().lower(),
+                actor_id=str(actor_id or "human.overseer").strip() or "human.overseer",
+                note=str(note or ""),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"project_id": project_id, "run": row}
+
+    def athena_ledger(self, *, project_id: str, limit: int = 200) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        rows = athena_list_flow_ledger(project_id, limit=max(1, min(int(limit or 200), 5000)))
         return {"project_id": project_id, "rows": rows}
 
     def build_report(self, project_id: str) -> dict[str, Any]:
