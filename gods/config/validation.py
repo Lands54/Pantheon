@@ -40,6 +40,11 @@ def _agent_entity_exists(project_id: str, agent_id: str) -> bool:
     return agent_dir.is_dir() and profile.exists()
 
 
+def _project_entity_exists(project_id: str) -> bool:
+    base = Path("projects") / str(project_id or "")
+    return base.is_dir()
+
+
 def _clamp_int(value: int, low: int, high: int) -> int:
     return max(low, min(high, int(value)))
 
@@ -221,6 +226,14 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     )
 
     # Strict agent id hygiene: avoid invalid folders/identities leaking into runtime.
+    # Project-level softening: when project directory is absent (e.g. archived/removed),
+    # keep config loadable and skip entity existence checks.
+    project_exists = _project_entity_exists(project_id)
+    if not project_exists:
+        logger.warning(
+            "project '%s' directory not found under projects/; skip active_agents entity existence checks",
+            project_id,
+        )
     normalized_active: list[str] = []
     seen_active: set[str] = set()
     for aid in list(proj.active_agents or []):
@@ -230,11 +243,13 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
                 f"invalid active_agents item '{aa}' in project '{project_id}': "
                 "expected ^[a-z][a-z0-9_]{0,63}$ and not reserved human identity"
             )
-        if not _agent_entity_exists(project_id, aa):
-            raise ValueError(
-                f"invalid active_agents item '{aa}' in project '{project_id}': "
-                "agent entity not found (requires projects/<pid>/agents/<aid> and mnemosyne/agent_profiles/<aid>.md)"
+        if project_exists and not _agent_entity_exists(project_id, aa):
+            logger.warning(
+                "project '%s' active_agents contains missing entity '%s'; pruned under project-level soft strict mode",
+                project_id,
+                aa,
             )
+            continue
         if aa in seen_active:
             continue
         seen_active.add(aa)

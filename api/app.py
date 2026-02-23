@@ -17,6 +17,7 @@ from gods.events.migrate import assert_no_legacy_files_all_projects
 from gods.interaction import register_handlers as register_interaction_handlers
 from gods.agents.brain import prewarm_llm_runtime
 from gods.mnemosyne import ensure_memory_policy, validate_memory_policy
+from gods.paths import project_dir
 from gods.runtime.detach import startup_mark_lost_all_projects
 from gods.angelia import facade as angelia_facade
 
@@ -50,6 +51,12 @@ async def startup_event():
     legacy_guard = assert_no_legacy_files_all_projects()
     lost = startup_mark_lost_all_projects()
     for pid in runtime_config.projects.keys():
+        if not project_dir(pid).is_dir():
+            logger.warning(
+                "Startup validation skipped: project '%s' directory not found (likely archived/removed)",
+                pid,
+            )
+            continue
         try:
             ensure_memory_policy(pid)
             validate_memory_policy(pid, ensure_exists=True)
