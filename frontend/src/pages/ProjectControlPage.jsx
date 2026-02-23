@@ -8,18 +8,18 @@ import {
   Inbox, X, Network, FileText, Users, Settings
 } from 'lucide-react'
 import {
-  confirmSyncCouncil,
+  confirmAthenaCouncil,
   createAgent,
   deleteAgent,
-  getSyncCouncilLedger,
-  getSyncCouncilResolutions,
+  getAthenaCouncilLedger,
+  getAthenaCouncilResolutions,
   getHermesContracts,
   getHermesPorts,
   getSocialGraph,
-  getSyncCouncil,
-  syncCouncilAction,
-  syncCouncilChair,
-  startSyncCouncil,
+  getAthenaCouncil,
+  athenaCouncilAction,
+  athenaCouncilChair,
+  startAthenaCouncil,
 } from '../api/platformApi'
 
 function deepClone(v) {
@@ -372,9 +372,9 @@ export function ProjectControlPage({
   const refreshSyncCouncil = async () => {
     try {
       const [res, led, resol] = await Promise.all([
-        getSyncCouncil(projectId),
-        getSyncCouncilLedger(projectId, 0, 50).catch(() => ({ rows: [] })),
-        getSyncCouncilResolutions(projectId, 20).catch(() => ({ rows: [] })),
+        getAthenaCouncil(projectId),
+        getAthenaCouncilLedger(projectId, 0, 50).catch(() => ({ rows: [] })),
+        getAthenaCouncilResolutions(projectId, 20).catch(() => ({ rows: [] })),
       ])
       setSyncCouncil(res?.sync_council || null)
       setSyncLedger(Array.isArray(led?.rows) ? led.rows : [])
@@ -604,7 +604,7 @@ export function ProjectControlPage({
         ],
         timeouts: { speaker: 90, action: 90, vote: 120 },
       }
-      const res = await startSyncCouncil(projectId, payload)
+      const res = await startAthenaCouncil(projectId, payload)
       setSyncCouncil(res?.sync_council || null)
       setStatus('同步商议已启动')
     } catch (err) {
@@ -619,7 +619,7 @@ export function ProjectControlPage({
     setError('')
     setSyncBusy(true)
     try {
-      const res = await confirmSyncCouncil(projectId, aid)
+      const res = await confirmAthenaCouncil(projectId, aid)
       setSyncCouncil(res?.sync_council || null)
       setStatus(`已确认：${aid}`)
     } catch (err) {
@@ -634,7 +634,7 @@ export function ProjectControlPage({
     setError('')
     setSyncBusy(true)
     try {
-      const res = await syncCouncilChair(projectId, action, 'human.overseer')
+      const res = await athenaCouncilChair(projectId, action, 'human.overseer')
       setSyncCouncil(res?.sync_council || null)
       await refreshSyncCouncil()
       setStatus(`Chair action: ${action}`)
@@ -653,7 +653,7 @@ export function ProjectControlPage({
       const payload = {}
       if (syncAction === 'vote_cast') payload.choice = syncVoteChoice
       if (['motion_submit', 'debate_speak', 'amend_submit'].includes(syncAction)) payload.text = syncActionText
-      const res = await syncCouncilAction(projectId, 'human.overseer', syncAction, payload)
+      const res = await athenaCouncilAction(projectId, 'human.overseer', syncAction, payload)
       setSyncCouncil(res?.sync_council || null)
       await refreshSyncCouncil()
       setStatus(`Action submitted: ${syncAction}`)

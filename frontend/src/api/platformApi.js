@@ -226,37 +226,73 @@ export function gatewaySendMessage(projectId, fromId, toId, title, message, atta
   })
 }
 
-export function startSyncCouncil(projectId, payload) {
-  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/start`, payload || {})
+export function startAthenaCouncil(projectId, payload) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/council/start`, payload || {})
 }
 
-export function confirmSyncCouncil(projectId, agentId) {
-  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/confirm`, { agent_id: agentId })
+export function confirmAthenaCouncil(projectId, agentId) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/council/confirm`, { agent_id: agentId })
 }
 
-export function getSyncCouncil(projectId) {
-  return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council`)
+export function getAthenaCouncil(projectId) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/council`)
 }
 
-export function syncCouncilAction(projectId, actorId, actionType, payload = {}) {
-  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/action`, {
+export function athenaCouncilAction(projectId, actorId, actionType, payload = {}) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/council/action`, {
     actor_id: actorId,
     action_type: actionType,
     payload,
   })
 }
 
-export function syncCouncilChair(projectId, action, actorId = 'human.overseer') {
-  return apiPost(`/projects/${encodeURIComponent(projectId)}/sync-council/chair`, {
+export function athenaCouncilChair(projectId, action, actorId = 'human.overseer') {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/council/chair`, {
     action,
     actor_id: actorId,
   })
 }
 
-export function getSyncCouncilLedger(projectId, sinceSeq = 0, limit = 200) {
-  return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council/ledger${qp({ since_seq: sinceSeq, limit })}`)
+export function getAthenaCouncilLedger(projectId, sinceSeq = 0, limit = 200) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/council/ledger${qp({ since_seq: sinceSeq, limit })}`)
 }
 
-export function getSyncCouncilResolutions(projectId, limit = 200) {
-  return apiGet(`/projects/${encodeURIComponent(projectId)}/sync-council/resolutions${qp({ limit })}`)
+export function getAthenaCouncilResolutions(projectId, limit = 200) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/council/resolutions${qp({ limit })}`)
+}
+
+export function getAthenaFlows(projectId) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/flows`)
+}
+
+export function getAthenaRuns(projectId, includeInactive = false) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/runs${qp({ include_inactive: includeInactive })}`)
+}
+
+export function startAthenaRun(projectId, payload) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/runs/start`, payload || {})
+}
+
+export function getAthenaRun(projectId, runId) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/runs/${encodeURIComponent(runId)}`)
+}
+
+export function advanceAthenaRun(projectId, runId, nextStage, actorId = 'human.overseer', note = '') {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/runs/${encodeURIComponent(runId)}/advance`, {
+    next_stage: nextStage,
+    actor_id: actorId,
+    note,
+  })
+}
+
+export function finishAthenaRun(projectId, runId, status = 'completed', actorId = 'human.overseer', note = '') {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/athena/runs/${encodeURIComponent(runId)}/finish`, {
+    status,
+    actor_id: actorId,
+    note,
+  })
+}
+
+export function getAthenaLedger(projectId, limit = 200) {
+  return apiGet(`/projects/${encodeURIComponent(projectId)}/athena/ledger${qp({ limit })}`)
 }
