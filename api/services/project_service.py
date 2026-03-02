@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from gods.angelia import facade as angelia_facade
 from gods.angelia import sync_council as angelia_sync_council
+from gods.agents import registry as agent_registry
 from gods.athena import (
     advance_flow_stage as athena_advance_flow_stage,
     finish_flow_run as athena_finish_flow_run,
@@ -24,13 +25,19 @@ from gods.config import ProjectConfig, runtime_config
 from gods.iris import facade as iris_facade
 from gods.mnemosyne import facade as mnemosyne_facade
 from gods.mnemosyne import template_registry as mnemosyne_templates
-from gods.project import build_project_report, load_project_report
+from gods.project.reporting import build_project_report, load_project_report
+from gods.project import registry as project_registry
+from gods.project.bootstrap import migrate_runtime_registries_from_config
 from gods.protocols import build_knowledge_graph
 from gods.runtime import facade as runtime_facade
 from gods.paths import runtime_debug_dir
 
 
 class ProjectService:
+    @staticmethod
+    def _active_agents(project_id: str) -> list[str]:
+        return agent_registry.list_active_agents(project_id)
+
     @staticmethod
     def _read_latest_jsonl_row(path: Path) -> dict[str, Any] | None:
         if not path.exists():
@@ -94,7 +101,19 @@ class ProjectService:
         ProjectService._ensure_project_layout(project_root)
 
     def list_projects(self) -> dict[str, Any]:
-        return {"projects": runtime_config.projects, "current": runtime_config.current_project}
+        migrated = migrate_runtime_registries_from_config(runtime_config.projects, project_registry.current_project())
+        projects_payload: dict[str, Any] = {}
+        for pid, proj in runtime_config.projects.items():
+            row = proj.model_dump()
+            row["active_agents"] = agent_registry.list_active_agents(pid)
+            projects_payload[pid] = row
+        return {"projects": projects_payload, "current": migrated.get("current_project", "default")}
+
+    def select_project(self, project_id: str) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        project_registry.set_current_project(project_id)
+        runtime_config.save()
+        return {"status": "success", "current": project_registry.current_project()}
 
     def create_project(self, pid: str) -> dict[str, str]:
         if not pid:
@@ -104,8 +123,10 @@ class ProjectService:
 
         runtime_config.projects[pid] = ProjectConfig()
         runtime_config.save()
+        project_registry.add_project(pid)
         # Create project root from templates/default and enforce current runtime layout.
         self._scaffold_project_root(pid)
+        agent_registry.ensure_registry(pid)
         return {"status": "success"}
 
     def delete_project(self, project_id: str) -> dict[str, str]:
@@ -122,9 +143,11 @@ class ProjectService:
 
         proj = runtime_config.projects[project_id]
         proj.simulation_enabled = False
+        active_agents = self._active_agents(project_id)
         del runtime_config.projects[project_id]
-        if runtime_config.current_project == project_id:
-            runtime_config.current_project = "default"
+        if project_registry.current_project() == project_id:
+            project_registry.set_current_project("default")
+        project_registry.remove_project(project_id)
         runtime_config.save()
 
         proj_dir = Path("projects") / project_id
@@ -179,15 +202,16 @@ class ProjectService:
         for pid, proj in runtime_config.projects.items():
             proj.simulation_enabled = pid == project_id
 
-        runtime_config.current_project = project_id
+        project_registry.set_current_project(project_id)
         proj = runtime_config.projects[project_id]
+        active_agents = self._active_agents(project_id)
         runtime_info = {"enabled": False, "ensured": []}
         if bool(getattr(proj, "docker_enabled", True)) and str(getattr(proj, "command_executor", "local")) == "docker":
             if bool(getattr(proj, "docker_auto_start_on_project_start", True)):
                 ok, msg = runtime_facade.docker_available()
                 runtime_info = {"enabled": True, "available": ok, "detail": msg, "ensured": []}
                 if ok:
-                    for aid in proj.active_agents:
+                    for aid in active_agents:
                         try:
                             st = runtime_facade.ensure_agent_runtime(project_id, aid)
                             runtime_info["ensured"].append(
@@ -202,7 +226,7 @@ class ProjectService:
                             runtime_info["ensured"].append({"agent_id": aid, "error": str(e)})
         runtime_config.save()
         try:
-            for aid in proj.active_agents:
+            for aid in active_agents:
                 angelia_facade.enqueue_event(
                     project_id=project_id,
                     agent_id=aid,
@@ -217,18 +241,19 @@ class ProjectService:
             "status": "success",
             "project_id": project_id,
             "simulation_enabled": True,
-            "current_project": runtime_config.current_project,
+            "current_project": project_registry.current_project(),
             "runtime": runtime_info,
         }
 
     def stop_project(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
         proj = runtime_config.projects[project_id]
+        active_agents = self._active_agents(project_id)
         proj.simulation_enabled = False
         runtime_info = {"stopped": []}
         if bool(getattr(proj, "docker_enabled", True)) and str(getattr(proj, "command_executor", "local")) == "docker":
             if bool(getattr(proj, "docker_auto_stop_on_project_stop", True)):
-                for aid in proj.active_agents:
+                for aid in active_agents:
                     runtime_facade.stop_agent_runtime(project_id, aid)
                     runtime_info["stopped"].append(aid)
         runtime_config.save()
@@ -236,21 +261,19 @@ class ProjectService:
             "status": "success",
             "project_id": project_id,
             "simulation_enabled": False,
-            "current_project": runtime_config.current_project,
+            "current_project": project_registry.current_project(),
             "runtime": runtime_info,
         }
 
     def runtime_status(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        proj = runtime_config.projects[project_id]
-        rows = runtime_facade.list_project_runtimes(project_id, proj.active_agents)
+        rows = runtime_facade.list_project_runtimes(project_id, self._active_agents(project_id))
         ok, msg = runtime_facade.docker_available()
         return {"project_id": project_id, "docker_available": ok, "docker_detail": msg, "agents": rows}
 
     def runtime_restart_agent(self, project_id: str, agent_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        proj = runtime_config.projects[project_id]
-        if agent_id not in proj.active_agents:
+        if agent_id not in set(self._active_agents(project_id)):
             raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' is not active in project '{project_id}'")
         ok, msg = runtime_facade.docker_available()
         if not ok:
@@ -268,11 +291,28 @@ class ProjectService:
 
     def runtime_reconcile(self, project_id: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        proj = runtime_config.projects[project_id]
         ok, msg = runtime_facade.docker_available()
         if not ok:
             raise HTTPException(status_code=503, detail=f"Docker unavailable: {msg}")
-        return runtime_facade.reconcile_project(project_id, proj.active_agents)
+        return runtime_facade.reconcile_project(project_id, self._active_agents(project_id))
+
+    def set_agent_active(self, project_id: str, agent_id: str, active: bool) -> dict[str, Any]:
+        self.ensure_exists(project_id)
+        aid = str(agent_id or "").strip()
+        if not aid:
+            raise HTTPException(status_code=400, detail="agent_id is required")
+        try:
+            agent_registry.ensure_registry(project_id)
+            agent_registry.set_active(project_id, aid, bool(active))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {
+            "status": "success",
+            "project_id": project_id,
+            "agent_id": aid,
+            "active": bool(active),
+            "active_agents": self._active_agents(project_id),
+        }
 
     def detach_submit(self, project_id: str, agent_id: str, command: str) -> dict[str, Any]:
         self.ensure_exists(project_id)
@@ -324,12 +364,7 @@ class ProjectService:
         timeouts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        proj = runtime_config.projects[project_id]
-        active = {
-            str(x).strip()
-            for x in list(getattr(proj, "active_agents", []) or [])
-            if str(x).strip()
-        }
+        active = {str(x).strip() for x in self._active_agents(project_id) if str(x).strip()}
         members = [str(x).strip() for x in list(participants or []) if str(x).strip()]
         if not members:
             raise HTTPException(status_code=400, detail="participants is required")
@@ -486,12 +521,7 @@ class ProjectService:
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         self.ensure_exists(project_id)
-        proj = runtime_config.projects[project_id]
-        active = {
-            str(x).strip()
-            for x in list(getattr(proj, "active_agents", []) or [])
-            if str(x).strip()
-        }
+        active = {str(x).strip() for x in self._active_agents(project_id) if str(x).strip()}
         members = [str(x).strip() for x in list(participants or []) if str(x).strip()]
         if not members:
             raise HTTPException(status_code=400, detail="participants is required")

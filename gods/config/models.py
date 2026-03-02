@@ -52,7 +52,6 @@ class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: Optional[str] = PROJECT_DEFAULTS["name"]
-    active_agents: List[str] = Field(default_factory=lambda: _deepcopy_default(PROJECT_DEFAULTS["active_agents"]))
     agent_settings: Dict[str, AgentModelConfig] = Field(
         default_factory=lambda: _deepcopy_default(PROJECT_DEFAULTS["agent_settings"])
     )
@@ -166,7 +165,6 @@ class SystemConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     openrouter_api_key: str = SYSTEM_DEFAULTS["openrouter_api_key"]
-    current_project: str = SYSTEM_DEFAULTS["current_project"]
     projects: Dict[str, ProjectConfig] = Field(default_factory=_default_projects)
 
     def save(self):

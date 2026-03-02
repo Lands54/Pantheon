@@ -139,14 +139,14 @@ class ConfigRegistry:
         if not isinstance(data, dict):
             raise ValueError("invalid config payload: must be object")
 
-        allowed_root = {"openrouter_api_key", "current_project", "projects"}
+        allowed_root = {"openrouter_api_key", "projects"}
         unknown_root = [k for k in data.keys() if k not in allowed_root]
         if unknown_root:
             raise ValueError(f"invalid config payload: unknown top-level keys: {', '.join(sorted(unknown_root))}")
 
         warnings: list[str] = []
 
-        for root_key in ("openrouter_api_key", "current_project"):
+        for root_key in ("openrouter_api_key",):
             if root_key in data:
                 e = self.get("system", root_key)
                 if not e:

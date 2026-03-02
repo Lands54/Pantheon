@@ -24,7 +24,7 @@ export function AgentStatusTable({ rows = [], onPickAgent }) {
             {rows.map((row) => (
               <tr key={row.agent_id} onClick={() => onPickAgent?.(row.agent_id)}>
                 <td>{row.agent_id}</td>
-                <td>{row.status}</td>
+                <td>{row.worker_state || 'idle'}</td>
                 <td>{formatTs(row.last_pulse_at)}</td>
                 <td>{row.queued_pulse_events ?? 0}</td>
                 <td>{row.has_pending_inbox ? 'Yes' : 'No'}</td>

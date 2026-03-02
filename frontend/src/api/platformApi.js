@@ -26,6 +26,14 @@ export function createProject(id) {
   return apiPost('/projects/create', { id })
 }
 
+export function getProjects() {
+  return apiGet('/projects')
+}
+
+export function selectProject(projectId) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/select`, {})
+}
+
 export function deleteProject(projectId) {
   return apiDelete(`/projects/${encodeURIComponent(projectId)}`)
 }
@@ -36,6 +44,12 @@ export function startProject(projectId) {
 
 export function stopProject(projectId) {
   return apiPost(`/projects/${encodeURIComponent(projectId)}/stop`, {})
+}
+
+export function setProjectAgentActive(projectId, agentId, active) {
+  return apiPost(`/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/active`, {
+    active: !!active,
+  })
 }
 
 export function getAgentStatus(projectId) {

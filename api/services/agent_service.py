@@ -9,25 +9,48 @@ from fastapi import HTTPException
 
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
+from gods.agents import registry as agent_registry
 from gods.config import AgentModelConfig, runtime_config
 from gods.identity import HUMAN_AGENT_ID, is_valid_agent_id
 from gods.iris import facade as iris_facade
 
 
 class AgentService:
+    @staticmethod
+    def _derive_llm_state(row: dict[str, Any], queued: int) -> str:
+        run_state = str(row.get("run_state", "") or "").strip().lower()
+        event_type = str(row.get("current_event_type", "") or "").strip().lower()
+        last_error = str(row.get("last_error", "") or "").lower()
+        backoff_until = float(row.get("backoff_until", 0.0) or 0.0)
+
+        if "429" in last_error or "rate limit" in last_error:
+            return "throttled"
+        if run_state == "error_backoff" or backoff_until > 0:
+            return "backoff"
+        if run_state == "running" and event_type:
+            return "inflight"
+        if queued > 0:
+            return "queued"
+        if run_state == "cooldown":
+            return "cooldown"
+        return "none"
+
     def status(self, project_id: str | None = None) -> dict[str, Any]:
         pid = resolve_project(project_id)
-        proj = runtime_config.projects.get(pid)
-        active = list(proj.active_agents) if proj else []
+        active = agent_registry.list_active_agents(pid)
         rows = angelia_facade.list_agent_status(pid, active)
         items = []
         for row in rows:
             aid = row.get("agent_id", "")
+            queued = int(row.get("queued_events", 0) or 0)
+            worker_state = str(row.get("run_state", "idle") or "idle")
+            llm_state = self._derive_llm_state(row, queued)
             items.append(
                 {
                     "project_id": pid,
                     "agent_id": aid,
-                    "status": row.get("run_state", "idle"),
+                    "worker_state": worker_state,
+                    "llm_state": llm_state,
                     "last_reason": row.get("current_event_type", ""),
                     "last_pulse_at": float(row.get("last_wake_at", 0.0) or 0.0),
                     "next_eligible_at": max(
@@ -37,7 +60,7 @@ class AgentService:
                     "empty_cycles": 0,
                     "last_next_step": "",
                     "last_error": row.get("last_error", ""),
-                    "queued_pulse_events": int(row.get("queued_events", 0)),
+                    "queued_pulse_events": queued,
                     "has_pending_inbox": bool(iris_facade.has_pending(pid, aid)),
                 }
             )
@@ -67,6 +90,8 @@ class AgentService:
         proj = runtime_config.projects[project_id]
         if aid not in proj.agent_settings:
             proj.agent_settings[aid] = AgentModelConfig()
+        agent_registry.ensure_registry(project_id)
+        agent_registry.register_agent(project_id, aid, active=False)
         runtime_config.save()
         return {"status": "success"}
 
@@ -83,9 +108,8 @@ class AgentService:
         profile = Path("projects") / project_id / "mnemosyne" / "agent_profiles" / f"{aid}.md"
         if profile.exists():
             profile.unlink()
+        agent_registry.unregister_agent(project_id, aid)
         proj = runtime_config.projects[project_id]
-        if aid in proj.active_agents:
-            proj.active_agents.remove(aid)
         if aid in proj.agent_settings:
             del proj.agent_settings[aid]
         runtime_config.save()

@@ -22,16 +22,6 @@ CONFIG_BLOCKS: list[ConfigBlockDecl] = [
                 runtime_used_by=["gods/agents/brain.py", "api/services/config_service.py"],
             ),
             ConfigFieldDecl(
-                key="current_project",
-                scope="system",
-                type="string",
-                default="default",
-                nullable=False,
-                description="当前激活项目 ID。",
-                owner="core-runtime",
-                runtime_used_by=["gods/config/runtime.py", "api/services/project_service.py"],
-            ),
-            ConfigFieldDecl(
                 key="projects",
                 scope="system",
                 type="object",

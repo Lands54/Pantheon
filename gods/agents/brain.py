@@ -9,6 +9,7 @@ import threading
 import time
 
 from gods.config import runtime_config
+from gods.project import registry as project_registry
 from langchain_core.messages import AIMessage
 from gods.agents.llm_control import LLMControlAcquireTimeout, llm_control_plane
 from gods.mnemosyne.compaction import note_llm_token_io
@@ -61,12 +62,15 @@ class GodBrain:
         """
         self.agent_id = agent_id
         self.project_id = project_id
+
+    def _current_project(self) -> str:
+        return str(self.project_id or project_registry.current_project() or "default")
     
     def _resolve_model(self) -> str:
         """
         Determines the appropriate LLM model for the agent based on project configuration.
         """
-        current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+        current_project = self._current_project()
         projects = getattr(runtime_config, 'projects', {})
         proj = projects.get(current_project)
         if proj and hasattr(proj, 'agent_settings') and self.agent_id in proj.agent_settings:
@@ -77,7 +81,7 @@ class GodBrain:
         """
         Checks if LLM tracing is enabled for the current project.
         """
-        current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+        current_project = self._current_project()
         proj = getattr(runtime_config, "projects", {}).get(current_project)
         return bool(getattr(proj, "debug_llm_trace_enabled", True) if proj else True)
 
@@ -156,7 +160,7 @@ class GodBrain:
             return
 
         meta = trace_meta or {}
-        current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+        current_project = self._current_project()
         trace_dir = runtime_debug_dir(current_project, self.agent_id)
         trace_dir.mkdir(parents=True, exist_ok=True)
         trace_file = trace_dir / "llm_io.jsonl"
@@ -217,7 +221,7 @@ class GodBrain:
         ChatOpenAI = self._resolve_chat_openai_class()
         
         model = self._resolve_model()
-        current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+        current_project = self._current_project()
         proj = getattr(runtime_config, "projects", {}).get(current_project)
         request_timeout_sec = int(getattr(proj, "llm_request_timeout_sec", 90) if proj else 90)
         request_timeout_sec = max(1, min(request_timeout_sec, 600))
@@ -252,7 +256,7 @@ class GodBrain:
 
         ticket = None
         try:
-            current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+            current_project = self._current_project()
             ticket = llm_control_plane.acquire(current_project)
             llm, model = self.get_llm()
             response = llm.invoke(context)
@@ -303,7 +307,7 @@ class GodBrain:
 
         ticket = None
         try:
-            current_project = self.project_id or getattr(runtime_config, 'current_project', 'default')
+            current_project = self._current_project()
             ticket = llm_control_plane.acquire(current_project)
             llm_raw, model = self.get_llm()
             llm = llm_raw.bind_tools(tools)
@@ -360,7 +364,7 @@ class GodBrain:
         """
         Returns a string representation of the GodBrain instance.
         """
-        current_project = self.project_id or runtime_config.current_project
+        current_project = self._current_project()
         proj = runtime_config.projects.get(current_project)
         model = "default"
         if proj and self.agent_id in proj.agent_settings:

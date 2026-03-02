@@ -225,37 +225,6 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
         known_tools=known_tools,
     )
 
-    # Strict agent id hygiene: avoid invalid folders/identities leaking into runtime.
-    # Project-level softening: when project directory is absent (e.g. archived/removed),
-    # keep config loadable and skip entity existence checks.
-    project_exists = _project_entity_exists(project_id)
-    if not project_exists:
-        logger.warning(
-            "project '%s' directory not found under projects/; skip active_agents entity existence checks",
-            project_id,
-        )
-    normalized_active: list[str] = []
-    seen_active: set[str] = set()
-    for aid in list(proj.active_agents or []):
-        aa = str(aid or "").strip()
-        if not is_valid_agent_id(aa):
-            raise ValueError(
-                f"invalid active_agents item '{aa}' in project '{project_id}': "
-                "expected ^[a-z][a-z0-9_]{0,63}$ and not reserved human identity"
-            )
-        if project_exists and not _agent_entity_exists(project_id, aa):
-            logger.warning(
-                "project '%s' active_agents contains missing entity '%s'; pruned under project-level soft strict mode",
-                project_id,
-                aa,
-            )
-            continue
-        if aa in seen_active:
-            continue
-        seen_active.add(aa)
-        normalized_active.append(aa)
-    proj.active_agents = normalized_active
-
     proj.finalize_sleep_min_sec = _clamp_int(proj.finalize_sleep_min_sec, 5, 3600)
     proj.finalize_sleep_max_sec = _clamp_int(proj.finalize_sleep_max_sec, proj.finalize_sleep_min_sec, 86400)
     proj.finalize_sleep_default_sec = _clamp_int(
@@ -309,16 +278,8 @@ def normalize_project_config(project_id: str, proj: ProjectConfig) -> ProjectCon
     }
 
     raw_agent_settings = dict(proj.agent_settings or {})
-    stale = [aid for aid in raw_agent_settings.keys() if aid not in set(proj.active_agents or [])]
-    if stale:
-        logger.warning(
-            "project '%s': prune %s stale agent_settings not in active_agents: %s",
-            project_id,
-            len(stale),
-            ", ".join(sorted(stale)),
-        )
     normalized_settings: dict[str, AgentModelConfig] = {}
-    for aid in list(proj.active_agents or []):
+    for aid in sorted(raw_agent_settings.keys()):
         settings = raw_agent_settings.get(aid) or AgentModelConfig()
         if not is_valid_agent_id(aid):
             raise ValueError(
@@ -389,6 +350,4 @@ def normalize_system_config(cfg: SystemConfig) -> SystemConfig:
         normalized["default"] = ProjectConfig(name="Default World")
 
     cfg.projects = normalized
-    if cfg.current_project not in cfg.projects:
-        cfg.current_project = "default"
     return cfg

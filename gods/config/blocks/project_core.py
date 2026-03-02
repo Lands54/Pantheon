@@ -12,7 +12,6 @@ CONFIG_BLOCKS: list[ConfigBlockDecl] = [
         group_title="Project Core",
         fields=[
             ConfigFieldDecl("name", "project", "string", None, True, "项目展示名称。", "project-runtime", ["api/services/project_service.py"]),
-            ConfigFieldDecl("active_agents", "project", "array", [], False, "项目激活 agent 列表。", "project-runtime", ["api/services/project_service.py", "api/services/angelia_service.py"]),
             ConfigFieldDecl("phase_strategy", "project", "string", "react_graph", False, "项目策略流程名。", "project-runtime", ["gods/agents/runtime/engine.py", "cli/commands/agent.py"], enum=["react_graph", "freeform"]),
         ],
     ),

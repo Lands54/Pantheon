@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 
 from gods import events as events_bus
+from gods.agents import registry as agent_registry
 from gods.config import runtime_config
 from gods.identity import is_valid_agent_id
 
@@ -33,7 +34,7 @@ def _try_wake_on_enqueue(record: events_bus.EventRecord) -> None:
     proj = runtime_config.projects.get(record.project_id)
     if not proj:
         return
-    if aid not in set(getattr(proj, "active_agents", []) or []):
+    if aid not in set(agent_registry.list_active_agents(record.project_id) or []):
         return
     try:
         from gods.angelia.scheduler import angelia_supervisor

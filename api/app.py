@@ -18,6 +18,7 @@ from gods.interaction import register_handlers as register_interaction_handlers
 from gods.agents.brain import prewarm_llm_runtime
 from gods.mnemosyne import ensure_memory_policy, validate_memory_policy
 from gods.paths import project_dir
+from gods.project.bootstrap import migrate_runtime_registries_from_config
 from gods.runtime.detach import startup_mark_lost_all_projects
 from gods.angelia import facade as angelia_facade
 
@@ -39,6 +40,7 @@ app.include_router(events.router)
 
 @app.on_event("startup")
 async def startup_event():
+    migrated = migrate_runtime_registries_from_config(runtime_config.projects, "default")
     # Safety-first startup: pause worlds first, then start scheduler loop.
     changed = simulation_service.pause_all_projects_on_startup()
     register_interaction_handlers()
@@ -64,6 +66,7 @@ async def startup_event():
             logger.error(f"Startup validation failed for project '{pid}': {e}")
             raise
     logger.info(f"Legacy runtime file guard: {legacy_guard}")
+    logger.info(f"Runtime registry bootstrap: projects={len(migrated.get('projects', []))} current={migrated.get('current_project')}")
     logger.info(f"Detach startup reconcile: marked lost jobs per project: {lost}")
     simulation_service.check_runtime_health()
     if changed > 0:

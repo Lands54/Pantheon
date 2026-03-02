@@ -5,6 +5,7 @@ import time
 import uuid
 
 from api.services import project_service
+from gods.agents import registry as agent_registry
 from gods.angelia import store as angelia_store
 from gods.angelia import sync_council
 from gods.config import runtime_config
@@ -30,13 +31,15 @@ def test_roberts_sync_council_end_to_end_simulation():
             pf.write_text(f"agent {aid}", encoding="utf-8")
 
         proj = runtime_config.projects[pid]
-        proj.active_agents = list(agents)
         cur = dict(proj.agent_settings or {})
         for aid in agents:
             if aid not in cur or not isinstance(cur.get(aid), AgentModelConfig):
                 cur[aid] = AgentModelConfig()
         proj.agent_settings = cur
         runtime_config.save()
+        agent_registry.ensure_registry(pid)
+        for aid in agents:
+            agent_registry.register_agent(pid, aid, active=True)
 
         st = project_service.athena_council_start(
             project_id=pid,

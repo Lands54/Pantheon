@@ -10,6 +10,7 @@ from . import policy, store
 from gods.angelia.mailbox import angelia_mailbox
 from gods.angelia.metrics import angelia_metrics
 from gods.angelia.worker import WorkerContext, worker_loop
+from gods.agents import registry as agent_registry
 from gods.config import runtime_config
 from gods.identity import is_valid_agent_id
 
@@ -138,7 +139,7 @@ class AngeliaSupervisor:
             return {"project_id": project_id, "emitted": 0}
         idle_sec = policy.timer_idle_sec(project_id)
         now = time.time()
-        for agent_id in list(getattr(proj, "active_agents", []) or []):
+        for agent_id in list(agent_registry.list_active_agents(project_id) or []):
             self._ensure_worker(project_id, agent_id)
             if store.has_queued(project_id, agent_id):
                 continue
@@ -190,7 +191,7 @@ class AngeliaSupervisor:
                         continue
                     if bool(getattr(proj, "simulation_enabled", False)):
                         enabled_projects.append(pid)
-                        for aid in list(getattr(proj, "active_agents", []) or []):
+                        for aid in list(agent_registry.list_active_agents(pid) or []):
                             self._ensure_worker(pid, aid)
                         self.tick_timer_once(pid)
 
@@ -201,7 +202,7 @@ class AngeliaSupervisor:
                             stale.append((pid, aid, h))
                             continue
                         proj = runtime_config.projects.get(pid)
-                        if not proj or aid not in list(getattr(proj, "active_agents", []) or []):
+                        if not proj or aid not in set(agent_registry.list_active_agents(pid) or []):
                             stale.append((pid, aid, h))
                     for pid, aid, h in stale:
                         h.stop_event.set()
@@ -219,7 +220,7 @@ class AngeliaSupervisor:
         proj = runtime_config.projects.get(project_id)
         if not proj:
             return False
-        return aid in set(getattr(proj, "active_agents", []) or [])
+        return aid in set(agent_registry.list_active_agents(project_id) or [])
 
 
 angelia_supervisor = AngeliaSupervisor()

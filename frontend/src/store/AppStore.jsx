@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react'
-import { createProject, getConfig, saveConfig, startProject, stopProject } from '../api/platformApi'
+import { createProject, getConfig, getProjects, saveConfig, selectProject, startProject, stopProject } from '../api/platformApi'
 
 const AppStoreContext = createContext(null)
 
@@ -17,7 +17,12 @@ export function AppStoreProvider({ children }) {
     setLoading(true)
     setError('')
     try {
-      const data = await getConfig()
+      const [cfg, projectsState] = await Promise.all([getConfig(), getProjects()])
+      const data = {
+        ...(cfg || {}),
+        current_project: projectsState?.current || cfg?.current_project || 'default',
+        projects: projectsState?.projects || cfg?.projects || {},
+      }
       setConfig(data)
       return data
     } catch (err) {
@@ -30,8 +35,7 @@ export function AppStoreProvider({ children }) {
 
   const switchProject = async (projectId) => {
     if (!projectId || projectId === 'null' || projectId === 'undefined') return
-    const next = { ...config, current_project: projectId }
-    await saveConfig(next)
+    await selectProject(projectId)
     await refreshConfig()
   }
 
@@ -49,7 +53,16 @@ export function AppStoreProvider({ children }) {
   }
 
   const updateConfig = async (next) => {
-    const res = await saveConfig(next)
+    const payload = JSON.parse(JSON.stringify(next || {}))
+    delete payload.current_project
+    const projects = payload.projects && typeof payload.projects === 'object' ? payload.projects : {}
+    for (const pid of Object.keys(projects)) {
+      const proj = projects[pid]
+      if (proj && typeof proj === 'object') {
+        delete proj.active_agents
+      }
+    }
+    const res = await saveConfig(payload)
     const fresh = await refreshConfig()
     return { ...(fresh || {}), warnings: res?.warnings || [] }
   }

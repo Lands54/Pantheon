@@ -5,14 +5,13 @@ from typing import Any
 
 from api.services.common.project_context import resolve_project
 from gods.angelia import facade as angelia_facade
-from gods.config import runtime_config
+from gods.agents import registry as agent_registry
 
 
 class AngeliaService:
     def agents_status(self, project_id: str | None = None) -> dict[str, Any]:
         pid = resolve_project(project_id)
-        proj = runtime_config.projects.get(pid)
-        active = list(getattr(proj, "active_agents", []) or []) if proj else []
+        active = agent_registry.list_active_agents(pid)
         return {
             "project_id": pid,
             "agents": angelia_facade.list_agent_status(pid, active),

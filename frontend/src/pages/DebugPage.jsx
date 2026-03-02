@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { createAgent, deleteProject, getConfig, startProject } from '../api/platformApi'
+import { createAgent, deleteProject, getConfig, selectProject, setProjectAgentActive, startProject } from '../api/platformApi'
 
 const DEFAULT_PROJECT_ID = 'animal_world_lab'
 const ANIMAL_AGENTS = [
@@ -62,9 +62,9 @@ export function DebugPage({ config, onCreateProject, onSaveConfig }) {
         await deleteProject(pid)
       }
       await onCreateProject(pid)
+      await selectProject(pid)
       const latest = await getConfig()
       const next = deepClone(latest)
-      next.current_project = pid
       next.projects = next.projects || {}
       next.projects[pid] = next.projects[pid] || {}
 
@@ -80,7 +80,6 @@ export function DebugPage({ config, onCreateProject, onSaveConfig }) {
       proj.llm_project_max_concurrency = 8
       proj.llm_project_rate_per_minute = 240
       proj.llm_acquire_timeout_sec = 60
-      proj.active_agents = createAgents ? [...ANIMAL_AGENTS] : (Array.isArray(proj.active_agents) ? proj.active_agents : [])
       proj.agent_settings = proj.agent_settings && typeof proj.agent_settings === 'object' ? proj.agent_settings : {}
 
       for (const aid of ANIMAL_AGENTS) {
@@ -95,6 +94,11 @@ export function DebugPage({ config, onCreateProject, onSaveConfig }) {
             await createAgent(aid, AGENT_DIRECTIVES[aid] || '')
           } catch {
             // Ignore "Agent exists" and continue for idempotent bootstrap.
+          }
+          try {
+            await setProjectAgentActive(pid, aid, true)
+          } catch {
+            // agent may not exist yet in edge races; ignore per-agent toggle failures.
           }
         }
       }

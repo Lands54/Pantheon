@@ -25,7 +25,6 @@ def test_project_config_defaults():
     """Test ProjectConfig default values."""
     config = ProjectConfig()
     assert config.name is None
-    assert config.active_agents == []
     assert config.agent_settings == {}
     assert config.simulation_enabled is False
     assert config.simulation_interval_min == 10
@@ -42,11 +41,9 @@ def test_project_config_custom():
     """Test ProjectConfig with custom values."""
     config = ProjectConfig(
         name="Test World",
-        active_agents=["agent1", "agent2"],
         simulation_enabled=True
     )
     assert config.name == "Test World"
-    assert len(config.active_agents) == 2
     assert config.simulation_enabled is True
 
 
@@ -54,7 +51,6 @@ def test_system_config_defaults():
     """Test SystemConfig default values."""
     config = SystemConfig()
     assert config.openrouter_api_key == ""
-    assert config.current_project == "default"
     assert "default" in config.projects
 
 

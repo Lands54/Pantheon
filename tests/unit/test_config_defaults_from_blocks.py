@@ -14,5 +14,4 @@ def test_model_defaults_follow_block_defaults():
     assert agent.model == AGENT_DEFAULTS["model"]
     assert agent.disabled_tools == AGENT_DEFAULTS["disabled_tools"]
 
-    assert syscfg.current_project == SYSTEM_DEFAULTS["current_project"]
     assert "default" in syscfg.projects

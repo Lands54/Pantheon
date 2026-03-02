@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from gods.config import runtime_config
+from gods.agents import registry as agent_registry
 from gods.identity import is_valid_agent_id
 from gods.paths import project_dir
 
@@ -25,7 +26,7 @@ def _list_project_agents(project_id: str) -> list[str]:
 
     proj = runtime_config.projects.get(project_id)
     if proj is not None:
-        for aid in list(getattr(proj, "active_agents", []) or []):
+        for aid in list(agent_registry.list_active_agents(project_id) or []):
             aa = str(aid or "").strip()
             if not is_valid_agent_id(aa) or aa in seen:
                 continue

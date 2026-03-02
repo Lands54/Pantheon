@@ -8,6 +8,7 @@ from gods.agents.brain import GodBrain
 from gods.agents.orchestrators import ChronosOrchestrator, NikeOrchestrator, ThemisOrchestrator
 from gods.agents.tool_policy import is_social_disabled, is_tool_disabled
 from gods.config import runtime_config
+from gods.project import registry as project_registry
 from gods.mnemosyne import MemoryIntent, record_intent
 
 from gods.mnemosyne.facade import ensure_agent_memory_seeded, load_agent_directives, load_chronicle_for_context
@@ -101,7 +102,7 @@ def create_god_node(agent_id: str):
     """
 
     def node_func(state: GodsState) -> GodsState:
-        project_id = state.get("project_id", runtime_config.current_project)
+        project_id = state.get("project_id", project_registry.current_project())
 
         # Check if this agent chose to abstain from this thread
         abstained_list = state.get("abstained", [])

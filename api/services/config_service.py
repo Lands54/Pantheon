@@ -12,7 +12,6 @@ from gods.config import (
 )
 from gods.tools import GODS_TOOLS
 
-
 class ConfigService:
     @staticmethod
     def mask_api_key(raw: str) -> str:
@@ -30,7 +29,6 @@ class ConfigService:
         return {
             "openrouter_api_key": self.mask_api_key(runtime_config.openrouter_api_key),
             "has_openrouter_api_key": bool(runtime_config.openrouter_api_key),
-            "current_project": runtime_config.current_project,
             "projects": runtime_config.projects,
             "available_agents": get_available_agents(),
             "all_tools": [t.name for t in GODS_TOOLS],

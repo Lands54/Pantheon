@@ -43,6 +43,12 @@ async def start_project(project_id: str):
     return project_service.start_project(project_id)
 
 
+@router.post("/{project_id}/select")
+async def select_project(project_id: str):
+    """Select current project without changing run state."""
+    return project_service.select_project(project_id)
+
+
 @router.post("/{project_id}/stop")
 async def stop_project(project_id: str):
     """
@@ -170,6 +176,13 @@ async def runtime_restart_agent(project_id: str, agent_id: str):
 async def runtime_reconcile(project_id: str):
     """Reconcile runtime containers against project's active_agents list."""
     return project_service.runtime_reconcile(project_id)
+
+
+@router.post("/{project_id}/agents/{agent_id}/active")
+async def set_project_agent_active(project_id: str, agent_id: str, req: Request):
+    """Set one agent active state via runtime agent registry."""
+    data = await req.json()
+    return project_service.set_agent_active(project_id, agent_id, bool(data.get("active", False)))
 
 
 @router.get("/{project_id}/athena/flows")

@@ -99,7 +99,8 @@ function Satellite({ cx, cy, r, angle, index, total }) {
 }
 
 function AgentNode({ agent, cx, cy, onClick, isConnecting }) {
-    const statusColor = getStatusColor(agent.status);
+    const workerState = String(agent.worker_state || 'idle');
+    const statusColor = getStatusColor(workerState);
     const inboxColor = getInboxColor(agent.has_pending_inbox);
     const queueCount = agent.queued_pulse_events || 0;
 
@@ -116,7 +117,7 @@ function AgentNode({ agent, cx, cy, onClick, isConnecting }) {
     return (
         <g onClick={(e) => { e.stopPropagation(); onClick(agent, e.clientX, e.clientY); }} style={{ cursor: isConnecting ? 'crosshair' : 'pointer' }}>
             {/* Pulse Effect for Running Agents */}
-            {agent.status === 'running' && (
+            {workerState === 'running' && (
                 <motion.circle
                     cx={cx} cy={cy} r={32}
                     stroke={statusColor} strokeWidth={2} fill="none"
@@ -416,7 +417,7 @@ export function AgentGalaxyPage({ projectId, config, onSaveConfig }) {
                     <RadialMenu
                         x={menuPos.x} y={menuPos.y}
                         agentId={selectedAgent.agent_id}
-                        isActive={selectedAgent.status === 'running'}
+                        isActive={String(selectedAgent.worker_state || 'idle') === 'running'}
                         onAction={handleAction}
                         onClose={() => setSelectedAgent(null)}
                     />

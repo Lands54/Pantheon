@@ -19,6 +19,7 @@ import {
   getAthenaCouncil,
   athenaCouncilAction,
   athenaCouncilChair,
+  setProjectAgentActive,
   startAthenaCouncil,
 } from '../api/platformApi'
 
@@ -43,25 +44,42 @@ function asList(v) {
 
 // --- Components ---
 
-function StatusBadge({ status }) {
-  const isRunning = status === 'running'
+function StatusBadge({ workerState }) {
+  const isRunning = workerState === 'running'
   return (
     <div className={`agent-status-badge ${isRunning ? 'status-running' : 'status-idle'}`}>
       <span className="status-point" />
-      {status || 'IDLE'}
+      {workerState || 'IDLE'}
+    </div>
+  )
+}
+
+function MiniState({ label, value }) {
+  const v = String(value || 'none').toLowerCase()
+  const tone = (v === 'inflight' || v === 'running')
+    ? '#16a34a'
+    : (v === 'queued' || v === 'cooldown')
+      ? '#2563eb'
+      : (v === 'throttled' || v === 'backoff')
+        ? '#ea580c'
+        : '#64748b'
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span style={{ color: '#64748b' }}>{label}</span>
+      <span style={{ color: tone, fontWeight: 600 }}>{String(value || 'none')}</span>
     </div>
   )
 }
 
 function AgentCard({
-  agentId, status, active, model,
+  agentId, workerState, llmState, active, model,
   inboxStatus, queueCount, busy,
   onUpdate, onDelete,
   modelDraft, setModelDraft,
   strategyDraft, setStrategyDraft,
   rawStrategy,
 }) {
-  const isRunning = status === 'running'
+  const isRunning = workerState === 'running'
 
   return (
     <motion.div
@@ -79,7 +97,11 @@ function AgentCard({
           </div>
           <div className="agent-name">{agentId}</div>
         </div>
-        <StatusBadge status={status} />
+        <StatusBadge workerState={workerState} />
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginTop: 4, marginBottom: 4 }}>
+        <MiniState label="Worker" value={workerState || 'idle'} />
+        <MiniState label="LLM" value={llmState || 'none'} />
       </div>
 
       <div className="agent-body">
@@ -444,7 +466,6 @@ export function ProjectControlPage({
       next.projects = next.projects || {}
       next.projects[projectId] = next.projects[projectId] || {}
       const proj = next.projects[projectId]
-      proj.active_agents = Array.isArray(proj.active_agents) ? proj.active_agents : []
       proj.agent_settings = proj.agent_settings || {}
 
       proj.agent_settings[aid] = {
@@ -453,11 +474,8 @@ export function ProjectControlPage({
         phase_strategy: newAgentStrategy === INHERIT_STRATEGY ? null : newAgentStrategy,
       }
 
-      const set = new Set(proj.active_agents)
-      set.add(aid)
-      proj.active_agents = Array.from(set).sort()
-
       await onSaveConfig(next)
+      await setProjectAgentActive(projectId, aid, true)
       setStatus(`Agent ${aid} created`)
       setNewAgentId('')
       setNewAgentDirectives('')
@@ -490,10 +508,7 @@ export function ProjectControlPage({
 
       // Update active state
       if (typeof patch.active === 'boolean') {
-        const set = new Set(proj.active_agents || [])
-        if (patch.active) set.add(agentId)
-        else set.delete(agentId)
-        proj.active_agents = Array.from(set).sort()
+        await setProjectAgentActive(projectId, agentId, patch.active)
       }
 
       await onSaveConfig(next)
@@ -762,7 +777,8 @@ export function ProjectControlPage({
                 <AgentCard
                   key={aid}
                   agentId={aid}
-                  status={srow?.status || 'idle'}
+                  workerState={srow?.worker_state || 'idle'}
+                  llmState={srow?.llm_state || 'none'}
                   active={active}
                   model={model}
                   // Draft state management

@@ -40,7 +40,6 @@ def test_get_config():
     response = client.get("/config")
     assert response.status_code == 200
     data = response.json()
-    assert "current_project" in data
     assert "projects" in data
     assert "available_agents" in data
 
@@ -229,8 +228,9 @@ def test_project_start_stop_endpoints():
         assert payload["current_project"] == test_project_id
 
         # Verify config state
+        pstate = client.get("/projects").json()
+        assert pstate["current"] == test_project_id
         cfg = client.get("/config").json()
-        assert cfg["current_project"] == test_project_id
         assert cfg["projects"][test_project_id]["simulation_enabled"] is True
         for pid, proj in cfg["projects"].items():
             if pid != test_project_id:

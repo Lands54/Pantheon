@@ -11,6 +11,19 @@ from gods.config.validation import normalize_system_config
 logger = logging.getLogger("GodsConfig")
 
 
+def _sanitize_legacy_runtime_fields(data: dict) -> dict:
+    out = dict(data or {})
+    # Hard-cut: project selection moved to project registry.
+    out.pop("current_project", None)
+    projects = out.get("projects")
+    if isinstance(projects, dict):
+        for _pid, proj in projects.items():
+            if isinstance(proj, dict):
+                # Hard-cut: active_agents moved to agent registry.
+                proj.pop("active_agents", None)
+    return out
+
+
 def save_system_config(cfg: SystemConfig) -> None:
     normalized = normalize_system_config(cfg)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -29,7 +42,7 @@ def load_system_config() -> SystemConfig:
         if "projects" not in data:
             raise ValueError("legacy config payload is not supported; expected top-level 'projects'")
 
-        cfg = SystemConfig(**data)
+        cfg = SystemConfig(**_sanitize_legacy_runtime_fields(data))
         cfg = normalize_system_config(cfg)
         return cfg
     except Exception as e:

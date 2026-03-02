@@ -6,11 +6,12 @@ import json
 from langchain_core.tools import tool
 
 from gods.config import runtime_config
+from gods.project import registry as project_registry
 from gods.hermes import facade as hermes_facade
 
 
 def _resolve_project(project_id: str | None) -> str:
-    pid = project_id or runtime_config.current_project
+    pid = project_id or project_registry.current_project()
     if pid not in runtime_config.projects:
         raise ValueError(f"Project '{pid}' not found")
     return pid
