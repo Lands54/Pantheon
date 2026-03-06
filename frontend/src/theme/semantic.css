@@ -1,0 +1,31 @@
+.is-running {
+  color: var(--accent-green);
+}
+
+.is-idle {
+  color: var(--accent-amber);
+}
+
+.is-inactive {
+  color: var(--text-muted);
+}
+
+.is-danger {
+  color: var(--accent-danger);
+}
+
+.is-selected {
+  outline: 1px solid rgba(250, 204, 21, 0.35);
+}
+
+.is-linking {
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+
+.has-inbox {
+  border-color: rgba(250, 204, 21, 0.35);
+}
+
+.has-queue {
+  box-shadow: var(--shadow-orbit);
+}

@@ -305,7 +305,9 @@ function SocialGraphView({ loading, graph }) {
 
 export function ProjectControlPage({
   projectId,
+  projectIds = [],
   onCreateProject,
+  onDeleteProject,
   onSetRunning,
   isRunning,
   config,
@@ -347,6 +349,7 @@ export function ProjectControlPage({
   const [syncVoteChoice, setSyncVoteChoice] = useState('yes')
   const [syncLedger, setSyncLedger] = useState([])
   const [syncResolutions, setSyncResolutions] = useState([])
+  const [deletingProjectId, setDeletingProjectId] = useState('')
   const [syncForm, setSyncForm] = useState({
     title: '同步商议',
     content: '',
@@ -358,10 +361,6 @@ export function ProjectControlPage({
   const currentProject = useMemo(() => (config?.projects || {})[projectId] || {}, [config, projectId])
 
   const projectStrategy = String(currentProject?.phase_strategy || STRATEGY_OPTIONS[0])
-
-  const activeAgents = useMemo(() =>
-    Array.isArray(currentProject?.active_agents) ? currentProject.active_agents : []
-    , [currentProject])
 
   const agentSettings = useMemo(() =>
     currentProject?.agent_settings && typeof currentProject.agent_settings === 'object'
@@ -375,13 +374,25 @@ export function ProjectControlPage({
     return m
   }, [agentRows])
 
+  const activeAgents = useMemo(() => {
+    const out = []
+    for (const row of agentRows || []) {
+      if (row && row.agent_id && row.active === true) out.push(String(row.agent_id))
+    }
+    return out
+  }, [agentRows])
+
   const allAgentIds = useMemo(() => {
-    const ids = new Set([...activeAgents, ...Object.keys(agentSettings || {})])
+    const ids = new Set([
+      ...activeAgents,
+      ...(agentRows || []).map((x) => String(x?.agent_id || '').trim()).filter(Boolean),
+      ...Object.keys(agentSettings || {}),
+    ])
     return Array.from(ids)
       .map((x) => String(x || '').trim())
       .filter((x) => AGENT_ID_RE.test(x))
       .sort()
-  }, [activeAgents, agentSettings])
+  }, [activeAgents, agentRows, agentSettings])
 
   useEffect(() => {
     setSyncForm((prev) => {
@@ -679,6 +690,29 @@ export function ProjectControlPage({
     }
   }
 
+  const handleDeleteProject = async (pid) => {
+    const target = String(pid || '').trim()
+    if (!target) return
+    if (target === 'default') {
+      setError('default 项目不允许删除')
+      return
+    }
+    if (typeof onDeleteProject !== 'function') return
+    const yes = window.confirm(`确认删除项目 ${target}？该操作会删除项目目录和运行数据。`)
+    if (!yes) return
+    setStatus('')
+    setError('')
+    setDeletingProjectId(target)
+    try {
+      await onDeleteProject(target)
+      setStatus(`Project ${target} deleted`)
+    } catch (err) {
+      setError(String(err?.message || err))
+    } finally {
+      setDeletingProjectId('')
+    }
+  }
+
   return (
     <div className="stack-lg page-body">
 
@@ -734,6 +768,41 @@ export function ProjectControlPage({
               BOOT SYSTEM
             </button>
           )}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="section-title row-between">
+          <span>Total Project Management ({projectIds.length})</span>
+        </div>
+        <div className="stack-sm">
+          {projectIds.map((pid) => {
+            const isCurrent = pid === projectId
+            const isDefault = pid === 'default'
+            const deleting = deletingProjectId === pid
+            return (
+              <div key={pid} className="row-between" style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="mono" style={{ fontWeight: 700 }}>{pid}</span>
+                  {isCurrent && <span className="chip ok" style={{ fontSize: 11 }}>CURRENT</span>}
+                  {isDefault && <span className="chip off" style={{ fontSize: 11 }}>SYSTEM</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {!isDefault && (
+                    <button
+                      className="ghost-btn"
+                      style={{ color: '#b91c1c' }}
+                      onClick={() => handleDeleteProject(pid)}
+                      disabled={deleting}
+                    >
+                      <Trash2 size={14} />
+                      {deleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 

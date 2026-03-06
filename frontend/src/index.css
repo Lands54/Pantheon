@@ -1,22 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  margin: 0;
-  width: 100%;
-  min-height: 100%;
-}
-
-body {
-  font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
-}
-
-button {
-  cursor: pointer;
-  font-family: inherit;
-}
+@import './theme/tokens.css';
+@import './theme/semantic.css';
+@import './theme/motion.css';
+@import './theme/layers.css';
+@import './theme/responsive.css';
+@import './styles/reset.css';
+@import './styles/utilities.css';
+@import './App.css';
+@import './modules/galaxy/styles/galaxy.css';
+@import './modules/galaxy/styles/galaxy-stage.css';
+@import './modules/galaxy/styles/galaxy-node.css';
+@import './modules/galaxy/styles/galaxy-edge.css';
+@import './modules/galaxy/styles/galaxy-panels.css';

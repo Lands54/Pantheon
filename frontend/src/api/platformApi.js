@@ -145,6 +145,16 @@ export function getContextPulses(projectId, agentId, fromSeq = 0, limit = 500) {
   )
 }
 
+export function getProjectTimeline(projectId, fromTs = 0, toTs = 0, limit = 5000) {
+  return apiGet(
+    `/projects/${encodeURIComponent(projectId)}/timeline${qp({
+      from_ts: fromTs,
+      to_ts: toTs,
+      limit,
+    })}`
+  )
+}
+
 export function listOutboxReceipts(projectId, fromAgentId, status = '', limit = 50) {
   return apiGet(`/projects/${encodeURIComponent(projectId)}/inbox/outbox${qp({ from_agent_id: fromAgentId, status, limit })}`)
 }

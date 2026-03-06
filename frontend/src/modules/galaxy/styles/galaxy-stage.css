@@ -1,0 +1,7 @@
+.galaxy-nebula {
+  animation: galaxy-nebula-float 18s ease-in-out infinite;
+}
+
+.galaxy-starfield {
+  animation: galaxy-stars-glint 8s ease-in-out infinite;
+}

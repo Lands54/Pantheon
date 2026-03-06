@@ -293,7 +293,7 @@ export function AgentDetailPage({ projectId, agentId }) {
         setPulseRows(Array.isArray(pulsesLive.pulses) ? pulsesLive.pulses : [])
         setPulseErrors(Array.isArray(pulsesLive.errors) ? pulsesLive.errors : [])
         setIntentRows(Array.isArray(pulsesLive.intents) ? pulsesLive.intents : [])
-      } catch (e) {
+      } catch {
         // ignore polling errors; full reload path still available
       }
     }, 2000)
@@ -313,7 +313,34 @@ export function AgentDetailPage({ projectId, agentId }) {
           <h3>Card Context Feed - {agentId}</h3>
           <button className="ghost-btn" onClick={load}>Reload</button>
         </div>
+        <div className="top-gap dim">
+          snapshot_cards={snapshotCards.length} | snapshot_id={snapshotMeta.snapshot_id || 'n/a'} | token_estimate={snapshotMeta.token_estimate}
+        </div>
         <pre className="json-block">{JSON.stringify(preview || {}, null, 2)}</pre>
+        {!!snapshotCards.length && (
+          <div className="table-wrap top-gap">
+            <table>
+              <thead>
+                <tr>
+                  <th>card_id</th>
+                  <th>kind</th>
+                  <th>priority</th>
+                  <th>source_max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshotCards.slice(0, 20).map((card) => (
+                  <tr key={card.card_id}>
+                    <td className="mono">{card.card_id}</td>
+                    <td>{card.kind || '-'}</td>
+                    <td>{card.priority ?? '-'}</td>
+                    <td>{card.source_intent_seq_max ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="panel">
