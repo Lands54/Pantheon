@@ -1,84 +1,180 @@
-import { useEffect, useRef, useState } from 'react'
-import { getAgentStatus } from '../api/platformApi'
-import { usePolling } from '../hooks/usePolling'
-import { useHermesStream } from '../hooks/useHermesStream'
-import { useAgentStatusStream } from '../hooks/useAgentStatusStream'
+import { Activity, Inbox, Orbit, RadioTower, Sparkles } from 'lucide-react'
 import { AgentStatusTable } from '../components/AgentStatusTable'
+import { useEventsStream } from '../hooks/useEventsStream'
+import { useHermesStream } from '../hooks/useHermesStream'
 
-export function DashboardPage({ projectId, onPickAgent }) {
-  const [error, setError] = useState('')
-  const reqSeqRef = useRef(0)
+function formatTs(ts) {
+  if (!ts) return '暂无'
+  return new Date(Number(ts || 0) * 1000).toLocaleString()
+}
+
+export function DashboardPage({
+  projectId,
+  agentRows = [],
+  selectedAgentId = '',
+  onPickAgent,
+  currentProjectConfig = {},
+  isRunning = false,
+}) {
   const hermes = useHermesStream(projectId)
-  const statusStream = useAgentStatusStream(projectId)
-
-  const loadStatus = async (pid = projectId) => {
-    if (!pid) return
-    const reqSeq = ++reqSeqRef.current
-    try {
-      const data = await getAgentStatus(pid)
-      if (reqSeq !== reqSeqRef.current || pid !== projectId) return
-      statusStream.setAgents(data.agents || [])
-      setError('')
-    } catch (err) {
-      if (reqSeq !== reqSeqRef.current || pid !== projectId) return
-      setError(String(err.message || err))
-    }
-  }
-
-  useEffect(() => {
-    statusStream.setAgents([])
-    setError('')
-    loadStatus(projectId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
-
-  usePolling(async () => {
-    if (!statusStream.connected) await loadStatus()
-  }, 10000, [projectId, statusStream.connected])
-
+  const events = useEventsStream(projectId, { limit: 18 })
+  const selectedAgent = agentRows.find((item) => item.agent_id === selectedAgentId) || agentRows[0] || null
+  const activeCount = agentRows.filter((item) => item.active).length
+  const pendingInbox = agentRows.filter((item) => item.has_pending_inbox).length
+  const queued = agentRows.reduce((sum, item) => sum + Number(item.queued_pulse_events || 0), 0)
+  const runningCount = agentRows.filter((item) => String(item.worker_state || '').toLowerCase() === 'running').length
   const nodes = Object.keys(hermes.nodes || {}).length
   const edges = Object.keys(hermes.edges || {}).length
 
   return (
     <div className="stack-lg">
-      <div className="grid-3">
-        <div className="panel metric">
-          <div className="label">Current Project</div>
-          <div className="value">{projectId}</div>
+      <section className="panel overview-hero">
+        <div>
+          <div className="eyebrow">Overview</div>
+          <h2>{currentProjectConfig?.name || projectId}</h2>
+          <p className="dim">
+            当前项目采用
+            <span className="mono"> {currentProjectConfig?.phase_strategy || 'react_graph'} </span>
+            策略，context 为
+            <span className="mono"> {currentProjectConfig?.context_strategy || 'default'} </span>
+            。
+          </p>
         </div>
-        <div className="panel metric">
-          <div className="label">Hermes Stream</div>
-          <div className="value">{hermes.connected ? 'Connected' : 'Disconnected'}</div>
-          {hermes.degraded && <div className="warn">Realtime degraded, polling fallback active</div>}
+        <div className="hero-status-grid">
+          <div className={`hero-status-card ${isRunning ? 'online' : 'offline'}`}>
+            <span>调度状态</span>
+            <strong>{isRunning ? '运行中' : '已停止'}</strong>
+          </div>
+          <div className="hero-status-card">
+            <span>活跃 Agent</span>
+            <strong>{activeCount}/{agentRows.length}</strong>
+          </div>
+          <div className="hero-status-card">
+            <span>Pending Inbox</span>
+            <strong>{pendingInbox}</strong>
+          </div>
+          <div className="hero-status-card">
+            <span>Pulse Queue</span>
+            <strong>{queued}</strong>
+          </div>
         </div>
-        <div className="panel metric">
-          <div className="label">Agent Status Stream</div>
-          <div className="value">{statusStream.connected ? 'Connected' : 'Disconnected'}</div>
-          {statusStream.degraded && <div className="warn">Agent status uses polling fallback</div>}
-        </div>
-      </div>
+      </section>
 
-      <div className="panel metric">
-        <div className="label">Hermes Topology</div>
-        <div className="value">{nodes} nodes / {edges} edges</div>
-      </div>
-
-      {error && <div className="panel error-banner">{error}</div>}
-
-      <AgentStatusTable rows={statusStream.agents} onPickAgent={onPickAgent} />
-
-      <div className="panel">
-        <h3>Hermes Event Feed (SSE)</h3>
-        <div className="log-list">
-          {(hermes.recent || []).slice(0, 20).map((ev, idx) => (
-            <div className="log-row" key={`${ev.seq || idx}-${idx}`}>
-              <span className="mono">{ev.type || 'event'}</span>
-              <span className="mono dim">{JSON.stringify(ev.payload || {}).slice(0, 160)}</span>
+      <div className="overview-grid">
+        <section className="panel">
+          <div className="section-header">
+            <div>
+              <div className="eyebrow">Focus Agent</div>
+              <h3>{selectedAgent?.agent_id || '暂无 agent'}</h3>
             </div>
-          ))}
-          {!hermes.recent?.length && <div className="dim">No live Hermes events yet</div>}
-        </div>
+            {selectedAgent && (
+              <button className="ghost-btn" onClick={() => onPickAgent?.(selectedAgent.agent_id)}>
+                打开 Agent
+              </button>
+            )}
+          </div>
+          {!selectedAgent && <div className="dim">当前项目还没有可观察的 agent。</div>}
+          {selectedAgent && (
+            <div className="focus-agent-card">
+              <div className="focus-agent-head">
+                <div>
+                  <div className="focus-title">{selectedAgent.agent_id}</div>
+                  <div className="mono dim">{selectedAgent.worker_state || 'idle'} / {selectedAgent.llm_state || 'none'}</div>
+                </div>
+                <div className={`project-state-chip compact ${selectedAgent.active ? 'online' : 'offline'}`}>
+                  <span className="state-dot" />
+                  {selectedAgent.active ? 'active' : 'inactive'}
+                </div>
+              </div>
+              <div className="focus-agent-grid">
+                <div>
+                  <span>最后脉冲</span>
+                  <strong>{formatTs(selectedAgent.last_pulse_at)}</strong>
+                </div>
+                <div>
+                  <span>等待队列</span>
+                  <strong>{selectedAgent.queued_pulse_events || 0}</strong>
+                </div>
+                <div>
+                  <span>Inbox</span>
+                  <strong>{selectedAgent.has_pending_inbox ? '有未读' : '清空'}</strong>
+                </div>
+                <div>
+                  <span>最近原因</span>
+                  <strong>{selectedAgent.last_reason || 'n/a'}</strong>
+                </div>
+              </div>
+              {selectedAgent.last_error && (
+                <div className="warn top-gap">
+                  最近错误：<span className="mono">{selectedAgent.last_error}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="section-header">
+            <div>
+              <div className="eyebrow">Live Bus</div>
+              <h3>系统脉动</h3>
+            </div>
+            <div className="stream-chip-row">
+              <span className={`stream-chip ${hermes.connected ? 'online' : 'offline'}`}>
+                <RadioTower size={14} />
+                Hermes {hermes.connected ? 'SSE' : 'fallback'}
+              </span>
+              <span className={`stream-chip ${events.connected ? 'online' : 'offline'}`}>
+                <Activity size={14} />
+                Events {events.connected ? 'SSE' : 'fallback'}
+              </span>
+            </div>
+          </div>
+          <div className="overview-mini-grid">
+            <div className="summary-tile">
+              <Orbit size={16} />
+              <div>
+                <span>拓扑节点</span>
+                <strong>{nodes}</strong>
+              </div>
+            </div>
+            <div className="summary-tile">
+              <Sparkles size={16} />
+              <div>
+                <span>协议边</span>
+                <strong>{edges}</strong>
+              </div>
+            </div>
+            <div className="summary-tile">
+              <Activity size={16} />
+              <div>
+                <span>运行中 agent</span>
+                <strong>{runningCount}</strong>
+              </div>
+            </div>
+            <div className="summary-tile">
+              <Inbox size={16} />
+              <div>
+                <span>最近事件</span>
+                <strong>{events.items?.length || 0}</strong>
+              </div>
+            </div>
+          </div>
+          <div className="feed-card-list">
+            {(events.items || []).slice(0, 8).map((item) => (
+              <div key={item.event_id} className="feed-card-item">
+                <div className="feed-card-title">{item.event_type}</div>
+                <div className="feed-card-meta mono">
+                  {item.domain} · {item.state} · {(item.payload?.agent_id || item.payload?.to_id || '-')}
+                </div>
+              </div>
+            ))}
+            {!events.items?.length && <div className="dim">暂无实时事件。</div>}
+          </div>
+        </section>
       </div>
+
+      <AgentStatusTable rows={agentRows} onPickAgent={onPickAgent} />
     </div>
   )
 }

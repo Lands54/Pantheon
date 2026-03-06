@@ -1,0 +1,21 @@
+.galaxy-legend {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(4, 9, 20, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}

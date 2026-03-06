@@ -185,9 +185,9 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
     }
   }, [])
 
-  const projectFields = schema?.fields?.project || []
-  const groups = schema?.groups?.filter((g) => g.scope === 'project') || []
-  const moduleGroups = schema?.module_groups?.filter((g) => g.scope === 'project') || []
+  const projectFields = useMemo(() => schema?.fields?.project || [], [schema])
+  const groups = useMemo(() => schema?.groups?.filter((g) => g.scope === 'project') || [], [schema])
+  const moduleGroups = useMemo(() => schema?.module_groups?.filter((g) => g.scope === 'project') || [], [schema])
   const toolOptions = schema?.tool_options || []
   const toolManagedKeys = new Set([
     'tool_loop_max',
@@ -275,7 +275,7 @@ export function ConfigCenterPage({ projectId, config, onSaveConfig }) {
     )
   }
 
-  const renderAgentTools = () => {
+  const UNUSED_renderAgentTools = () => {
     if (!toolOptions.length) return null
     return (
       <div className="panel">

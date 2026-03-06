@@ -1,0 +1,6 @@
+.node-shell,
+.node-core,
+.node-ring,
+.event-bubble-core {
+  vector-effect: non-scaling-stroke;
+}

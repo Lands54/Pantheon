@@ -7,8 +7,6 @@ export function useAgentStatusStream(projectId) {
 
   useEffect(() => {
     if (!projectId) return undefined
-    setAgents([])
-    setConnected(false)
 
     let es
     try {
@@ -40,7 +38,9 @@ export function useAgentStatusStream(projectId) {
       setDegraded(true)
     }
 
-    return () => es.close()
+    return () => {
+      es.close()
+    }
   }, [projectId])
 
   return { agents, connected, degraded, setAgents }

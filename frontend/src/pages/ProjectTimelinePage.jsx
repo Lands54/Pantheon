@@ -146,6 +146,10 @@ function MonthHeatmap({ year, month, counts, onPickDay, selectedDay }) {
 }
 
 function ProjectSpanTimeline({ items, onPickEvent, zoom = 1, range = null, onRangeChange }) {
+  const [dragging, setDragging] = useState(false)
+  const [dragStartX, setDragStartX] = useState(0)
+  const [dragCurrentX, setDragCurrentX] = useState(0)
+
   if (!items.length) {
     return (
       <div className="panel" style={{ color: '#94a3b8' }}>
@@ -204,10 +208,6 @@ function ProjectSpanTimeline({ items, onPickEvent, zoom = 1, range = null, onRan
     if (k === 'private_message') return '#1d4ed8'
     return '#475569'
   }
-
-  const [dragging, setDragging] = useState(false)
-  const [dragStartX, setDragStartX] = useState(0)
-  const [dragCurrentX, setDragCurrentX] = useState(0)
 
   const toSvgX = (ev) => {
     const rect = ev.currentTarget.getBoundingClientRect()
