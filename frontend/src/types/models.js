@@ -2,6 +2,7 @@
  * @typedef {Object} AgentStatus
  * @property {string} project_id
  * @property {string} agent_id
+ * @property {boolean} active
  * @property {string} worker_state
  * @property {string} llm_state
  * @property {string} last_reason

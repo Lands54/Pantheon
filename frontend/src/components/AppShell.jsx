@@ -1,8 +1,9 @@
-import { Activity, Bot, MessageSquare, Layers, FolderKanban, RefreshCw, BookText, SlidersHorizontal, Wrench, Hexagon, Bug } from 'lucide-react'
+import { Activity, Bot, MessageSquare, Layers, FolderKanban, RefreshCw, BookText, SlidersHorizontal, Wrench, Hexagon, Bug, CalendarRange } from 'lucide-react'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: Activity },
   { id: 'events', label: 'Events', icon: Layers },
+  { id: 'timeline', label: 'Timeline', icon: CalendarRange },
   { id: 'agentDetail', label: 'Agent Detail', icon: Bot },
   { id: 'galaxy', label: 'Agent Galaxy', icon: Hexagon },
   { id: 'messageCenter', label: 'Message Center', icon: MessageSquare },

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react'
-import { createProject, getConfig, getProjects, saveConfig, selectProject, startProject, stopProject } from '../api/platformApi'
+import { createProject, deleteProject, getConfig, getProjects, saveConfig, selectProject, startProject, stopProject } from '../api/platformApi'
 
 const AppStoreContext = createContext(null)
 
@@ -45,6 +45,12 @@ export function AppStoreProvider({ children }) {
     await switchProject(projectId)
   }
 
+  const deleteProjectById = async (projectId) => {
+    if (!projectId || projectId === 'null' || projectId === 'undefined') return
+    await deleteProject(projectId)
+    await refreshConfig()
+  }
+
   const setProjectRunning = async (projectId, running) => {
     if (!projectId || projectId === 'null' || projectId === 'undefined') return
     if (running) await startProject(projectId)
@@ -74,6 +80,7 @@ export function AppStoreProvider({ children }) {
     refreshConfig,
     switchProject,
     createAndSwitchProject,
+    deleteProjectById,
     setProjectRunning,
     updateConfig,
   }

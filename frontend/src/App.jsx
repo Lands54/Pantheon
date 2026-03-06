@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { DashboardPage } from './pages/DashboardPage'
 import { EventsPage } from './pages/EventsPage'
+import { ProjectTimelinePage } from './pages/ProjectTimelinePage'
 import { MessageCenterPage } from './pages/MessageCenterPage'
 import { AgentDetailPage } from './pages/AgentDetailPage'
 import { ProjectControlPage } from './pages/ProjectControlPage'
@@ -24,6 +25,7 @@ function AppInner() {
     refreshConfig,
     switchProject,
     createAndSwitchProject,
+    deleteProjectById,
     setProjectRunning,
     updateConfig,
   } = useAppStore()
@@ -78,6 +80,8 @@ function AppInner() {
         return <DashboardPage projectId={currentProject} onPickAgent={(id) => { setSelectedAgentId(id); setActiveTab('agentDetail') }} />
       case 'events':
         return <EventsPage projectId={currentProject} />
+      case 'timeline':
+        return <ProjectTimelinePage projectId={currentProject} />
       case 'messageCenter':
         return (
           <MessageCenterPage
@@ -95,8 +99,10 @@ function AppInner() {
         return (
           <ProjectControlPage
             projectId={currentProject}
+            projectIds={projectIds}
             isRunning={isRunning}
             onCreateProject={createAndSwitchProject}
+            onDeleteProject={deleteProjectById}
             onSetRunning={setProjectRunning}
             config={config}
             onSaveConfig={updateConfig}
@@ -121,7 +127,7 @@ function AppInner() {
       default:
         return null
     }
-  }, [activeTab, currentProject, selectedAgentId, agentRows, isRunning, createAndSwitchProject, setProjectRunning, config, updateConfig])
+  }, [activeTab, currentProject, selectedAgentId, agentRows, isRunning, projectIds, createAndSwitchProject, deleteProjectById, setProjectRunning, config, updateConfig])
 
   return (
     <AppShell
